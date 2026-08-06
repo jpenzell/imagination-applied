@@ -64,7 +64,7 @@ const jsonLd = {
     <h1>{pub.title}</h1>
     <p class="lede">{pub.subtitle}</p>
     <p class="muted">
-      {pub.author} ·
+      {pub.author} ·{' '}
       <time datetime={pub.datePublished}>
         {
           new Date(pub.datePublished).toLocaleDateString('en-US', {
