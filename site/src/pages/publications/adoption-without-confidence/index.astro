@@ -1,0 +1,133 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { PUBLICATIONS, SITE } from '../../../consts';
+// The article body is staged by scripts/prebuild.mjs out of the canonical,
+// manifest-verified package. Wording is untouched; see that script.
+import { Content } from '../../../content/adoption-without-confidence.md';
+
+const pub = PUBLICATIONS[0];
+const base = `/publications/${pub.slug}`;
+const pageUrl = new URL(`${base}/`, SITE.origin).href;
+
+const DOWNLOADS = [
+  { href: `${base}/paper.pdf`, label: 'This article (PDF)' },
+  { href: `${base}/paper.docx`, label: 'This article (Word)' },
+  { href: `${base}/open-research-note.pdf`, label: 'Open Research Note (PDF)' },
+  { href: `${base}/research-report.pdf`, label: 'Full research report (PDF)' },
+  { href: `${base}/executive-brief.pdf`, label: 'Executive brief (PDF)' },
+  { href: `${base}/carousel.pdf`, label: 'Slide summary (PDF)' },
+];
+
+// Citation string is the one in the package README, extended with the live URL.
+const citation = `Penzell, J. (2026). ${pub.formalTitle}. Imagination Applied Press, ${pub.series}. ${pageUrl}`;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ScholarlyArticle',
+  headline: pub.title,
+  alternativeHeadline: pub.formalTitle,
+  description: pub.description,
+  url: pageUrl,
+  mainEntityOfPage: { '@type': 'WebPage', '@id': pageUrl },
+  datePublished: pub.datePublished,
+  inLanguage: 'en',
+  version: pub.version,
+  isPartOf: { '@type': 'PublicationIssue', name: pub.series },
+  author: {
+    '@type': 'Person',
+    name: pub.author,
+    url: SITE.founderSite,
+  },
+  publisher: {
+    '@type': 'Organization',
+    name: 'Imagination Applied Press',
+    url: SITE.origin,
+  },
+  license: pub.licenseUrl,
+  image: new URL(pub.ogImage, SITE.origin).href,
+  codeRepository: SITE.repo,
+  ...(pub.doi ? { identifier: { '@type': 'PropertyValue', propertyID: 'DOI', value: pub.doi } } : {}),
+};
+---
+
+<Base
+  title={pub.ogTitle}
+  description={pub.description}
+  path={`${base}/`}
+  image={pub.ogImage}
+  imageAlt="Bar chart showing daily AI use rising from 18.8% among very unfavorable current users to 88.1% among very favorable current users."
+  ogType="article"
+  jsonLd={jsonLd}
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">{pub.series} · Version {pub.version}</p>
+    <h1>{pub.title}</h1>
+    <p class="lede">{pub.subtitle}</p>
+    <p class="muted">
+      {pub.author} ·
+      <time datetime={pub.datePublished}>
+        {
+          new Date(pub.datePublished).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            timeZone: 'UTC',
+          })
+        }
+      </time>
+    </p>
+  </section>
+
+  <div class="wrap pub-layout">
+    <article class="pub-body">
+      <Content />
+    </article>
+
+    <aside class="sidebar">
+      <h2>Read and download</h2>
+      <ul>
+        {DOWNLOADS.map((d) => <li><a href={d.href}>{d.label}</a></li>)}
+      </ul>
+
+      <h2>Reproduce</h2>
+      <ul>
+        <li><a href={SITE.repo}>Source repository</a></li>
+        <li><a href={`${base}/MANIFEST.sha256`}>File manifest (SHA-256)</a></li>
+        <li><a href={`${base}/CITATION.cff`}>CITATION.cff</a></li>
+      </ul>
+      <p class="muted" style="font-size:0.82rem">
+        Stack Overflow survey data are not redistributed. The repository documents how to
+        obtain the official files and verify their hashes.
+      </p>
+
+      <h2>Details</h2>
+      <dl>
+        <div class="meta-row"><dt>Version</dt><dd>{pub.version}</dd></div>
+        <div class="meta-row"><dt>Published</dt><dd>{pub.datePublished}</dd></div>
+        <div class="meta-row"><dt>Licence</dt><dd><a href={pub.licenseUrl}>{pub.license}</a></dd></div>
+        <div class="meta-row">
+          <dt>DOI</dt>
+          <dd>{pub.doi ? <a href={`https://doi.org/${pub.doi}`}>{pub.doi}</a> : 'Pending'}</dd>
+        </div>
+      </dl>
+
+      <h2>Cite this</h2>
+      <p class="citation">{citation}</p>
+    </aside>
+  </div>
+
+  <section class="wrap">
+    <div class="section-rule">
+      <h2>Corrections welcome</h2>
+      <p>
+        This is an open research note. Corrections, replication attempts, and
+        methodological criticism are welcome. Material revisions will be documented in the
+        repository release notes and reflected in the versioned research note.
+      </p>
+      <div class="actions">
+        <a class="btn btn-secondary" href="/contact/">Get in touch</a>
+        <a class="btn btn-secondary" href="/publications/">All research</a>
+      </div>
+    </div>
+  </section>
+</Base>

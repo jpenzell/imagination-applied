@@ -1,0 +1,74 @@
+---
+import Base from '../layouts/Base.astro';
+import { DOORS } from '../consts';
+
+const door = DOORS[2];
+---
+
+<Base
+  title="Transformation consulting"
+  description={door.for}
+  path="/transformation-consulting/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">Three ways to work together</p>
+    <h1>Transformation consulting</h1>
+    <p class="lede">{door.for}</p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      <strong>Outcome.</strong>
+      {door.outcome}
+    </p>
+
+    <div class="section-rule">
+      <h2>Inspiration has a short half-life</h2>
+      <p>
+        A keynote can change what a room can see. It cannot change what happens on
+        Thursday afternoon in a workflow nobody in the room owns. That gap is where most
+        AI programs quietly stall—not because people resisted, but because nothing about
+        the actual work was ever redesigned.
+      </p>
+      <p>
+        This is the engagement for organizations past the inspiration stage and willing to
+        change behavior, workflow, learning, or operating practice.
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>Bounded experiments, not a transformation plan</h2>
+      <p>
+        We do not open with an eighteen-month roadmap. We open by finding the smallest
+        real piece of work where a change would be visible, and running it somewhere the
+        cost of being wrong is low.
+      </p>
+      <p>Each experiment is designed to produce three things:</p>
+      <ul>
+        <li><strong>Evidence</strong> — something observed, not asserted.</li>
+        <li><strong>Trust</strong> — a team that has now done the thing once.</li>
+        <li><strong>Direction</strong> — a clearer read on what should scale and what should not.</li>
+      </ul>
+      <p>
+        Scale follows evidence. That order is the whole method, and it is the part that is
+        genuinely uncomfortable, because it means committing to fewer things earlier and
+        finding out sooner when one of them is wrong.
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>Where the work usually lands</h2>
+      <ul>
+        <li>Adoption that has plateaued after a tool rollout</li>
+        <li>Learning and enablement programs measured by completion rather than by change</li>
+        <li>Workflows where AI has been added beside the work instead of into it</li>
+        <li>Teams competent in isolation and misaligned together</li>
+      </ul>
+      <p class="pull">Stop training people on AI long enough to build something with them.</p>
+      <div class="actions">
+        <a class="btn" href="/contact/">Start a conversation</a>
+        <a class="btn btn-secondary" href="/how-we-work/">See the method</a>
+      </div>
+    </div>
+  </section>
+</Base>

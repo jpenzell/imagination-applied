@@ -1,0 +1,97 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../consts';
+
+// Every credential on this page comes from the Brand Guide's "Core Proof Bank"
+// (section 11), which lists what is safe to publish in evergreen copy. Claims
+// the guide flags for verification first -- named clients, stage counts,
+// audience totals, outcome percentages -- are deliberately absent. Do not add
+// one without checking permission and wording against the guide.
+---
+
+<Base
+  title="About"
+  description="Imagination Applied brings Artistic Intelligence into organizations through live experiences, executive advisory, and rehearsal-based transformation. Founded by Josh Penzell."
+  path="/about/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">About</p>
+    <h1>A company built on rehearsal</h1>
+    <p class="lede">{SITE.description}</p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>{SITE.boilerplate}</p>
+
+    <div class="section-rule">
+      <h2>Why theater</h2>
+      <p>
+        The premise is not that business should be more creative. It is that organizations
+        already face the exact conditions a director works in every day: the material is
+        incomplete, several interpretations are possible, judgment matters more than
+        compliance, and the right answer changes as the work moves.
+      </p>
+      <p>
+        Theater has spent a few thousand years developing a craft for exactly that. Most
+        management practice has not. So we borrow the craft rather than the vocabulary—and
+        when the theater language stops doing real work, we drop it.
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>Josh Penzell, founder</h2>
+      <p>
+        Josh Penzell helps leaders create direction when the answer is not waiting to be
+        found. He is a keynote speaker, advisor, founder of Imagination Applied, and
+        forthcoming author of <em>Artistic Intelligence</em>.
+      </p>
+      <p>
+        Trained as a theater director and formerly VP of AI Innovation &amp; Strategy at
+        ELB Learning, Josh brings the rehearsal room into the future of work—helping
+        organizations align people, direct AI, and turn uncertainty into intelligent
+        action. He has worked across learning and enablement in organizations including
+        Amazon Alexa and Skillsoft, holds an MFA in Theater Directing from Brooklyn
+        College and a BS from Northwestern University, and writes for TD Magazine.
+      </p>
+      <p>
+        His keynotes are live, participatory, and built around a simple idea: AI does not
+        replace leadership. It changes what leadership has to rehearse for.
+      </p>
+      <p>
+        <a href={SITE.founderSite}>joshpenzell.com →</a>
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>How the pieces fit</h2>
+      <dl>
+        <dt><strong>Artistic Intelligence</strong></dt>
+        <dd class="muted" style="margin:0 0 1rem">
+          The philosophy and the capacity. The subject of Josh's forthcoming book.
+        </dd>
+        <dt><strong>TheaterThink</strong></dt>
+        <dd class="muted" style="margin:0 0 1rem">
+          The rehearsal-based practice. How the philosophy is actually run.
+        </dd>
+        <dt><strong>Imagination Applied</strong></dt>
+        <dd class="muted" style="margin:0 0 1rem">
+          The company. Where the work becomes engagements and organizational change.
+        </dd>
+      </dl>
+    </div>
+
+    <div class="section-rule">
+      <h2>What we publish</h2>
+      <p>
+        We publish research under the <a href="/publications/">Open Research Series</a>,
+        with the analysis code and file checksums released alongside each paper. The
+        standard we hold ourselves to is simple: every claim traceable to code, and
+        limitations stated in the body rather than a footnote.
+      </p>
+      <div class="actions">
+        <a class="btn" href="/contact/">Start a conversation</a>
+        <a class="btn btn-secondary" href={SITE.linkedin}>Follow on LinkedIn</a>
+      </div>
+    </div>
+  </section>
+</Base>

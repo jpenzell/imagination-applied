@@ -1,0 +1,86 @@
+---
+import Base from '../layouts/Base.astro';
+import { PRACTICE, SITE } from '../consts';
+---
+
+<Base
+  title="How we work"
+  description="TheaterThink is our rehearsal-based practice: direct the work, cast the ensemble, rehearse before the stakes are irreversible. Three moves, in order."
+  path="/how-we-work/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">The method</p>
+    <h1>Direct. Cast. Rehearse.</h1>
+    <p class="lede">
+      Most AI rollouts get staged like a product launch. Pick the tool, announce it, train
+      people on the buttons, wait for adoption. Theater does not work that way.
+    </p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      A director does not hand out the script and hope. The work is three moves, and they
+      happen in order. We call the practice TheaterThink<sup>®</sup>—the applied method
+      behind everything on this site.
+    </p>
+
+    {
+      PRACTICE.map((step, i) => (
+        <div class="section-rule">
+          <p class="eyebrow">Move {i + 1}</p>
+          <h2 style="margin-top:0">
+            {step.name}: {step.subtitle}
+          </h2>
+          <p class="pull">{step.oneLiner}</p>
+          <p>
+            <strong>The core move.</strong> {step.move}
+          </p>
+        </div>
+      ))
+    }
+
+    <div class="section-rule">
+      <h2>Why rehearsal is the move everyone skips</h2>
+      <p>
+        Organizations buy training and call it rehearsal. They are not the same thing.
+        Training is being told. Rehearsal is trying, failing in a room where failure is
+        free, and adjusting before it matters.
+      </p>
+      <p>
+        A bounded experiment makes assumptions visible. It produces evidence instead of
+        opinion, and it lets a team disagree about something real. That is why our
+        engagements are built as a series of attempts rather than a single plan handed
+        over at the end.
+      </p>
+      <p class="pull">Rehearsal is a way of knowing.</p>
+    </div>
+
+    <div class="section-rule">
+      <h2>Where AI fits</h2>
+      <p>
+        The work is not anti-AI. It asks people to become better directors of it. Every
+        response a model gives is generated through a probabilistic process; fluency is
+        not the same as truth. So we treat important outputs as material to evaluate, not
+        authority to obey.
+      </p>
+      <p>
+        That is a directing problem before it is a tooling problem. Prompting is rewriting
+        the lines. Directing changes what the performer wants.
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>The idea underneath</h2>
+      <p>
+        TheaterThink is the practice. The larger capacity it develops is called Artistic
+        Intelligence: the ability to interpret what matters, compose with what is
+        available, and discover direction through rehearsal. It is the subject of Josh's
+        forthcoming book, and it is bigger than AI—AI is what makes it urgent right now.
+      </p>
+      <div class="actions">
+        <a class="btn" href="/contact/">Talk about your work</a>
+        <a class="btn btn-secondary" href={SITE.founderSite}>Artistic Intelligence, the book</a>
+      </div>
+    </div>
+  </section>
+</Base>

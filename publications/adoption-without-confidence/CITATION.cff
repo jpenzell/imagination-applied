@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this analysis, please cite it as below."
+title: "Adoption Without Confidence? Favorable Stance, Accuracy Trust, and Reported AI-Use Frequency in the 2025 Stack Overflow Survey"
+type: report
+authors:
+  - family-names: Penzell
+    given-names: Josh
+date-released: 2026-07-24
+publisher: Imagination Applied Open Research Series
+version: 3.1.0
+keywords:
+  - AI adoption
+  - developer survey
+  - favorable stance
+  - accuracy trust
+  - software engineering
+license: MIT

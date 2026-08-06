@@ -1,0 +1,84 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../consts';
+
+// This page is fully static HTML. The form is a plain POST to a Cloudflare
+// Pages Function -- no client JavaScript, no third-party embed, and the page
+// still renders and submits with scripting disabled.
+---
+
+<Base
+  title="Contact"
+  description="Tell us what the work is actually about. Imagination Applied works with leaders and teams on AI adoption, advisory, and rehearsal-based transformation."
+  path="/contact/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">Contact</p>
+    <h1>Start a conversation</h1>
+    <p class="lede">
+      The most useful first message is not a brief. It is the thing you are actually
+      stuck on.
+    </p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      Tell us what is happening, who it affects, and what you have already tried. If we
+      are not the right people, we will say so and point you somewhere better.
+    </p>
+    <p class="muted">
+      Booking Josh for a stage? That goes through
+      <a href={SITE.founderSite}>joshpenzell.com</a>. Prefer plain email?
+      <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>.
+    </p>
+
+    <form class="form" method="POST" action="/api/contact" style="margin-top:2rem">
+      <div class="field">
+        <label for="name">Your name</label>
+        <input id="name" name="name" type="text" required autocomplete="name" />
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="email" />
+      </div>
+
+      <div class="field">
+        <label for="organization">Organization</label>
+        <input id="organization" name="organization" type="text" autocomplete="organization" />
+      </div>
+
+      <div class="field">
+        <label for="topic">What is this about?</label>
+        <select id="topic" name="topic">
+          <option value="advisory">Executive advisory</option>
+          <option value="consulting">Transformation consulting</option>
+          <option value="workshop">A workshop or learning program</option>
+          <option value="speaking">Speaking</option>
+          <option value="research">The research</option>
+          <option value="other">Something else</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="message">What are you stuck on?</label>
+        <p class="hint">
+          The specific situation is more useful than a general description of your
+          company.
+        </p>
+        <textarea id="message" name="message" required></textarea>
+      </div>
+
+      <!-- Honeypot. Hidden from people, irresistible to naive bots. -->
+      <div class="hp" aria-hidden="true">
+        <label for="company_website">Do not fill this in</label>
+        <input id="company_website" name="company_website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+
+      <button class="btn" type="submit">Send</button>
+      <p class="muted" style="font-size:0.82rem;margin-top:1rem">
+        We use what you send here to reply to you. Nothing more.
+      </p>
+    </form>
+  </section>
+</Base>

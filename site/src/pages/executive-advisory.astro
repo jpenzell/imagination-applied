@@ -1,0 +1,81 @@
+---
+import Base from '../layouts/Base.astro';
+import { DOORS } from '../consts';
+
+const door = DOORS[1];
+---
+
+<Base title="Executive advisory" description={door.for} path="/executive-advisory/">
+  <section class="wrap page-head">
+    <p class="eyebrow">Three ways to work together</p>
+    <h1>Executive advisory</h1>
+    <p class="lede">{door.for}</p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      <strong>Outcome.</strong>
+      {door.outcome}
+    </p>
+
+    <div class="section-rule">
+      <h2>What this is for</h2>
+      <p>
+        Most AI decisions arriving on an executive's desk are framed as tooling questions.
+        Which platform, which licence count, which team goes first. Those are real
+        questions, and they are almost never the decision that matters.
+      </p>
+      <p>
+        The decision that matters is what the work is actually about—and therefore what
+        should change, what should not, and what you would need to see to believe it is
+        working. Advisory work is where that gets settled before budget follows it.
+      </p>
+      <p class="pull">A beautiful answer to a question nobody asked.</p>
+    </div>
+
+    <div class="section-rule">
+      <h2>How it runs</h2>
+      <p>
+        Advisory engagements are shaped around your calendar rather than a fixed
+        curriculum. In practice they tend to involve:
+      </p>
+      <ul>
+        <li>
+          <strong>Interpretation.</strong> Working through the choice in front of you and naming
+          what it is really a choice between.
+        </li>
+        <li>
+          <strong>Direction.</strong> Getting the leadership team into the same play, in language
+          the rest of the organization can act on.
+        </li>
+        <li>
+          <strong>Experiment design.</strong> Turning the direction into a small number of bounded
+          attempts with a stated cost, a stated duration, and an agreed way to read the result.
+        </li>
+        <li>
+          <strong>Interpretation again.</strong> Reading what actually happened, including the
+          parts that contradict the plan.
+        </li>
+      </ul>
+      <p>
+        The output is not a deck of recommendations. It is a set of decisions you can
+        defend and a rehearsal plan for the ones you cannot make yet.
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>What we will tell you</h2>
+      <p>
+        If the evidence does not support a move, we will say so. Our published research
+        exists partly to hold ourselves to that standard: it states its own limitations in
+        the body of the work, and it says plainly where a result does not establish cause.
+      </p>
+      <p>
+        <a href="/publications/">See the research →</a>
+      </p>
+      <div class="actions">
+        <a class="btn" href="/contact/">Start a conversation</a>
+      </div>
+    </div>
+  </section>
+</Base>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Imagination Applied">
+  <rect width="64" height="64" rx="8" fill="#16161a"/>
+  <!-- Two curtain halves parting: the moment before the work begins. -->
+  <path d="M10 10h12c0 16-4 26-4 44H10z" fill="#8a2f39"/>
+  <path d="M54 10H42c0 16 4 26 4 44h8z" fill="#8a2f39"/>
+  <circle cx="32" cy="30" r="6" fill="#fbfaf8"/>
+</svg>

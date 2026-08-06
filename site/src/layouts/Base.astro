@@ -1,0 +1,136 @@
+---
+// The single source of every page's head. This is the file that makes the
+// non-negotiable true: title, description, canonical, Open Graph and Twitter
+// tags are rendered into the raw HTML at build time. Astro ships no JavaScript
+// by default, so an unfurler reading the raw bytes sees the real, per-page
+// values -- which is the specific failure this site exists to avoid.
+//
+// Every page MUST pass a distinct title and description. There is no fallback
+// to a site-wide default on purpose: a missing value should be obvious, not
+// silently replaced by the homepage card.
+import { SITE, NAV } from '../consts';
+
+interface Props {
+  title: string;
+  description: string;
+  /** Absolute path, e.g. "/about/". Canonical is built from this. */
+  path: string;
+  /** Site-root-relative or absolute image URL for social cards. */
+  image?: string;
+  imageAlt?: string;
+  ogType?: 'website' | 'article';
+  /** Serialized JSON-LD injected as-is. */
+  jsonLd?: Record<string, unknown> | null;
+}
+
+const {
+  title,
+  description,
+  path,
+  image = SITE.ogImage,
+  imageAlt = SITE.name,
+  ogType = 'website',
+  jsonLd = null,
+} = Astro.props;
+
+if (!title || !description) {
+  throw new Error(`Base layout: title and description are required (path: ${path})`);
+}
+
+const canonical = new URL(path, SITE.origin).href;
+const imageUrl = new URL(image, SITE.origin).href;
+
+// Home gets the bare brand name; every other page is suffixed, so no two pages
+// can share a <title>.
+const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={imageUrl} />
+    <meta property="og:image:alt" content={imageAlt} />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={imageUrl} />
+    <meta name="twitter:image:alt" content={imageAlt} />
+
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={`${SITE.name} — Research`}
+      href={new URL('/feed.xml', SITE.origin).href}
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="wordmark" href="/">
+          <span class="wordmark-name">Imagination Applied</span>
+          <span class="wordmark-tag">{SITE.tagline}</span>
+        </a>
+        <nav aria-label="Primary">
+          <ul>
+            {
+              NAV.map((item) => (
+                <li>
+                  <a
+                    href={item.href}
+                    aria-current={path === item.href ? 'page' : undefined}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <div>
+          <p class="footer-name">Imagination Applied</p>
+          <p class="muted">{SITE.description}</p>
+        </div>
+        <div class="footer-links">
+          <p>
+            <a href={SITE.founderSite}>Josh Penzell</a><br />
+            <a href={SITE.linkedin}>LinkedIn</a><br />
+            <a href="/publications/">Research</a><br />
+            <a href="/feed.xml">RSS</a>
+          </p>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

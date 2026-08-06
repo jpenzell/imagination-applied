@@ -1,0 +1,33 @@
+---
+import Base from '../../layouts/Base.astro';
+import { SITE } from '../../consts';
+---
+
+<Base
+  title="Message sent"
+  description="Your message reached Imagination Applied. We read everything that arrives and reply to the ones we can genuinely help with."
+  path="/contact/thanks/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">Contact</p>
+    <h1>That reached us</h1>
+    <p class="lede">Thank you. We read everything that arrives.</p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      You will hear back from a person, usually within a few working days. If the answer
+      is that we are not the right fit, we will tell you that too, and try to point you
+      somewhere more useful.
+    </p>
+    <p>
+      In the meantime, the <a href="/publications/">research</a> is the fastest way to see
+      how we think about evidence, and <a href="/how-we-work/">how we work</a> covers the
+      method.
+    </p>
+    <div class="actions">
+      <a class="btn btn-secondary" href="/">Back to the start</a>
+      <a class="btn btn-secondary" href={SITE.linkedin}>Follow on LinkedIn</a>
+    </div>
+  </section>
+</Base>

@@ -1,0 +1,31 @@
+favorable_stance,accuracy_trust,n,daily_rate
+Very unfavorable,Highly distrust,389,0.17737789203084833
+Very unfavorable,Somewhat distrust,149,0.18120805369127516
+Very unfavorable,Neither trust nor distrust,22,0.2727272727272727
+Very unfavorable,Somewhat trust,24,0.3333333333333333
+Very unfavorable,Highly trust,1,0.0
+Unfavorable,Highly distrust,837,0.18518518518518517
+Unfavorable,Somewhat distrust,822,0.19464720194647203
+Unfavorable,Neither trust nor distrust,174,0.22988505747126436
+Unfavorable,Somewhat trust,90,0.35555555555555557
+Unfavorable,Highly trust,5,0.0
+Unsure,Highly distrust,48,0.20833333333333334
+Unsure,Somewhat distrust,112,0.35714285714285715
+Unsure,Neither trust nor distrust,81,0.3950617283950617
+Unsure,Somewhat trust,44,0.3181818181818182
+Unsure,Highly trust,3,0.6666666666666666
+Indifferent,Highly distrust,716,0.31564245810055863
+Indifferent,Somewhat distrust,1923,0.2750910036401456
+Indifferent,Neither trust nor distrust,1139,0.35030728709394204
+Indifferent,Somewhat trust,562,0.3718861209964413
+Indifferent,Highly trust,13,0.6923076923076923
+Favorable,Highly distrust,795,0.5786163522012578
+Favorable,Somewhat distrust,2922,0.5513347022587269
+Favorable,Neither trust nor distrust,3107,0.6140971998712584
+Favorable,Somewhat trust,4588,0.6724062772449869
+Favorable,Highly trust,128,0.6953125
+Very favorable,Highly distrust,241,0.8506224066390041
+Very favorable,Somewhat distrust,774,0.851421188630491
+Very favorable,Neither trust nor distrust,1586,0.8726355611601513
+Very favorable,Somewhat trust,3982,0.886991461577097
+Very favorable,Highly trust,825,0.9066666666666666

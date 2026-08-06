@@ -1,0 +1,19 @@
+# Data files — download separately per data/README_data.md
+data/**/*.csv
+data/**/*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Local rendering and packaging
+render_*/
+release_staging/
+
+# Temp
+*.tmp

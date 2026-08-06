@@ -1,0 +1,113 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE, DOORS } from '../consts';
+
+const door = DOORS[0];
+
+// Canonical talk titles and subtitles: Brand Guide section 7, "The Public Talk
+// Portfolio". Titles are fixed -- older names are variants, not products.
+const TALKS = [
+  {
+    title: 'Rehearsing the Future',
+    subtitle: 'Artistic Intelligence for the Age of AI',
+    role: 'Flagship conceptual keynote',
+    promise:
+      'AI has changed the script. This keynote shows leaders how to create direction, align an ensemble, and rehearse what comes next.',
+    when: 'When the event needs the full worldview, as an opening or closing keynote.',
+  },
+  {
+    title: 'AI at the Speed of Live',
+    subtitle: 'Don’t Just Prompt. Direct.',
+    role: 'Flagship live, experiential keynote',
+    promise:
+      'Josh directs AI in real time with the audience, making the difference between prompting and directing visible onstage.',
+    when: 'When the buyer wants a participatory mainstage experience and concrete AI relevance.',
+  },
+  {
+    title: 'TheaterThink Workshop Suite',
+    subtitle: 'Directing, Casting, and Rehearsing What Comes Next',
+    role: 'Interactive workshops and deeper learning experiences',
+    promise:
+      'Participants apply the craft to a real team, project, or AI-enabled workflow rather than to a case study.',
+    when: 'When a room needs to practice the moves, not just see them.',
+  },
+];
+---
+
+<Base
+  title="Keynotes and workshops"
+  description={door.for}
+  path="/keynotes-and-workshops/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">Three ways to work together</p>
+    <h1>Keynotes and workshops</h1>
+    <p class="lede">{door.for}</p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      <strong>Outcome.</strong>
+      {door.outcome}
+    </p>
+    <p>
+      Josh does not simply explain AI onstage. He directs it live, with the room as part
+      of the argument. The audience watches a plausible answer fail, watches the direction
+      change, and leaves with a move they can use on Monday.
+    </p>
+
+    <div class="section-rule">
+      <h2>The portfolio</h2>
+      <ul class="cards">
+        {
+          TALKS.map((talk) => (
+            <li class="card">
+              <p class="eyebrow">{talk.role}</p>
+              <h3 style="margin-top:0">{talk.title}</h3>
+              <p class="muted">{talk.subtitle}</p>
+              <p>{talk.promise}</p>
+              <p class="outcome">
+                <strong>Best fit</strong>
+                {talk.when}
+              </p>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="muted" style="margin-top:1.25rem">
+        Industry-specific sessions are built as variants of these talks rather than as
+        separate programs.
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>Live-build sessions</h2>
+      <h3>Oops, We Built a Training Program</h3>
+      <p>
+        Participants watch AI make plausible mistakes, revise the direction, and build a
+        real learning solution in motion. It is the clearest demonstration of the
+        difference between prompting and directing, because the failures are real and
+        happen in the room.
+      </p>
+      <h3>Rehearsing What Comes Next: A Certificate for L&amp;D Leaders</h3>
+      <p>
+        A one-day hands-on lab that translates Artistic Intelligence into usable practice
+        without requiring theater or AI expertise. The arc runs direct the work, cast the
+        ensemble, rehearse the solution, interpret what emerged. Participants leave with a
+        completed application to a real workplace challenge.
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>Booking</h2>
+      <p>
+        Speaking is booked through Josh directly. His speaker page carries availability,
+        reel, and the full stage history.
+      </p>
+      <div class="actions">
+        <a class="btn" href={SITE.founderSite}>Bring Josh to your stage</a>
+        <a class="btn btn-secondary" href="/contact/">Ask about a workshop</a>
+      </div>
+    </div>
+  </section>
+</Base>

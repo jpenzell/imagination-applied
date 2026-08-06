@@ -1,0 +1,77 @@
+---
+import Base from '../../layouts/Base.astro';
+import { PUBLICATIONS, SITE } from '../../consts';
+
+const pubs = [...PUBLICATIONS];
+---
+
+<Base
+  title="Research"
+  description="Open research from Imagination Applied. Every claim traceable to code, limitations stated in the body rather than a footnote, and the analysis released with its checksums."
+  path="/publications/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">Open Research Series</p>
+    <h1>Research</h1>
+    <p class="lede">
+      We publish what we find, including the parts that complicate the argument.
+    </p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      Claims about AI adoption are easy to make and hard to check. So we publish ours the
+      way a reader would need in order to disagree with us properly: the analysis code,
+      the denominators, the robustness checks, a file manifest with SHA-256 checksums, and
+      the strongest counterargument we could construct against our own result.
+    </p>
+    <p>
+      Survey data belonging to third parties is never redistributed here. Each release
+      documents how to obtain the original data and how to verify that what you obtained
+      matches what we analyzed.
+    </p>
+
+    <div class="section-rule">
+      <h2>Publications</h2>
+      <ul class="cards">
+        {
+          pubs.map((pub) => (
+            <li class="card card-link">
+              <p class="eyebrow">
+                {pub.series} · v{pub.version}
+              </p>
+              <h3 style="margin-top:0">
+                <a href={`/publications/${pub.slug}/`}>{pub.title}</a>
+              </h3>
+              <p class="muted">{pub.subtitle}</p>
+              <p>{pub.description}</p>
+              <p class="outcome">
+                <strong>{pub.author}</strong>
+                <time datetime={pub.datePublished}>
+                  {new Date(pub.datePublished).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    timeZone: 'UTC',
+                  })}
+                </time>
+              </p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <div class="section-rule">
+      <h2>Replication and corrections</h2>
+      <p>
+        Corrections, replication attempts, and methodological criticism are welcome.
+        Material revisions are documented in the repository release notes and reflected in
+        the versioned research note.
+      </p>
+      <div class="actions">
+        <a class="btn btn-secondary" href={SITE.repo}>Source and data on GitHub</a>
+        <a class="btn btn-secondary" href="/feed.xml">Subscribe by RSS</a>
+      </div>
+    </div>
+  </section>
+</Base>

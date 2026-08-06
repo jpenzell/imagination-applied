@@ -1,0 +1,13 @@
+{
+  "sample": "current_users_only",
+  "n_train": 20881,
+  "n_test": 5221,
+  "accuracy": 0.7333844091170274,
+  "balanced_accuracy": 0.7105633759776802,
+  "roc_auc": 0.788823468294822,
+  "log_loss": 0.5402325300976965,
+  "brier": 0.18097785569699845,
+  "calibration_intercept": 0.03436298568000304,
+  "calibration_slope": 0.9598473699683062,
+  "mean_absolute_decile_gap": 0.015553049867730361
+}

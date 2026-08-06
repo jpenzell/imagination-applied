@@ -1,0 +1,142 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE, DOORS, PRACTICE, PUBLICATIONS } from '../consts';
+
+const pub = PUBLICATIONS[0];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: SITE.name,
+  url: SITE.origin,
+  description: SITE.description,
+  slogan: SITE.hero,
+  founder: {
+    '@type': 'Person',
+    name: SITE.founder,
+    url: SITE.founderSite,
+  },
+  sameAs: [SITE.linkedin, SITE.founderSite],
+};
+---
+
+<Base
+  title="Imagination Applied"
+  description={SITE.description}
+  path="/"
+  jsonLd={jsonLd}
+>
+  <section class="wrap hero">
+    <p class="eyebrow">{SITE.tagline}</p>
+    <h1>{SITE.hero}</h1>
+    <p class="lede">
+      AI can make almost anything. The real leadership challenge is deciding what is
+      worth making—and creating the conditions to make it real.
+    </p>
+    <div class="actions">
+      <a class="btn" href="/contact/">Start a conversation</a>
+      <a class="btn btn-secondary" href="/how-we-work/">See how we work</a>
+    </div>
+  </section>
+
+  <section class="wrap section-rule">
+    <h2>The problem is not capability. It is direction.</h2>
+    <p>
+      Organizations are surrounded by possibility and starved for direction. They can
+      generate more options, more content, more analysis than ever. But more output does
+      not produce shared meaning, good judgment, or movement.
+    </p>
+    <p>
+      Teams can be competent and still be in different plays. Leaders can move quickly and
+      still move in the wrong direction. AI can produce a beautiful answer to a question
+      nobody meant to ask.
+    </p>
+    <p>
+      That decision—what is worth making—is not hidden inside a better prompt. It lives in
+      interpretation. In the point of view you bring, the people and tools you put in the
+      room, and what you learn when the idea finally has to move.
+    </p>
+    <p class="pull">Artistic Intelligence is what we use when the answer is not waiting to be found—it has to be made.</p>
+  </section>
+
+  <section class="wrap section-rule">
+    <h2>Three ways to work together</h2>
+    <p class="muted">
+      Every engagement starts with the same question: what is this work actually about?
+    </p>
+    <ul class="cards">
+      {
+        DOORS.map((door) => (
+          <li class="card card-link">
+            <h3><a href={door.href}>{door.title}</a></h3>
+            <p>{door.for}</p>
+            <p class="outcome">
+              <strong>Outcome</strong>
+              {door.outcome}
+            </p>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="wrap section-rule">
+    <h2>The method: direct, cast, rehearse</h2>
+    <p>
+      Our practice is called TheaterThink. It is not a metaphor we decorate the work with.
+      It is how the work is actually run: three moves, in order.
+    </p>
+    <ul class="cards">
+      {
+        PRACTICE.map((step) => (
+          <li class="card">
+            <h3>{step.name}</h3>
+            <p class="muted">{step.subtitle}</p>
+            <p>{step.oneLiner}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <p style="margin-top:1.5rem">
+      <a href="/how-we-work/">How we work, in detail →</a>
+    </p>
+  </section>
+
+  <section class="wrap section-rule">
+    <h2>We publish what we find</h2>
+    <p>
+      Advice about AI adoption is cheap. We test ours, publish the code and the
+      checksums, and state the limitations in the body of the work rather than in a
+      footnote.
+    </p>
+    <div class="card" style="margin-top:1.5rem;max-width:38rem">
+      <p class="eyebrow">{pub.series}</p>
+      <h3 style="margin-top:0">
+        <a href={`/publications/${pub.slug}/`}>{pub.title}</a>
+      </h3>
+      <p>{pub.description}</p>
+      <p class="outcome">
+        <strong>Read</strong>
+        Full analysis, figures, reproducible code, and the strongest counterargument.
+      </p>
+    </div>
+  </section>
+
+  <section class="wrap section-rule">
+    <h2>Who is behind this</h2>
+    <p>
+      Imagination Applied was founded by <a href={SITE.founderSite}>Josh Penzell</a>—keynote
+      speaker, advisor, and theater director by training. He is the forthcoming author of
+      <em>Artistic Intelligence</em>, and the public voice of this work.
+    </p>
+    <p>
+      If you are here to book Josh for a stage, that lives on
+      <a href={SITE.founderSite}>joshpenzell.com</a>. If you are here to change how your
+      organization works, you are in the right place.
+    </p>
+    <div class="actions">
+      <a class="btn" href="/contact/">Start a conversation</a>
+      <a class="btn btn-secondary" href="/about/">About the company</a>
+    </div>
+  </section>
+</Base>
