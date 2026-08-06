@@ -364,6 +364,18 @@ section {
   }
 }
 
+/* Rich-text coming from the admin. Constrained to the same measure as authored
+   copy so an edit cannot blow out the column. */
+.prose > * {
+  max-width: var(--measure);
+}
+.prose > :first-child {
+  margin-top: 0;
+}
+.prose a {
+  color: var(--link);
+}
+
 /* ---------- cards ---------- */
 
 .cards {
@@ -742,6 +754,47 @@ section {
 .hp {
   position: absolute;
   left: -9999px;
+}
+
+/* ---------- the house: how the four pieces fit ---------- */
+
+.house {
+  border-top: 1px solid var(--rule);
+  background: var(--wash);
+  margin-top: 4rem;
+  padding-block: 2.5rem;
+}
+.house-inner {
+  display: grid;
+  gap: 1.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+.house-item p {
+  max-width: none;
+  margin: 0;
+  font-size: 0.88rem;
+}
+.house-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.35rem !important;
+}
+.house-name {
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem !important;
+  color: var(--ink);
+}
+/* The company is the one you are standing in. */
+.house-item:nth-child(3) .house-name {
+  color: var(--teal-text);
+}
+.house + .site-footer {
+  margin-top: 0;
 }
 
 /* ---------- footer ---------- */

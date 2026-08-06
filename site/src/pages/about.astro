@@ -1,5 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
+import { seo } from '../lib/content';
+import { defaultSeo } from '../lib/blocks';
 import { SITE } from '../consts';
 
 // Every credential on this page comes from the Brand Guide's "Core Proof Bank"
@@ -7,11 +9,14 @@ import { SITE } from '../consts';
 // the guide flags for verification first -- named clients, stage counts,
 // audience totals, outcome percentages -- are deliberately absent. Do not add
 // one without checking permission and wording against the guide.
+
+// Editable from the joshpenzell.com admin; falls back to the default above.
+const meta = await seo('ia.seo.about', defaultSeo('ia.seo.about'));
 ---
 
 <Base
-  title="About"
-  description="Imagination Applied brings Artistic Intelligence into organizations through live experiences, executive advisory, and rehearsal-based transformation. Founded by Josh Penzell."
+  title={meta.title}
+  description={meta.description}
   path="/about/"
 >
   <section class="wrap page-head">

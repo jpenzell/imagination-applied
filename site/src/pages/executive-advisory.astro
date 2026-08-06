@@ -1,11 +1,16 @@
 ---
 import Base from '../layouts/Base.astro';
+import { seo } from '../lib/content';
+import { defaultSeo } from '../lib/blocks';
 import { DOORS } from '../consts';
 
 const door = DOORS[1];
+
+// Editable from the joshpenzell.com admin; falls back to the default above.
+const meta = await seo('ia.seo.advisory', defaultSeo('ia.seo.advisory'));
 ---
 
-<Base title="Executive advisory" description={door.for} path="/executive-advisory/">
+<Base title={meta.title} description={meta.description} path="/executive-advisory/">
   <section class="wrap page-head">
     <p class="eyebrow">Three ways to work together</p>
     <h1>Executive advisory</h1>

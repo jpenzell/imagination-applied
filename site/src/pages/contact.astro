@@ -1,15 +1,20 @@
 ---
 import Base from '../layouts/Base.astro';
+import { seo } from '../lib/content';
+import { defaultSeo } from '../lib/blocks';
 import { SITE } from '../consts';
 
 // This page is fully static HTML. The form is a plain POST to a Cloudflare
 // Pages Function -- no client JavaScript, no third-party embed, and the page
 // still renders and submits with scripting disabled.
+
+// Editable from the joshpenzell.com admin; falls back to the default above.
+const meta = await seo('ia.seo.contact', defaultSeo('ia.seo.contact'));
 ---
 
 <Base
-  title="Contact"
-  description="Tell us what the work is actually about. Imagination Applied works with leaders and teams on AI adoption, advisory, and rehearsal-based transformation."
+  title={meta.title}
+  description={meta.description}
   path="/contact/"
 >
   <section class="wrap page-head">

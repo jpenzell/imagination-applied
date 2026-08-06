@@ -10,7 +10,8 @@
     "build": "node scripts/prebuild.mjs && astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "prebuild": "node scripts/prebuild.mjs"
+    "prebuild": "node scripts/prebuild.mjs",
+    "emit:blocks": "node scripts/emit-blocks.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

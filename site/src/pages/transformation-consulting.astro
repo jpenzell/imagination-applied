@@ -1,13 +1,18 @@
 ---
 import Base from '../layouts/Base.astro';
+import { seo } from '../lib/content';
+import { defaultSeo } from '../lib/blocks';
 import { DOORS } from '../consts';
 
 const door = DOORS[2];
+
+// Editable from the joshpenzell.com admin; falls back to the default above.
+const meta = await seo('ia.seo.consulting', defaultSeo('ia.seo.consulting'));
 ---
 
 <Base
-  title="Transformation consulting"
-  description={door.for}
+  title={meta.title}
+  description={meta.description}
   path="/transformation-consulting/"
 >
   <section class="wrap page-head">

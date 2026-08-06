@@ -1,5 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
+import { seo } from '../lib/content';
+import { defaultSeo } from '../lib/blocks';
 import { SITE, DOORS } from '../consts';
 
 const door = DOORS[0];
@@ -32,11 +34,14 @@ const TALKS = [
     when: 'When a room needs to practice the moves, not just see them.',
   },
 ];
+
+// Editable from the joshpenzell.com admin; falls back to the default above.
+const meta = await seo('ia.seo.keynotes', defaultSeo('ia.seo.keynotes'));
 ---
 
 <Base
-  title="Keynotes and workshops"
-  description={door.for}
+  title={meta.title}
+  description={meta.description}
   path="/keynotes-and-workshops/"
 >
   <section class="wrap page-head">

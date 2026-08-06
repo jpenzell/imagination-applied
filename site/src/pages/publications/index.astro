@@ -1,13 +1,18 @@
 ---
 import Base from '../../layouts/Base.astro';
+import { seo } from '../../lib/content';
+import { defaultSeo } from '../../lib/blocks';
 import { PUBLICATIONS, SITE } from '../../consts';
 
 const pubs = [...PUBLICATIONS];
+
+// Editable from the joshpenzell.com admin; falls back to the default above.
+const meta = await seo('ia.seo.publications', defaultSeo('ia.seo.publications'));
 ---
 
 <Base
-  title="Research"
-  description="Open research from Imagination Applied. Every claim traceable to code, limitations stated in the body rather than a footnote, and the analysis released with its checksums."
+  title={meta.title}
+  description={meta.description}
   path="/publications/"
 >
   <section class="wrap page-head">

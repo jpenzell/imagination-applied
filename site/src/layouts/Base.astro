@@ -9,6 +9,8 @@
 // to a site-wide default on purpose: a missing value should be obvious, not
 // silently replaced by the homepage card.
 import { SITE, NAV } from '../consts';
+import { text } from '../lib/content';
+import { defaultText } from '../lib/blocks';
 
 interface Props {
   title: string;
@@ -36,6 +38,12 @@ const {
 if (!title || !description) {
   throw new Error(`Base layout: title and description are required (path: ${path})`);
 }
+
+// Editable from the joshpenzell.com admin.
+const description_global = await text(
+  'ia.global.description',
+  defaultText('ia.global.description')
+);
 
 const canonical = new URL(path, SITE.origin).href;
 const imageUrl = new URL(image, SITE.origin).href;
@@ -134,15 +142,53 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
       <slot />
     </main>
 
+    {/* How the pieces fit. The Brand Guide keeps this architecture backstage --
+        "the audience should experience one clear idea, not receive a tour of
+        the filing cabinet" -- so it sits in the footer, stated once, rather
+        than in the navigation. It is also what makes the relationship to
+        joshpenzell.com legible on every page instead of only the About page. */}
+    <section class="house">
+      <div class="wrap house-inner">
+        <div class="house-item">
+          <p class="house-label">The philosophy</p>
+          <p class="house-name">Artistic Intelligence</p>
+          <p class="muted">
+            What we use when the answer is not waiting to be found. Josh's
+            forthcoming book.
+          </p>
+        </div>
+        <div class="house-item">
+          <p class="house-label">The practice</p>
+          <p class="house-name">TheaterThink</p>
+          <p class="muted">
+            The rehearsal-based method. <a href="/how-we-work/">How we work</a>.
+          </p>
+        </div>
+        <div class="house-item">
+          <p class="house-label">The company</p>
+          <p class="house-name">Imagination Applied</p>
+          <p class="muted">Where the work becomes engagements and change. You are here.</p>
+        </div>
+        <div class="house-item">
+          <p class="house-label">The voice</p>
+          <p class="house-name">Josh Penzell</p>
+          <p class="muted">
+            Keynotes, speaking, and the book live at
+            <a href={SITE.founderSite}>joshpenzell.com</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
     <footer class="site-footer">
       <div class="wrap footer-inner">
         <div>
           <p class="footer-name">Imagination Applied</p>
-          <p class="muted">{SITE.description}</p>
+          <p class="muted">{description_global}</p>
         </div>
         <div class="footer-links">
           <p>
-            <a href={SITE.founderSite}>Josh Penzell</a><br />
+            <a href={SITE.founderSite}>joshpenzell.com</a><br />
             <a href={SITE.linkedin}>LinkedIn</a><br />
             <a href="/publications/">Research</a><br />
             <a href="/feed.xml">RSS</a>

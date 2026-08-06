@@ -1,11 +1,16 @@
 ---
 import Base from '../layouts/Base.astro';
+import { seo } from '../lib/content';
+import { defaultSeo } from '../lib/blocks';
 import { PRACTICE, SITE } from '../consts';
+
+// Editable from the joshpenzell.com admin; falls back to the default above.
+const meta = await seo('ia.seo.how-we-work', defaultSeo('ia.seo.how-we-work'));
 ---
 
 <Base
-  title="How we work"
-  description="TheaterThink is our rehearsal-based practice: direct the work, cast the ensemble, rehearse before the stakes are irreversible. Three moves, in order."
+  title={meta.title}
+  description={meta.description}
   path="/how-we-work/"
 >
   <section class="wrap page-head">
