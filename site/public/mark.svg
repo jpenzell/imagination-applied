@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" role="img" aria-label="Imagination Applied">
+  <title>Imagination Applied</title>
+  <!-- The head: a profile facing right, thought leaving it. -->
+  <path fill="#009078" d="M14 52c0-14.4 11.2-25 25.4-25 13 0 22.3 8.4 24.4 19.6l4.6 12.4-6.2 2.3 1.6 8.2c.5 2.5-1 4.3-3.5 4.3h-4.1v6.9c0 2.4-1.9 4.3-4.3 4.3H31.6V72.6c0-2-1-3.2-2.7-4.3C20.3 63 14 58.4 14 52Z"/>
+  <!-- The paper airplane: the idea in flight. Magenta upper wing, orange body. -->
+  <path fill="#0C306C" d="m56.5 39.8 9.6-3.6 3.4 9-9.7 3.7z"/>
+  <path fill="#B40C54" d="M110 8 58.2 40.6l14.4 5.1z"/>
+  <path fill="#F06C18" d="m110 8-37.4 37.7 5.6 20.6z"/>
+</svg>

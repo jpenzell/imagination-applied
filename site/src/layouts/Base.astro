@@ -79,6 +79,21 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/playfair-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
     {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
 
     <link rel="stylesheet" href="/styles.css" />
@@ -90,8 +105,11 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
     <header class="site-header">
       <div class="wrap header-inner">
         <a class="wordmark" href="/">
-          <span class="wordmark-name">Imagination Applied</span>
-          <span class="wordmark-tag">{SITE.tagline}</span>
+          <img src="/mark.svg" width="42" height="35" alt="" />
+          <span>
+            <span class="wordmark-name">Imagination Applied</span>
+            <span class="wordmark-tag">{SITE.tagline}</span>
+          </span>
         </a>
         <nav aria-label="Primary">
           <ul>

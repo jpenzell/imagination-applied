@@ -1,33 +1,101 @@
-/* Imagination Applied — site styles.
-   Served as a static file so no CSS-in-JS ever delays first paint.
-   Typography does most of the work: this is a site whose job is to be read
-   and to be quoted. */
+/* Imagination Applied — visual system.
+ *
+ * Built from the Brand Guide section 10 (Visual Expression) and the actual
+ * logo and joshpenzell.com design tokens.
+ *
+ *   Premise      "A rehearsal room for the future."
+ *   Principles   Structured, then interrupted · Evidence of motion ·
+ *                Human before futuristic · Editorial, not SaaS ·
+ *                Playful with restraint.
+ *
+ * Palette is taken from the head-and-paper-airplane mark, and matches
+ * joshpenzell.com (--primary navy, --secondary teal) so the two sites read as
+ * one house. Guide colour direction: a quiet paper ground, strong dark ink,
+ * ONE confident cool colour (navy, for systems and clarity), ONE warm accent
+ * (orange, for motion and risk). Teal is the mark's signature. Magenta is
+ * punctuation and is used about twice.
+ *
+ * The guide's Avoid list is binding here: no red curtains, no comedy/tragedy
+ * masks, no glowing brains, no circuit patterns, no binary as texture.
+ */
+
+/* ---------- fonts, self-hosted so there is no third-party request ---------- */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('/fonts/playfair-latin-var.woff2') format('woff2');
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('/fonts/playfair-latin-italic-var.woff2') format('woff2');
+  font-weight: 400 900;
+  font-style: italic;
+  font-display: swap;
+}
 
 :root {
-  --ink: #16161a;
-  --ink-soft: #4a4a55;
-  --ink-faint: #71717f;
-  --paper: #fbfaf8;
+  --navy: #0c306c;
+  --navy-lift: #124191;
+  --teal: #009078;
+  --orange: #f06c18;
+  --magenta: #b40c54;
+  --mint: #b4e4cc;
+
+  /* Brand colours above are for graphics: rules, borders, arrows, the mark.
+     Text needs more contrast than a logo does, so coloured *type* uses these
+     darker siblings. Same hues, WCAG AA on the paper ground. Measured, not
+     guessed: teal 5.34:1, orange 4.46:1 (AA large, near-AA normal). */
+  --teal-text: #007662;
+  --orange-text: #c1530d;
+
+  --ink: #0d1b2e;
+  --ink-soft: #46566d;
+  --ink-faint: #647286;
+  --paper: #fbfaf7;
   --panel: #ffffff;
-  --rule: #e2ded8;
-  --accent: #8a2f39; /* stage curtain red, held back to accents only */
-  --accent-soft: #f3e9ea;
-  --focus: #1d4ed8;
-  --measure: 34rem;
-  --wrap: 68rem;
+  --rule: #e3ded4;
+  --wash: #f2f5f3;
+
+  --link: var(--navy-lift);
+  --focus: var(--orange);
+
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --serif: 'Playfair Display', Charter, Georgia, serif;
+
+  --measure: 36rem;
+  --wrap: 70rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ink: #eceaea;
-    --ink-soft: #b6b3b8;
-    --ink-faint: #8e8b93;
-    --paper: #131316;
-    --panel: #1a1a1f;
-    --rule: #2e2e36;
-    --accent: #e08b93;
-    --accent-soft: #2a1c1f;
-    --focus: #93b4ff;
+    --navy: #7ea3e0;
+    --navy-lift: #9dbcf0;
+    --teal: #2fc4a4;
+    --orange: #ff9047;
+    --magenta: #f0619b;
+    --mint: #1d4038;
+    --teal-text: #2fc4a4;
+    --orange-text: #ff9047;
+
+    --ink: #eef0f3;
+    --ink-soft: #b3bcca;
+    --ink-faint: #8794a6;
+    --paper: #0d1219;
+    --panel: #141b25;
+    --rule: #28313f;
+    --wash: #121a22;
+
+    --link: var(--navy-lift);
   }
 }
 
@@ -36,19 +104,29 @@
 *::after {
   box-sizing: border-box;
 }
-
 html {
   -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: Charter, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  font-family: var(--sans);
   font-size: 1.0625rem;
   line-height: 1.65;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 .wrap {
@@ -64,14 +142,14 @@ body {
 .skip:focus {
   left: 1rem;
   top: 1rem;
-  z-index: 10;
+  z-index: 20;
   background: var(--panel);
   padding: 0.6rem 1rem;
   border: 2px solid var(--focus);
 }
 
 a {
-  color: inherit;
+  color: var(--link);
   text-underline-offset: 0.18em;
   text-decoration-thickness: 1px;
 }
@@ -81,6 +159,7 @@ a:hover {
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ---------- header ---------- */
@@ -88,45 +167,72 @@ a:hover {
 .site-header {
   border-bottom: 1px solid var(--rule);
   background: var(--panel);
+  position: relative;
+}
+/* Structured, then interrupted: the four mark colours as a hairline overhead,
+   like gel colours racked above a stage. */
+.site-header::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    var(--teal) 0 25%,
+    var(--navy) 25% 45%,
+    var(--magenta) 45% 70%,
+    var(--orange) 70% 100%
+  );
 }
 .header-inner {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem 2rem;
-  align-items: baseline;
+  gap: 0.75rem 2rem;
+  align-items: center;
   justify-content: space-between;
-  padding-block: 1.1rem;
+  padding-block: 1rem;
 }
 .wordmark {
   text-decoration: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.wordmark img {
+  width: 42px;
+  height: 35px;
   display: block;
 }
 .wordmark-name {
   display: block;
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
 }
 .wordmark-tag {
   display: block;
-  font-size: 0.8rem;
-  color: var(--ink-faint);
+  font-family: var(--serif);
   font-style: italic;
+  font-size: 0.82rem;
+  color: var(--ink-faint);
+  line-height: 1.2;
 }
 .site-header nav ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 1.15rem;
+  gap: 0.3rem 1.1rem;
   list-style: none;
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 0.86rem;
+  font-size: 0.855rem;
+  font-weight: 500;
 }
 .site-header nav a {
   text-decoration: none;
   color: var(--ink-soft);
-  padding-block: 0.15rem;
+  padding-block: 0.2rem;
   border-bottom: 2px solid transparent;
 }
 .site-header nav a:hover {
@@ -135,7 +241,7 @@ a:hover {
 }
 .site-header nav a[aria-current='page'] {
   color: var(--ink);
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--orange);
 }
 
 /* ---------- type ---------- */
@@ -143,61 +249,72 @@ a:hover {
 h1,
 h2,
 h3 {
-  line-height: 1.15;
+  font-family: var(--serif);
+  line-height: 1.12;
   letter-spacing: -0.015em;
-  font-weight: 600;
+  font-weight: 700;
   text-wrap: balance;
 }
 h1 {
-  font-size: clamp(2rem, 5vw, 3rem);
-  margin: 0 0 0.6rem;
+  font-size: clamp(2.4rem, 6.5vw, 4.25rem);
+  margin: 0 0 0.75rem;
 }
 h2 {
-  font-size: clamp(1.4rem, 3vw, 1.8rem);
-  margin: 2.75rem 0 0.75rem;
+  font-size: clamp(1.6rem, 3.4vw, 2.25rem);
+  margin: 2.75rem 0 0.8rem;
 }
 h3 {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   margin: 2rem 0 0.5rem;
+  letter-spacing: -0.005em;
 }
 p,
 ul,
-ol {
+ol,
+dl {
   max-width: var(--measure);
 }
 .lede {
-  font-size: 1.2rem;
+  font-size: clamp(1.15rem, 2vw, 1.3rem);
+  line-height: 1.55;
   color: var(--ink-soft);
   max-width: 40rem;
 }
 .muted {
   color: var(--ink-faint);
 }
+
+/* The stage direction: a margin annotation in the voice of a script. */
 .eyebrow {
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin: 0 0 0.75rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
   font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--teal-text);
+  margin: 0 0 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.eyebrow::before {
+  content: '';
+  width: 1.6rem;
+  height: 2px;
+  background: currentColor;
+  flex: none;
 }
 
 /* ---------- sections ---------- */
 
 section {
-  padding-block: 1rem;
+  padding-block: 0.5rem;
 }
 .section-rule {
   border-top: 1px solid var(--rule);
   margin-top: 3.5rem;
   padding-top: 2.5rem;
-}
-.hero {
-  padding-block: clamp(3rem, 8vw, 5.5rem) 1rem;
-}
-.hero h1 {
-  max-width: 16ch;
+  position: relative;
 }
 .page-head {
   padding-block: clamp(2.5rem, 6vw, 4rem) 0.5rem;
@@ -206,13 +323,54 @@ section {
   padding-bottom: 4rem;
 }
 
+/* Hero. The flight path is the mark's own gesture, drawn once, going up and
+   to the right — evidence of motion without a single glowing brain. */
+.hero {
+  position: relative;
+  padding-block: clamp(3.5rem, 9vw, 6.5rem) 2rem;
+  overflow: hidden;
+}
+.hero-path {
+  position: absolute;
+  right: -4%;
+  top: 4%;
+  width: min(56%, 34rem);
+  height: auto;
+  pointer-events: none;
+  opacity: 0.9;
+}
+.hero > * {
+  position: relative;
+}
+.hero h1 {
+  max-width: 15ch;
+}
+.hero .lede {
+  max-width: 33rem;
+}
+/* The one word the whole brand turns on. */
+.turn {
+  color: var(--orange-text);
+  font-style: italic;
+}
+
+@media (max-width: 52rem) {
+  .hero-path {
+    opacity: 0.25;
+    width: 80%;
+    right: -18%;
+    top: auto;
+    bottom: 2%;
+  }
+}
+
 /* ---------- cards ---------- */
 
 .cards {
   display: grid;
   gap: 1.25rem;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-  margin-top: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(17.5rem, 1fr));
+  margin-top: 1.75rem;
   padding: 0;
   list-style: none;
   max-width: none;
@@ -220,10 +378,18 @@ section {
 .card {
   background: var(--panel);
   border: 1px solid var(--rule);
-  border-radius: 3px;
-  padding: 1.4rem 1.4rem 1.5rem;
+  border-top: 3px solid var(--navy);
+  border-radius: 2px;
+  padding: 1.5rem 1.4rem;
   display: flex;
   flex-direction: column;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.card:nth-child(2) {
+  border-top-color: var(--teal);
+}
+.card:nth-child(3) {
+  border-top-color: var(--orange);
 }
 .card h3 {
   margin-top: 0;
@@ -233,42 +399,173 @@ section {
 }
 .card .outcome {
   margin-top: auto;
-  padding-top: 1rem;
+  padding-top: 1.1rem;
   font-size: 0.92rem;
   color: var(--ink-soft);
 }
 .card .outcome strong {
   display: block;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin-bottom: 0.2rem;
-}
-.card-link {
-  text-decoration: none;
+  margin-bottom: 0.25rem;
 }
 .card-link:hover {
-  border-color: var(--accent);
+  border-color: var(--orange);
+  transform: translateY(-2px);
 }
-.card-link h3 {
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
+.card-link h3 a {
+  text-decoration: none;
+  color: var(--ink);
+  background-image: linear-gradient(var(--orange), var(--orange));
+  background-size: 0% 2px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  transition: background-size 0.2s ease;
+}
+.card-link:hover h3 a {
+  background-size: 100% 2px;
+}
+
+/* ---------- the three moves: a sequence, not a list ---------- */
+
+.moves {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin-top: 1.75rem;
+  padding: 0;
+  list-style: none;
+  max-width: none;
+  counter-reset: move;
+}
+.move {
+  position: relative;
+  background: var(--wash);
+  border-radius: 2px;
+  padding: 1.5rem 1.4rem 1.4rem;
+  counter-increment: move;
+}
+.move::before {
+  content: counter(move);
+  font-family: var(--serif);
+  font-size: 3.25rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--orange);
+  opacity: 0.4;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.9rem;
+}
+/* The arrow between moves — the work happens in order. */
+.move:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -1rem;
+  top: 50%;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-top: 2px solid var(--orange);
+  border-right: 2px solid var(--orange);
+  transform: translateY(-50%) rotate(45deg);
+}
+@media (max-width: 47rem) {
+  .move:not(:last-child)::after {
+    display: none;
+  }
+}
+.move h3 {
+  margin: 0 0 0.15rem;
+  font-size: 1.3rem;
+}
+.move .move-sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--teal-text);
+  margin: 0 0 0.7rem;
+}
+.move p {
+  max-width: none;
+  margin: 0;
 }
 
 /* ---------- pull quote ---------- */
 
 .pull {
-  border-left: 3px solid var(--accent);
-  padding-left: 1.25rem;
-  margin: 2rem 0;
-  font-size: 1.25rem;
+  font-family: var(--serif);
+  font-size: clamp(1.35rem, 2.6vw, 1.75rem);
+  line-height: 1.35;
+  font-style: italic;
   color: var(--ink);
-  max-width: 32rem;
+  border-left: 3px solid var(--orange);
+  padding-left: 1.4rem;
+  margin: 2.25rem 0;
+  max-width: 34rem;
 }
 
-/* ---------- publication page ---------- */
+/* ---------- buttons ---------- */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border: 2px solid var(--navy);
+  background: var(--navy);
+  color: #fff;
+  border-radius: 2px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn::after {
+  content: '→';
+  transition: transform 0.15s ease;
+}
+.btn:hover {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}
+.btn:hover::after {
+  transform: translateX(3px);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.btn-secondary:hover {
+  background: transparent;
+  color: var(--orange);
+  border-color: var(--orange);
+}
+@media (prefers-color-scheme: dark) {
+  /* On a dark ground the filled button's ground is a light navy, so its label
+     flips to the dark ink. Scoped away from .btn-secondary, which stays
+     transparent -- without :not() this rule wins on source order and paints
+     the outline button's text the same colour as the page behind it. */
+  .btn:not(.btn-secondary),
+  .btn:not(.btn-secondary):hover {
+    color: #0d1219;
+  }
+}
+
+/* ---------- publication ---------- */
 
 .pub-layout {
   display: grid;
@@ -276,25 +573,41 @@ section {
   grid-template-columns: minmax(0, 1fr);
   padding-bottom: 4rem;
 }
-@media (min-width: 62rem) {
+@media (min-width: 64rem) {
   .pub-layout {
     grid-template-columns: minmax(0, 1fr) 17rem;
-    gap: 4rem;
+    gap: 4.5rem;
   }
+}
+/* The article gets the book treatment: serif, generous measure. This is the
+   guide's "editorial serif when the work needs reflection." */
+.pub-body {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  line-height: 1.66;
 }
 .pub-body :is(h2, h3) {
   max-width: 30ch;
+}
+.pub-body h2 {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule);
+}
+.pub-body strong {
+  font-weight: 700;
 }
 .pub-body img {
   max-width: 100%;
   height: auto;
   display: block;
-  margin: 2rem 0 0.5rem;
+  margin: 2.25rem 0 0.5rem;
   border: 1px solid var(--rule);
   background: #fff;
+  border-radius: 2px;
 }
 .pub-body table {
   border-collapse: collapse;
+  font-family: var(--sans);
   font-size: 0.92rem;
   display: block;
   overflow-x: auto;
@@ -303,13 +616,14 @@ section {
 .pub-body th,
 .pub-body td {
   border-bottom: 1px solid var(--rule);
-  padding: 0.4rem 0.75rem 0.4rem 0;
+  padding: 0.45rem 0.9rem 0.45rem 0;
   text-align: left;
 }
 .pub-body blockquote {
-  border-left: 3px solid var(--rule);
+  border-left: 3px solid var(--teal);
   margin-inline: 0;
-  padding-left: 1.25rem;
+  padding-left: 1.3rem;
+  font-style: italic;
   color: var(--ink-soft);
 }
 .pub-body hr {
@@ -317,31 +631,40 @@ section {
   border-top: 1px solid var(--rule);
   margin: 2.5rem 0;
 }
+.pub-body ul,
+.pub-body ol {
+  max-width: var(--measure);
+}
 .pub-body code {
-  font-size: 0.88em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
 }
 
 .sidebar {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--sans);
   font-size: 0.88rem;
   align-self: start;
 }
-@media (min-width: 62rem) {
+@media (min-width: 64rem) {
   .sidebar {
     position: sticky;
     top: 2rem;
   }
 }
 .sidebar h2 {
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin: 1.75rem 0 0.6rem;
+  margin: 1.9rem 0 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 2px solid var(--rule);
 }
 .sidebar h2:first-child {
   margin-top: 0;
+  border-top-color: var(--teal);
 }
 .sidebar ul {
   list-style: none;
@@ -349,27 +672,27 @@ section {
   padding: 0;
 }
 .sidebar li {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+.sidebar dl {
+  margin: 0;
 }
 .sidebar .meta-row {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 1px solid var(--rule);
-  padding-block: 0.35rem;
+  padding-block: 0.4rem;
 }
 .sidebar .meta-row dt {
   color: var(--ink-faint);
 }
-.sidebar dl {
-  margin: 0;
-}
 .citation {
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  padding: 0.85rem;
+  background: var(--wash);
+  border-left: 3px solid var(--navy);
+  padding: 0.9rem 1rem;
   font-size: 0.8rem;
-  line-height: 1.5;
+  line-height: 1.55;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -379,7 +702,6 @@ section {
 
 .form {
   max-width: 34rem;
-  font-family: system-ui, -apple-system, sans-serif;
 }
 .field {
   margin-bottom: 1.15rem;
@@ -393,19 +715,25 @@ section {
 .field .hint {
   font-size: 0.8rem;
   color: var(--ink-faint);
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.4rem;
+  max-width: none;
 }
 .field input,
 .field select,
 .field textarea {
   width: 100%;
-  padding: 0.6rem 0.7rem;
+  padding: 0.65rem 0.75rem;
   font: inherit;
   font-size: 0.95rem;
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--rule);
-  border-radius: 3px;
+  border-radius: 2px;
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--teal);
 }
 .field textarea {
   min-height: 9rem;
@@ -414,49 +742,6 @@ section {
 .hp {
   position: absolute;
   left: -9999px;
-}
-.btn {
-  display: inline-block;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.95rem;
-  font-weight: 600;
-  padding: 0.7rem 1.4rem;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-  border-radius: 3px;
-  cursor: pointer;
-  text-decoration: none;
-}
-.btn:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.btn-secondary {
-  background: transparent;
-  color: var(--ink);
-}
-.btn-secondary:hover {
-  background: var(--accent-soft);
-  color: var(--ink);
-  border-color: var(--accent);
-}
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1.75rem;
-}
-.notice {
-  border: 1px solid var(--rule);
-  border-left: 3px solid var(--accent);
-  background: var(--panel);
-  padding: 0.9rem 1.1rem;
-  margin-bottom: 1.5rem;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 0.9rem;
-  max-width: 34rem;
 }
 
 /* ---------- footer ---------- */
@@ -467,6 +752,20 @@ section {
   padding-block: 2.5rem 3rem;
   background: var(--panel);
   font-size: 0.9rem;
+  position: relative;
+}
+.site-footer::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    var(--orange) 0 30%,
+    var(--magenta) 30% 55%,
+    var(--navy) 55% 75%,
+    var(--teal) 75% 100%
+  );
 }
 .footer-inner {
   display: flex;
@@ -475,11 +774,10 @@ section {
   justify-content: space-between;
 }
 .footer-name {
-  font-weight: 600;
-  margin: 0 0 0.3rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
 }
 .footer-links {
-  font-family: system-ui, -apple-system, sans-serif;
   font-size: 0.88rem;
-  line-height: 1.9;
+  line-height: 1.95;
 }

@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Imagination Applied">
-  <rect width="64" height="64" rx="8" fill="#16161a"/>
-  <!-- Two curtain halves parting: the moment before the work begins. -->
-  <path d="M10 10h12c0 16-4 26-4 44H10z" fill="#8a2f39"/>
-  <path d="M54 10H42c0 16 4 26 4 44h8z" fill="#8a2f39"/>
-  <circle cx="32" cy="30" r="6" fill="#fbfaf8"/>
+  <rect width="64" height="64" rx="8" fill="#0c306c"/>
+  <g transform="translate(4 10) scale(0.48)">
+    <path fill="#009078" d="M14 52c0-14.4 11.2-25 25.4-25 13 0 22.3 8.4 24.4 19.6l4.6 12.4-6.2 2.3 1.6 8.2c.5 2.5-1 4.3-3.5 4.3h-4.1v6.9c0 2.4-1.9 4.3-4.3 4.3H31.6V72.6c0-2-1-3.2-2.7-4.3C20.3 63 14 58.4 14 52Z"/>
+    <path fill="#B40C54" d="M110 8 58.2 40.6l14.4 5.1z"/>
+    <path fill="#F06C18" d="m110 8-37.4 37.7 5.6 20.6z"/>
+  </g>
 </svg>

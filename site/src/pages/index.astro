@@ -27,8 +27,23 @@ const jsonLd = {
   jsonLd={jsonLd}
 >
   <section class="wrap hero">
+    {/* The mark's own gesture, drawn once: an idea leaving the head and going
+        somewhere. Decorative, so it is hidden from assistive tech. */}
+    <svg class="hero-path" viewBox="0 0 520 300" fill="none" aria-hidden="true">
+      <path
+        d="M8 286C96 250 176 196 246 132 296 86 344 44 404 24"
+        stroke="var(--teal)"
+        stroke-width="2"
+        stroke-dasharray="7 9"
+        stroke-linecap="round"
+        opacity="0.55"
+      />
+      <path d="M498 6 396 70l28 10z" fill="var(--magenta)" />
+      <path d="m498 6-74 74 11 40z" fill="var(--orange)" />
+    </svg>
+
     <p class="eyebrow">{SITE.tagline}</p>
-    <h1>{SITE.hero}</h1>
+    <h1>Don’t Just Prompt. <span class="turn">Direct.</span></h1>
     <p class="lede">
       AI can make almost anything. The real leadership challenge is deciding what is
       worth making—and creating the conditions to make it real.
@@ -86,17 +101,17 @@ const jsonLd = {
       Our practice is called TheaterThink. It is not a metaphor we decorate the work with.
       It is how the work is actually run: three moves, in order.
     </p>
-    <ul class="cards">
+    <ol class="moves">
       {
         PRACTICE.map((step) => (
-          <li class="card">
+          <li class="move">
             <h3>{step.name}</h3>
-            <p class="muted">{step.subtitle}</p>
+            <p class="move-sub">{step.subtitle}</p>
             <p>{step.oneLiner}</p>
           </li>
         ))
       }
-    </ul>
+    </ol>
     <p style="margin-top:1.5rem">
       <a href="/how-we-work/">How we work, in detail →</a>
     </p>
