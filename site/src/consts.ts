@@ -29,11 +29,10 @@ export const SITE = {
   linkedin: 'https://www.linkedin.com/company/imaginationapplied',
 
   /**
-   * Where contact-form submissions are delivered, and the address shown on the
-   * contact page. The Brand Guide lists "choose one canonical email domain" as
-   * an open decision -- CONFIRM THIS ADDRESS BEFORE LAUNCH.
+   * The address shown on the contact page. Confirmed by Josh 2026-08-10.
+   * The live value is the ia.global.contactEmail block; this is the fallback.
    */
-  contactEmail: 'hello@imaginationapplied.ai',
+  contactEmail: 'josh@imaginationapplied.ai',
 
   repo: 'https://github.com/jpenzell/imagination-applied',
 

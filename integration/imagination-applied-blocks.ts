@@ -189,6 +189,6 @@ export const IMAGINATION_APPLIED_BLOCKS: SiteContentBlockDef[] = [
     "type": "text",
     "page": "Imagination Applied — Global",
     "label": "Contact email address",
-    "defaultValue": "hello@imaginationapplied.ai"
+    "defaultValue": "josh@imaginationapplied.ai"
   }
 ];

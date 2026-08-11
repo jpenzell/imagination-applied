@@ -52,10 +52,10 @@ but recreating both would carry a live fault forward. Replace with one:
 v=spf1 include:_spf.google.com include:amazonses.com ~all
 ```
 
-**Decide before applying:** `secureserver.net` is GoDaddy's mail relay. Keep
-that include only if something still sends mail through GoDaddy. If nothing
-does, the line above is correct as written. Amazon SES is kept because
-dropping a sender silently breaks whatever uses it.
+**Settled (Josh, 2026-08-10): drop `secureserver.net`.** Nothing sends through
+GoDaddy's relay any more — mail is on Google Workspace. Amazon SES is kept
+because dropping a sender silently breaks whatever uses it. The single record
+above is what to apply.
 
 ### Web — the records that change
 

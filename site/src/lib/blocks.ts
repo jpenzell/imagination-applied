@@ -221,7 +221,7 @@ export const BLOCKS: BlockDef[] = [
     type: 'text',
     page: `${IA} — Global`,
     label: 'Contact email address',
-    defaultValue: 'hello@imaginationapplied.ai',
+    defaultValue: 'josh@imaginationapplied.ai',
   },
 ];
 
