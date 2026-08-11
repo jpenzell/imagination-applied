@@ -41,8 +41,16 @@ export interface SeoValue {
   ogImage?: string;
 }
 
-const ENDPOINT =
-  import.meta.env.CONTENT_API_URL ?? 'https://joshpenzell.com/api/site-content';
+// Read from both: Vite injects import.meta.env, while a Cloudflare Pages build
+// sets dashboard variables as process.env. Checking only one would make an
+// override set in the dashboard silently do nothing.
+function env(name: string): string | undefined {
+  const viteVal = (import.meta.env as Record<string, string | undefined>)[name];
+  if (viteVal) return viteVal;
+  return typeof process !== 'undefined' ? process.env?.[name] : undefined;
+}
+
+const ENDPOINT = env('CONTENT_API_URL') ?? 'https://joshpenzell.com/api/site-content';
 const TIMEOUT_MS = 8000;
 
 let cache: Map<string, unknown> | null = null;
@@ -53,7 +61,7 @@ async function load(): Promise<Map<string, unknown>> {
   cache = new Map();
 
   // Opt out entirely (offline work, CI without network) without editing code.
-  if (import.meta.env.CONTENT_API_DISABLED === 'true') {
+  if (env('CONTENT_API_DISABLED') === 'true') {
     console.log('[content] disabled by CONTENT_API_DISABLED — using defaults');
     return cache;
   }
