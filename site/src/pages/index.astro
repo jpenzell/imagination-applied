@@ -71,7 +71,12 @@ const jsonLd = {
       jobTitle: 'Keynote speaker, advisor, and author',
       worksFor: { '@id': orgId },
       founderOf: { '@id': orgId },
-      sameAs: [SITE.founderSite, 'https://www.linkedin.com/in/joshpenzell'],
+      // sameAs is an identity claim, so every entry must be a URL that has
+      // been confirmed to exist. Josh's personal LinkedIn profile URL is not
+      // in here because LinkedIn returns 999 to any non-browser request, so it
+      // could not be verified -- and an unverified sameAs actively misinforms
+      // a crawler. Add it once the exact profile URL is confirmed.
+      sameAs: [SITE.founderSite],
     },
     {
       '@type': 'WebSite',

@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
-import { seo } from '../lib/content';
-import { defaultSeo } from '../lib/blocks';
+import { seo, text } from '../lib/content';
+import { defaultSeo, defaultText } from '../lib/blocks';
 import { SITE } from '../consts';
 
 // This page is fully static HTML. The form is a plain POST to a Cloudflare
@@ -10,6 +10,8 @@ import { SITE } from '../consts';
 
 // Editable from the joshpenzell.com admin; falls back to the default above.
 const meta = await seo('ia.seo.contact', defaultSeo('ia.seo.contact'));
+// Editable from the admin too, so the address can change without a deploy.
+const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global.contactEmail'));
 ---
 
 <Base
@@ -34,7 +36,7 @@ const meta = await seo('ia.seo.contact', defaultSeo('ia.seo.contact'));
     <p class="muted">
       Booking Josh for a stage? That goes through{' '}
       <a href={SITE.founderSite}>joshpenzell.com</a>. Prefer plain email?
-      <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>.
+      <a href={`mailto:${contactEmail}`}>{contactEmail}</a>.
     </p>
 
     <form class="form" method="POST" action="/api/contact" style="margin-top:2rem">
