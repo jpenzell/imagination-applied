@@ -37,6 +37,27 @@ The trade: a publish takes about a minute to appear rather than being instant.
 In exchange, every page keeps correct metadata in its raw bytes, and the site
 stays up and correct even when the Replit is asleep or mid-deploy.
 
+## Status
+
+Wired and verified 2026-08-12:
+
+| | |
+|---|---|
+| Cloudflare Pages project | live at `imagination-applied.pages.dev` |
+| Deploy hook `site-content-publish` | created, branch `main` |
+| Cloudflare `PARTNER_SECRET` | set as an encrypted Secret |
+| Cloudflare `CONTACT_FALLBACK` | set |
+| Replit `IA_PARTNER_SECRET` / `IA_DEPLOY_HOOK_URL` | set |
+| Branch merged into the Repl | merge commit, no conflicts, `tsc --noEmit` clean |
+| `POST /api/partner/leads` | live, returns 401 to unauthenticated calls |
+
+Remaining: DNS (see `dns-migration.md`) and the Zenodo DOI.
+
+⚠️ The Repl is the source of truth and was **16 commits ahead of GitHub** when
+this was merged. Merge integration branches *inside Replit* — merging them on
+GitHub does not reach the running app and risks being overwritten on the next
+Replit push.
+
 ## Setup
 
 ### 1. joshpenzell.com — merge the branch
