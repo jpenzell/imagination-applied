@@ -70,7 +70,27 @@ The old apex A records are GoDaddy's forwarding service, which is what makes
 `imaginationapplied.ai` 301 to `www.joshpenzell.com` today. Removing them is
 what retires the redirect.
 
-### Not present (confirmed absent, nothing to carry)
+### ⚠️ Records this file originally MISSED
+
+**Corrected 2026-08-12.** The first capture was built by probing a guessed list
+of record names with `dig`. Public DNS cannot be enumerated — you only find
+names you think to ask for — so that method silently misses anything not on the
+list. Cloudflare's scan (which reads the registrar's actual zone) found three
+records the probe never asked about, two of them mail-critical:
+
+| Type | Name | Content | Why it matters |
+|---|---|---|---|
+| MX | `send` | `feedback-smtp.us-east-1.amazonses.com` (10) | Amazon SES bounce/complaint handling |
+| TXT | `resend._domainkey` | `p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDsSqPCqOhsWxSMPoojq4VhrPJUERNQ+NiZzyqP/wazvQ7JxOT5nqVsck/DaSYxQSb3BWYfbWoyX8c6DTXu4mts1PV44g7LEVVgwinOrzEv3BJwFqWGku8WgZiewR95t2kFpNznUtqv8AkUoFMsB79ztY2Z/tupPxI2ATji80wk2wIDAQAB` | Resend DKIM signing |
+| CNAME | `_domainconnect` | `_domainconnect.gd.domaincontrol.com` | GoDaddy Domain Connect; harmless |
+
+Rebuilding the zone by hand from the original capture would have dropped SES
+bounce handling and broken Resend's DKIM signatures. **Prefer the provider's
+own zone scan or an AXFR/zone export over probe-based reconstruction.**
+
+Both are confirmed live and both are now in the Cloudflare zone.
+
+### Confirmed absent
 
 No AAAA, no CAA, no SRV, and no CNAMEs on any of: `mail`, `autodiscover`,
 `calendar`, `drive`, `docs`, `sites`, `m`, `ftp`, `cpanel`, `webmail`, `blog`,
@@ -95,6 +115,29 @@ curl -s https://imaginationapplied.ai/ | grep -i -e '<title' -e canonical
 ```
 
 6. Send a test email to and from the domain before considering it done.
+
+## DNSSEC — checked, and it is off
+
+Verified 2026-08-12: no `DS` at the parent, no `DNSKEY` published. This matters
+because changing nameservers while DNSSEC is enabled makes the domain fail to
+resolve **entirely** — web and mail — until the DS record is removed and that
+removal propagates. Re-check with:
+
+```bash
+dig DS imaginationapplied.ai +noall +answer   # must be empty
+```
+
+## Progress
+
+- Zone created in Cloudflare (Free), records imported from the registrar scan.
+- Duplicate SPF removed; a single record remains:
+  `v=spf1 include:_spf.google.com include:amazonses.com ~all`
+- Assigned Cloudflare nameservers: `dan.ns.cloudflare.com`, `violet.ns.cloudflare.com`
+- **Nameservers NOT yet changed at GoDaddy.** Until they are, this zone is
+  inert and the live domain still resolves through GoDaddy exactly as before.
+
+Still to do: attach the apex + `www` custom domain to the Pages project, remove
+the three GoDaddy forwarding A records, then flip the nameservers.
 
 ## Known trap
 
