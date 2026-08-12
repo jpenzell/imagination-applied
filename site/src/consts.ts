@@ -121,8 +121,13 @@ export const PUBLICATIONS = [
       'Adoption Without Confidence? Favorable Stance, Accuracy Trust, and Reported AI-Use Frequency in the 2025 Stack Overflow Survey',
     author: 'Josh Penzell',
     version: '3.1.0',
-    /** CITATION.cff date-released. Update when the DOI is minted. */
-    datePublished: '2026-07-24',
+    /**
+     * Publication date: the day this became publicly available and citable at
+     * imaginationapplied.ai. Kept in step with the root CITATION.cff so the
+     * page, the citation and the DOI record cannot disagree. The v3.1.0
+     * package build date (2026-07-24) lives in RELEASE_NOTES.md.
+     */
+    datePublished: '2026-08-12',
     series: 'Open Research Series',
     license: 'MIT',
     licenseUrl: 'https://opensource.org/licenses/MIT',
