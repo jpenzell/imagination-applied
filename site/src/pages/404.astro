@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import { PUBLICATIONS } from '../consts';
+
+// Astro emits this as dist/404.html, which Cloudflare Pages serves with a real
+// 404 status for any unmatched route. Without this file Pages falls back to
+// index.html and every wrong URL returns 200 with the homepage -- a soft 404,
+// which search engines treat as a quality problem and which tells a visitor
+// nothing about what went wrong.
+const pub = PUBLICATIONS[0];
+---
+
+<Base
+  title="Page not found"
+  description="That page does not exist on imaginationapplied.ai."
+  path="/404/"
+  noindex={true}
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">404</p>
+    <h1>That page is not here</h1>
+    <p class="lede">
+      The link may be old, or slightly wrong. Nothing here is lost—it is just not at
+      this address.
+    </p>
+  </section>
+
+  <section class="wrap page-body">
+    <h2>Where you might be going</h2>
+    <ul>
+      <li><a href="/">The start</a> — what we do and how to work with us</li>
+      <li><a href="/how-we-work/">How we work</a> — direct, cast, rehearse</li>
+      <li>
+        <a href={`/publications/${pub.slug}/`}>{pub.title}</a> — our current research
+      </li>
+      <li><a href="/publications/">All research</a></li>
+      <li><a href="/contact/">Contact</a></li>
+    </ul>
+    <p class="muted">
+      If you followed a link from somewhere and it brought you here,
+      <a href="/contact/">tell us</a> and we will fix it.
+    </p>
+  </section>
+</Base>

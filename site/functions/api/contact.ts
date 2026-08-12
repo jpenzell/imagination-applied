@@ -61,7 +61,18 @@ function field(form: FormData, key: keyof typeof MAX): string {
   return typeof raw === 'string' ? raw.trim().slice(0, MAX[key]) : '';
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+// Anything that is not a POST gets a plain 405 rather than falling through to
+// the static asset handler, which would otherwise serve a page (or the 404) at
+// a URL that is not a page at all.
+export const onRequest: PagesFunction<Env> = async (ctx) => {
+  if (ctx.request.method === 'POST') return onRequestPost(ctx);
+  return new Response('Method Not Allowed. This endpoint accepts POST from the contact form.', {
+    status: 405,
+    headers: { allow: 'POST', 'content-type': 'text/plain; charset=utf-8' },
+  });
+};
+
+const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let form: FormData;
   try {
     form = await request.formData();

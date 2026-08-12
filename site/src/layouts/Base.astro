@@ -23,6 +23,8 @@ interface Props {
   ogType?: 'website' | 'article';
   /** Serialized JSON-LD injected as-is. */
   jsonLd?: Record<string, unknown> | null;
+  /** Keep this page out of search results (error pages, thin utility pages). */
+  noindex?: boolean;
 }
 
 const {
@@ -33,6 +35,7 @@ const {
   imageAlt = SITE.name,
   ogType = 'website',
   jsonLd = null,
+  noindex = false,
 } = Astro.props;
 
 if (!title || !description) {
@@ -62,6 +65,7 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, follow" />}
 
     <meta property="og:type" content={ogType} />
     <meta property="og:site_name" content={SITE.name} />

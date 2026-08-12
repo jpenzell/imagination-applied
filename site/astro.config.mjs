@@ -8,7 +8,13 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
   site: 'https://imaginationapplied.ai',
   trailingSlash: 'always',
-  integrations: [sitemap()],
+  integrations: [
+    sitemap({
+      // The 404 is a real built page but not a destination, so it stays out of
+      // the sitemap (it also carries noindex).
+      filter: (page) => !page.endsWith('/404/'),
+    }),
+  ],
   build: {
     // Directory-style output so every page is /path/index.html and the URL
     // with a trailing slash is the real, canonical one.
