@@ -32,9 +32,17 @@ const DOWNLOADS = {
   'executive-brief.pdf': 'outputs/Favorable_Stance_Is_Not_Accuracy_Trust_Executive_Brief_2026.pdf',
   'executive-brief.docx': 'outputs/Favorable_Stance_Is_Not_Accuracy_Trust_Executive_Brief_2026.docx',
   'carousel.pdf': 'outputs/Favorable_Stance_Is_Not_Accuracy_Trust_LinkedIn_Carousel_2026.pdf',
-  'CITATION.cff': 'CITATION.cff',
   'MANIFEST.sha256': 'MANIFEST.sha256',
 };
+
+// CITATION.cff is deliberately NOT taken from the package. The package's copy
+// is frozen at the v3.1.0 build (publisher "Imagination Applied Open Research
+// Series", dated 2026-07-24, no URL) because the manifest covers it. The live
+// citation lives at the repo root and carries the publisher, publication date,
+// canonical URL and DOI. Serving the frozen one here would hand a reader a
+// machine-readable citation that contradicts the human-readable one printed on
+// the same page. The frozen copy remains in the repo as the historical record.
+const ROOT_CITATION = path.join(repoRoot, 'CITATION.cff');
 
 async function main() {
   if (!existsSync(pkg)) {
@@ -50,6 +58,9 @@ async function main() {
     if (!existsSync(from)) throw new Error(`Missing package file: ${src}`);
     await cp(from, path.join(publicDir, dest));
   }
+
+  if (!existsSync(ROOT_CITATION)) throw new Error('Missing root CITATION.cff');
+  await cp(ROOT_CITATION, path.join(publicDir, 'CITATION.cff'));
 
   // Figures, referenced relatively by the blog markdown.
   await cp(path.join(pkg, 'publication', 'assets'), path.join(publicDir, 'assets'), {
