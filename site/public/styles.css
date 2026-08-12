@@ -756,6 +756,55 @@ section {
   left: -9999px;
 }
 
+/* ---------- press: the volume catalogue ---------- */
+
+.volumes {
+  list-style: none;
+  margin: 2rem 0 0;
+  padding: 0;
+  max-width: none;
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+}
+.volume {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--teal);
+  border-radius: 2px;
+  padding: 1.4rem;
+}
+.volume:nth-child(even) {
+  border-top-color: var(--orange);
+}
+.volume h2 {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+  max-width: none;
+}
+.volume p {
+  max-width: none;
+}
+.volume-no {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 0.4rem;
+}
+.volume-sub {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-soft);
+  margin: 0 0 0.75rem;
+}
+.volume-meta {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-faint);
+}
+
 /* ---------- the house: how the four pieces fit ---------- */
 
 .house {

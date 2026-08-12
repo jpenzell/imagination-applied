@@ -1,0 +1,94 @@
+---
+import Base from '../../layouts/Base.astro';
+import { SITE, PUBLICATIONS } from '../../consts';
+import { FORGOTTEN_PLAYBOOK, SERIES_PRINCIPLE, BOOK } from '../../press';
+
+const pub = PUBLICATIONS[0];
+---
+
+<Base
+  title="Imagination Applied Press"
+  description="The publishing imprint of Imagination Applied. Open research, the Forgotten Playbook Library, and the forthcoming Artistic Intelligence."
+  path="/press/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">The imprint</p>
+    <h1>Imagination Applied Press</h1>
+    <p class="lede">
+      Three lines of work, one standard: say what is actually known, show where it came
+      from, and make the useful part easy to act on.
+    </p>
+  </section>
+
+  <section class="wrap page-body">
+    <p>
+      The Press publishes under Imagination Applied. It exists because the practice keeps
+      producing things worth writing down—analysis that ought to be checkable, and methods
+      that ought to be usable by someone who was never in the room.
+    </p>
+
+    <div class="section-rule">
+      <p class="eyebrow">Line one</p>
+      <h2>Open Research Series</h2>
+      <p>
+        Secondary analysis published with its code, its denominators, its robustness
+        checks and its file checksums. Limitations are stated in the body of the work,
+        not a footnote, and the strongest counterargument we can build against our own
+        result is published alongside it.
+      </p>
+      <div class="card" style="margin-top:1.5rem;max-width:38rem">
+        <p class="eyebrow">Published</p>
+        <h3 style="margin-top:0">
+          <a href={`/publications/${pub.slug}/`}>{pub.title}</a>
+        </h3>
+        <p>{pub.description}</p>
+        <p class="outcome">
+          <strong>DOI</strong>
+          {pub.doi}
+        </p>
+      </div>
+      <p style="margin-top:1.25rem"><a href="/publications/">All research →</a></p>
+    </div>
+
+    <div class="section-rule">
+      <p class="eyebrow">Line two</p>
+      <h2>The Forgotten Playbook Library</h2>
+      <p>
+        Six volumes that recover overlooked public-domain ideas and rebuild them for
+        modern families, educators, facilitators and communities. Practical books for
+        people running a room, not reading about one.
+      </p>
+      <p class="pull">{SERIES_PRINCIPLE}</p>
+      <p>
+        <a href="/press/forgotten-playbook-library/">See all six volumes →</a>
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <p class="eyebrow">Line three</p>
+      <h2>{BOOK.title}: {BOOK.subtitle}</h2>
+      <p>{BOOK.premise}</p>
+      <p>
+        Josh's first book—a theater director's way of seeing, applied to work and to AI.
+        Not a method book; the practice is a separate project.
+      </p>
+      <p>
+        <a href="/press/artistic-intelligence/">About the book →</a>
+      </p>
+    </div>
+
+    <div class="section-rule">
+      <h2>The standard</h2>
+      <p>
+        Every claim traceable to a source. Every number checkable. Where the evidence
+        does not support a stronger statement, the weaker one is printed instead—and
+        where an earlier version got something wrong, the correction is published rather
+        than quietly folded in.
+      </p>
+      <div class="actions">
+        <a class="btn btn-secondary" href={SITE.repo}>Source on GitHub</a>
+        <a class="btn btn-secondary" href="/contact/">Get in touch</a>
+      </div>
+    </div>
+  </section>
+</Base>

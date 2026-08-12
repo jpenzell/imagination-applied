@@ -1,0 +1,75 @@
+---
+import Base from '../../layouts/Base.astro';
+import { SITE } from '../../consts';
+import { BOOK } from '../../press';
+
+// Deliberately a forthcoming listing: no manuscript, no excerpt, no sample
+// chapter. See src/press.ts for why.
+---
+
+<Base
+  title="Artistic Intelligence: A Manifesto"
+  description="Josh Penzell's forthcoming book — a theater director's way of seeing, applied to work and to AI. Join the list to hear when it is out."
+  path="/press/artistic-intelligence/"
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">{BOOK.status} · Imagination Applied Press</p>
+    <h1>{BOOK.title}</h1>
+    <p class="lede">{BOOK.subtitle}</p>
+  </section>
+
+  <section class="wrap page-body">
+    <p class="pull">{BOOK.premise}</p>
+
+    <p>
+      AI made generation cheap. It did not make judgment cheap. When anyone can produce a
+      plausible answer in seconds, the scarce thing stops being production and starts
+      being taste—knowing which of the plausible answers is worth having, and being able
+      to say why.
+    </p>
+    <p>
+      This is a book about where that judgment comes from. It argues that the people who
+      have spent their lives making things under uncertainty—directors, designers,
+      writers, anyone who has had to commit to an interpretation before the evidence was
+      in—have been practising the exact capacity the rest of us now need.
+    </p>
+    <p>
+      It is a way of seeing rather than a method. The practice built on top of it,
+      TheaterThink, is a separate project and a separate book.
+    </p>
+
+    <div class="section-rule">
+      <h2>Hear when it is out</h2>
+      <p class="muted">
+        One email when the book is available. Nothing else, and no list sharing.
+      </p>
+
+      <form class="form" method="POST" action="/api/waitlist" style="margin-top:1.5rem">
+        <input type="hidden" name="list" value="artistic-intelligence" />
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required autocomplete="email" />
+        </div>
+        <div class="hp" aria-hidden="true">
+          <label for="company_website">Do not fill this in</label>
+          <input id="company_website" name="company_website" type="text" tabindex="-1" autocomplete="off" />
+        </div>
+        <button class="btn" type="submit">Join the list</button>
+      </form>
+    </div>
+
+    <div class="section-rule">
+      <h2>About the author</h2>
+      <p>
+        Josh Penzell is a keynote speaker, advisor, and founder of Imagination Applied. A
+        theater director turned AI strategist, he helps leaders create direction when the
+        answer is not waiting to be found—aligning people, directing AI, and rehearsing
+        what comes next.
+      </p>
+      <div class="actions">
+        <a class="btn btn-secondary" href={SITE.founderSite}>joshpenzell.com</a>
+        <a class="btn btn-secondary" href="/press/">More from the Press</a>
+      </div>
+    </div>
+  </section>
+</Base>
