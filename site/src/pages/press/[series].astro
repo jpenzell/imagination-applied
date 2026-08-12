@@ -1,0 +1,70 @@
+---
+import Base from '../../layouts/Base.astro';
+import { SERIES } from '../../press';
+
+export function getStaticPaths() {
+  return SERIES.map((s) => ({ params: { series: s.slug }, props: { series: s } }));
+}
+
+const { series } = Astro.props;
+const anyLive = series.titles.some((t) => t.url);
+const held = series.titles.filter((t) => t.status === 'hold');
+---
+
+<Base
+  title={series.name}
+  description={`${series.tagline} ${series.titles.length} titles from Imagination Applied Press.`}
+  path={`/press/${series.slug}/`}
+>
+  <section class="wrap page-head">
+    <p class="eyebrow">Imagination Applied Press</p>
+    <h1>{series.name}</h1>
+    <p class="lede">{series.tagline}</p>
+  </section>
+
+  <section class="wrap page-body">
+    {series.principle && <p class="pull">{series.principle}</p>}
+
+    <p><strong>Who it is for.</strong> {series.audience}</p>
+
+    {
+      !anyLive && held.length === 0 && (
+        <div class="notice">
+          <strong>Publishing shortly.</strong> These titles are finished and through
+          production. Purchase links appear here as each one goes on sale.
+        </div>
+      )
+    }
+    {
+      held.length > 0 && (
+        <div class="notice">
+          <strong>Held before publication.</strong> {held[0].holdReason}
+        </div>
+      )
+    }
+
+    <ol class="volumes">
+      {
+        series.titles.map((t) => (
+          <li class="volume">
+            <p class="volume-no">
+              {series.titles.length > 1 ? `Volume ${t.volume}` : 'Single title'}
+              {t.status === 'hold' ? ' · on hold' : ''}
+            </p>
+            <h2>{t.url ? <a href={t.url}>{t.title}</a> : t.title}</h2>
+            <p class="volume-sub">{t.subtitle}</p>
+            <p>{t.blurb}</p>
+            {t.pages && <p class="volume-meta">{t.pages} pages · paperback and Kindle</p>}
+          </li>
+        ))
+      }
+    </ol>
+
+    <div class="section-rule">
+      <div class="actions">
+        <a class="btn btn-secondary" href="/press/">All of the Press</a>
+        <a class="btn btn-secondary" href="/contact/">Ask about bulk or institutional use</a>
+      </div>
+    </div>
+  </section>
+</Base>

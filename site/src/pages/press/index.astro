@@ -1,14 +1,14 @@
 ---
 import Base from '../../layouts/Base.astro';
 import { SITE, PUBLICATIONS } from '../../consts';
-import { FORGOTTEN_PLAYBOOK, SERIES_PRINCIPLE, BOOK } from '../../press';
+import { SERIES, TOTAL_TITLES, BOOK } from '../../press';
 
 const pub = PUBLICATIONS[0];
 ---
 
 <Base
   title="Imagination Applied Press"
-  description="The publishing imprint of Imagination Applied. Open research, the Forgotten Playbook Library, and the forthcoming Artistic Intelligence."
+  description="The publishing imprint of Imagination Applied: open research, thirteen books across three series, and the forthcoming Artistic Intelligence."
   path="/press/"
 >
   <section class="wrap page-head">
@@ -52,16 +52,27 @@ const pub = PUBLICATIONS[0];
 
     <div class="section-rule">
       <p class="eyebrow">Line two</p>
-      <h2>The Forgotten Playbook Library</h2>
+      <h2>The book series</h2>
       <p>
-        Six volumes that recover overlooked public-domain ideas and rebuild them for
-        modern families, educators, facilitators and communities. Practical books for
-        people running a room, not reading about one.
+        {TOTAL_TITLES} titles across three series. Practical books for people doing the
+        thing, not reading about it.
       </p>
-      <p class="pull">{SERIES_PRINCIPLE}</p>
-      <p>
-        <a href="/press/forgotten-playbook-library/">See all six volumes →</a>
-      </p>
+      <ul class="cards">
+        {
+          SERIES.map((s) => (
+            <li class="card card-link">
+              <h3 style="margin-top:0">
+                <a href={`/press/${s.slug}/`}>{s.name}</a>
+              </h3>
+              <p>{s.tagline}</p>
+              <p class="outcome">
+                <strong>{s.titles.length} {s.titles.length === 1 ? 'title' : 'titles'}</strong>
+                {s.audience}
+              </p>
+            </li>
+          ))
+        }
+      </ul>
     </div>
 
     <div class="section-rule">
