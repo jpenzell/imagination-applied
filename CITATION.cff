@@ -8,6 +8,14 @@ authors:
 date-released: 2026-08-12
 publisher: Imagination Applied Press
 version: 3.1.0
+doi: 10.5281/zenodo.21896528
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21896528
+    description: "Version DOI — this exact release (v3.1.0)"
+  - type: doi
+    value: 10.5281/zenodo.21896527
+    description: "Concept DOI — always resolves to the latest version"
 url: "https://imaginationapplied.ai/publications/adoption-without-confidence/"
 repository-code: "https://github.com/jpenzell/imagination-applied"
 keywords:

@@ -131,8 +131,13 @@ export const PUBLICATIONS = [
     series: 'Open Research Series',
     license: 'MIT',
     licenseUrl: 'https://opensource.org/licenses/MIT',
-    /** Set once Zenodo mints it, then mirror into CITATION.cff. */
-    doi: null as string | null,
+    /**
+     * Version DOI — cites this exact release, which is what a reproducibility
+     * claim needs. The concept DOI below always resolves to the latest version.
+     * Both are recorded in the root CITATION.cff.
+     */
+    doi: '10.5281/zenodo.21896528' as string | null,
+    conceptDoi: '10.5281/zenodo.21896527',
     ogImage: '/publications/adoption-without-confidence/assets/daily-use-by-stance.png',
   },
 ] as const;
