@@ -60,7 +60,7 @@
 
   --ink: #0d1b2e;
   --ink-soft: #46566d;
-  --ink-faint: #647286;
+  --ink-faint: #5f6d80;
   --paper: #fbfaf7;
   --panel: #ffffff;
   --rule: #e3ded4;
@@ -287,7 +287,7 @@ dl {
 /* The stage direction: a margin annotation in the voice of a script. */
 .eyebrow {
   font-family: var(--sans);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -403,6 +403,12 @@ section {
 .card:nth-child(3) {
   border-top-color: var(--orange);
 }
+.card:nth-child(4) {
+  border-top-color: var(--magenta);
+}
+.artifact-cards {
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
 .card h3 {
   margin-top: 0;
 }
@@ -417,7 +423,7 @@ section {
 }
 .card .outcome strong {
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -439,6 +445,72 @@ section {
 }
 .card-link:hover h3 a {
   background-size: 100% 2px;
+}
+
+/* ---------- evidence from founder-led engagements ---------- */
+
+.evidence-grid {
+  display: grid;
+  gap: 2rem;
+  align-items: start;
+}
+@media (min-width: 58rem) {
+  .evidence-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 3.5rem;
+  }
+}
+.evidence-photo {
+  margin: 0;
+  background: var(--wash);
+  border: 1px solid var(--rule);
+  padding: 0.55rem;
+}
+.evidence-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  object-position: 50% 55%;
+}
+.evidence-photo figcaption {
+  padding: 0.65rem 0.35rem 0.15rem;
+  color: var(--ink-faint);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+.evidence-copy h2 {
+  margin-top: 0.15rem;
+}
+.evidence-quote {
+  margin: 1.5rem 0 0;
+  padding: 1.1rem 1.2rem 1.1rem 1.35rem;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--teal);
+}
+.evidence-quote:nth-of-type(2) {
+  border-left-color: var(--orange);
+}
+.evidence-quote p {
+  margin: 0;
+  max-width: none;
+  font-family: var(--serif);
+  font-size: 1.08rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+.evidence-quote footer {
+  display: grid;
+  gap: 0.1rem;
+  margin-top: 0.8rem;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.evidence-quote footer strong {
+  color: var(--ink);
+  font-size: 0.88rem;
 }
 
 /* ---------- the three moves: a sequence, not a list ---------- */
@@ -665,7 +737,7 @@ section {
 }
 .sidebar h2 {
   font-family: var(--sans);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -786,7 +858,7 @@ section {
   max-width: none;
 }
 .volume-no {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -824,7 +896,7 @@ section {
   font-size: 0.88rem;
 }
 .house-label {
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;

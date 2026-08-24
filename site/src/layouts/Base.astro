@@ -50,6 +50,31 @@ const description_global = await text(
 
 const canonical = new URL(path, SITE.origin).href;
 const imageUrl = new URL(image, SITE.origin).href;
+const defaultJsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebPage',
+      '@id': `${canonical}#webpage`,
+      url: canonical,
+      name: title,
+      description,
+      isPartOf: { '@id': `${SITE.origin}/#website` },
+      about: { '@id': `${SITE.origin}/#organization` },
+      inLanguage: 'en',
+    },
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: path === '/'
+        ? [{ '@type': 'ListItem', position: 1, name: SITE.name, item: SITE.origin }]
+        : [
+            { '@type': 'ListItem', position: 1, name: SITE.name, item: SITE.origin },
+            { '@type': 'ListItem', position: 2, name: title, item: canonical },
+          ],
+    },
+  ],
+};
+const resolvedJsonLd = jsonLd ?? defaultJsonLd;
 
 // Home gets the bare brand name; every other page is suffixed, so no two pages
 // can share a <title>.
@@ -106,7 +131,7 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
       crossorigin
     />
 
-    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+    <script type="application/ld+json" set:html={JSON.stringify(resolvedJsonLd)} />
 
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -171,13 +196,13 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
         <div class="house-item">
           <p class="house-label">The company</p>
           <p class="house-name">Imagination Applied</p>
-          <p class="muted">Where the work becomes engagements and change. You are here.</p>
+          <p class="muted">Where the work becomes experiences, prototypes, and capability. You are here.</p>
         </div>
         <div class="house-item">
           <p class="house-label">The voice</p>
           <p class="house-name">Josh Penzell</p>
           <p class="muted">
-            Keynotes, speaking, and the book live at
+            Keynotes, writing, and the book live at
             <a href={SITE.founderSite}>joshpenzell.com</a>.
           </p>
         </div>

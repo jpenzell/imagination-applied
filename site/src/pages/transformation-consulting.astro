@@ -4,7 +4,8 @@ import { seo } from '../lib/content';
 import { defaultSeo } from '../lib/blocks';
 import { DOORS } from '../consts';
 
-const door = DOORS[2];
+const prototype = DOORS[2];
+const capability = DOORS[3];
 
 // Editable from the joshpenzell.com admin; falls back to the default above.
 const meta = await seo('ia.seo.consulting', defaultSeo('ia.seo.consulting'));
@@ -16,23 +17,24 @@ const meta = await seo('ia.seo.consulting', defaultSeo('ia.seo.consulting'));
   path="/transformation-consulting/"
 >
   <section class="wrap page-head">
-    <p class="eyebrow">Three ways to work together</p>
-    <h1>Transformation consulting</h1>
-    <p class="lede">{door.for}</p>
+    <p class="eyebrow">Build the proof. Transfer the practice.</p>
+    <h1>Prototypes and capability</h1>
+    <p class="lede">
+      Turn direction into something people can try, then make the capability part of how
+      your team works.
+    </p>
   </section>
 
   <section class="wrap page-body">
-    <p>
-      <strong>Outcome.</strong>
-      {door.outcome}
-    </p>
+    <p><strong>Prototype outcome.</strong> {prototype.outcome}</p>
+    <p><strong>Capability outcome.</strong> {capability.outcome}</p>
 
     <div class="section-rule">
       <h2>Inspiration has a short half-life</h2>
       <p>
         A keynote can change what a room can see. It cannot change what happens on
         Thursday afternoon in a workflow nobody in the room owns. That gap is where most
-        AI programs quietly stall—not because people resisted, but because nothing about
+        change programs quietly stall—not because people resisted, but because nothing about
         the actual work was ever redesigned.
       </p>
       <p>
@@ -41,8 +43,9 @@ const meta = await seo('ia.seo.consulting', defaultSeo('ia.seo.consulting'));
       </p>
     </div>
 
-    <div class="section-rule">
-      <h2>Bounded experiments, not a transformation plan</h2>
+    <div class="section-rule" id="build">
+      <p class="eyebrow">Prototype sprints</p>
+      <h2>Build something real enough to disagree with</h2>
       <p>
         We do not open with an eighteen-month roadmap. We open by finding the smallest
         real piece of work where a change would be visible, and running it somewhere the
@@ -59,17 +62,41 @@ const meta = await seo('ia.seo.consulting', defaultSeo('ia.seo.consulting'));
         genuinely uncomfortable, because it means committing to fewer things earlier and
         finding out sooner when one of them is wrong.
       </p>
+      <h3>What a sprint can produce</h3>
+      <ul>
+        <li>A working learning experience or interactive program</li>
+        <li>A decision tool, dashboard, or evidence model</li>
+        <li>An AI-enabled workflow or automation with human judgment designed in</li>
+        <li>A functional prototype that makes the larger idea testable</li>
+        <li>A facilitation or operating playbook the internal team can run</li>
+      </ul>
+    </div>
+
+    <div class="section-rule" id="own">
+      <p class="eyebrow">Capability studios</p>
+      <h2>The goal is not to need us forever</h2>
+      <p>
+        Some work needs more than a sprint. A Capability Studio is an ongoing cadence of
+        working jams, coaching, guided builds, and interpretation sessions. We stay close
+        enough to help the practice take root and step back as your team becomes able to
+        direct the work itself.
+      </p>
+      <p>
+        The handoff is not a final deck. It is people who have rehearsed the moves on their
+        own material, artifacts they helped build, and a repeatable way to decide what to do next.
+      </p>
     </div>
 
     <div class="section-rule">
-      <h2>Where the work usually lands</h2>
+      <h2>Where the work often lands</h2>
       <ul>
         <li>Adoption that has plateaued after a tool rollout</li>
         <li>Learning and enablement programs measured by completion rather than by change</li>
         <li>Workflows where AI has been added beside the work instead of into it</li>
         <li>Teams competent in isolation and misaligned together</li>
+        <li>Important ideas stuck in slides because nobody has built the first believable version</li>
       </ul>
-      <p class="pull">Stop training people on AI long enough to build something with them.</p>
+      <p class="pull">Stop explaining the future long enough to rehearse a piece of it.</p>
       <div class="actions">
         <a class="btn" href="/contact/">Start a conversation</a>
         <a class="btn btn-secondary" href="/how-we-work/">See the method</a>

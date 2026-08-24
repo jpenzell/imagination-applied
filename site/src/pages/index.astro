@@ -7,7 +7,12 @@ import { SITE, PRACTICE, PUBLICATIONS } from '../consts';
 const pub = PUBLICATIONS[0];
 
 // All editable from the Site Content tab of the joshpenzell.com admin.
-const meta = await seo('ia.seo.home', defaultSeo('ia.seo.home'));
+// Use a new key for the Artistic Intelligence positioning so a legacy saved
+// homepage SEO row cannot silently override the launch title and description.
+const meta = await seo(
+  'ia.seo.home.artistic-intelligence',
+  defaultSeo('ia.seo.home.artistic-intelligence')
+);
 const headline = await text('ia.home.hero.headline', defaultText('ia.home.hero.headline'));
 const lede = await text('ia.home.hero.lede', defaultText('ia.home.hero.lede'));
 const tensionHeading = await text(
@@ -57,10 +62,15 @@ const jsonLd = {
       sameAs: [SITE.linkedin, SITE.founderSite],
       knowsAbout: [
         'Artistic Intelligence',
+        'Creativity',
+        'Imagination',
+        'Human judgment',
         'TheaterThink',
-        'AI adoption',
+        'Prototyping',
+        'Capability building',
         'Organizational change',
         'Leadership development',
+        'Artificial intelligence',
       ],
     },
     {
@@ -128,9 +138,9 @@ const jsonLd = {
   </section>
 
   <section class="wrap section-rule">
-    <h2>Three ways to work together</h2>
+    <h2>Four ways to work together</h2>
     <p class="muted">
-      Every engagement starts with the same question: what is this work actually about?
+      See it. Rehearse it. Build it. Own it. Start where the work is now.
     </p>
     <ul class="cards">
       {
@@ -146,6 +156,37 @@ const jsonLd = {
         ))
       }
     </ul>
+  </section>
+
+  <section class="wrap section-rule">
+    <p class="eyebrow">A common engagement path</p>
+    <h2>From a room that can see it to a team that can own it</h2>
+    <p class="muted">
+      These are not four competing products. They are moves that can stand alone or build
+      into one practical journey.
+    </p>
+    <ol class="moves">
+      <li class="move">
+        <h3>Kick off</h3>
+        <p class="move-sub">Keynote or workshop</p>
+        <p>Create a shared language and make the real opportunity visible.</p>
+      </li>
+      <li class="move">
+        <h3>Work it</h3>
+        <p class="move-sub">Ongoing jams</p>
+        <p>Use real decisions and workflows to practice the moves together.</p>
+      </li>
+      <li class="move">
+        <h3>Build proof</h3>
+        <p class="move-sub">Prototype support</p>
+        <p>Make something concrete enough to test, improve, and decide what deserves to scale.</p>
+      </li>
+      <li class="move">
+        <h3>Transfer it</h3>
+        <p class="move-sub">Internal capability</p>
+        <p>Leave the team with artifacts, routines, and the ability to continue without us.</p>
+      </li>
+    </ol>
   </section>
 
   <section class="wrap section-rule">
@@ -168,6 +209,84 @@ const jsonLd = {
     <p style="margin-top:1.5rem">
       <a href="/how-we-work/">How we work, in detail →</a>
     </p>
+  </section>
+
+  <section class="wrap section-rule">
+    <h2>What we actually make</h2>
+    <p>
+      Sometimes the work is a decision. Sometimes it needs to become a thing people can
+      touch, try, and improve. We build the proof alongside the team, then transfer the
+      practice rather than creating permanent dependence on us.
+    </p>
+    <ul class="cards artifact-cards">
+      <li class="card">
+        <h3>Learning experiences</h3>
+        <p>Programs, labs, and interactive environments that change what people do—not only what they complete.</p>
+      </li>
+      <li class="card">
+        <h3>Decision tools</h3>
+        <p>Working aids, dashboards, and prototypes that make a consequential choice easier to see and test.</p>
+      </li>
+      <li class="card">
+        <h3>Workflows and automations</h3>
+        <p>Practical systems that put technology inside the work, with human judgment kept where it belongs.</p>
+      </li>
+      <li class="card">
+        <h3>Internal practice</h3>
+        <p>Facilitation guides, coaching, and team routines that let the capability keep moving after we leave.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="wrap section-rule">
+    <div class="evidence-grid">
+      <figure class="evidence-photo">
+        <img
+          src="/images/innovateqa-live-workshop.jpg"
+          alt="Josh Penzell facilitating an audience exercise at InnovateQA 2026"
+          loading="lazy"
+        />
+        <figcaption>Founder-led work in the room · InnovateQA 2026 · Photo courtesy of InnovateQA</figcaption>
+      </figure>
+
+      <div class="evidence-copy">
+        <p class="eyebrow">Proof behind the practice</p>
+        <h2>The company is new. The practice isn't.</h2>
+        <p>
+          Imagination Applied is the company around work Josh has been developing in
+          keynotes, labs, team sessions, and live builds. These publication-cleared
+          responses show what organizations have already experienced.
+        </p>
+
+        <blockquote class="evidence-quote">
+          <p>
+            “Josh led two sessions at the Special Olympics Leadership Academy, and both
+            were the highest-rated of the program per participants' feedback. He made AI
+            feel practical and human for our team. We can't wait to work with him again.”
+          </p>
+          <footer>
+            <strong>Svetlana Fenichel</strong>
+            <span>Sr. Director, Learning &amp; Organizational Development · Special Olympics</span>
+          </footer>
+        </blockquote>
+
+        <blockquote class="evidence-quote">
+          <p>
+            “The team continued to rave about it after you left and left the meeting
+            energized to think about AI differently and put Copilot to work!”
+          </p>
+          <footer>
+            <strong>A.J. Koenig</strong>
+            <span>Delicato Family Wines</span>
+          </footer>
+        </blockquote>
+
+        <div class="actions">
+          <a class="btn" href="/keynotes-and-workshops/">Bring it into the room</a>
+          <a class="btn btn-secondary" href="/contact/">Start a conversation</a>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="wrap section-rule">
@@ -194,9 +313,9 @@ const jsonLd = {
       <em>Artistic Intelligence</em>, and the public voice of this work.
     </p>
     <p>
-      If you are here to book Josh for a stage, that lives on{' '}
-      <a href={SITE.founderSite}>joshpenzell.com</a>. If you are here to change how your
-      organization works, you are in the right place.
+      If you are here to book Josh for a stage or explore the ideas, that lives on{' '}
+      <a href={SITE.founderSite}>joshpenzell.com</a>. If you are here to bring the work
+      into your organization, you are in the right place.
     </p>
     <div class="actions">
       <a class="btn" href="/contact/">Start a conversation</a>

@@ -14,7 +14,7 @@ import type { SiteContentBlockDef } from "./site-content-registry";
 
 export const IMAGINATION_APPLIED_BLOCKS: SiteContentBlockDef[] = [
   {
-    "blockId": "ia.seo.home",
+    "blockId": "ia.seo.home.artistic-intelligence",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "Home page SEO",
@@ -80,7 +80,7 @@ export const IMAGINATION_APPLIED_BLOCKS: SiteContentBlockDef[] = [
     "label": "Research index SEO",
     "defaultValue": {
       "title": "Research",
-      "description": "Open research from Imagination Applied. Every claim traceable to code, limitations stated in the body rather than a footnote, and the analysis released with its checksums."
+      "description": "Open research from Imagination Applied, with traceable claims, stated limitations, reproducible analysis, and released checksums."
     }
   },
   {

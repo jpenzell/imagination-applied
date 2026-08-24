@@ -12,14 +12,14 @@ export const SITE = {
 
   /** Guide, section 3, "Recommended description". */
   description:
-    'Imagination Applied helps leaders and teams turn uncertainty into direction through keynotes, advisory work, and rehearsal-based transformation.',
+    'Imagination Applied helps leaders and teams direct creativity, judgment, and technology through live experiences, advisory, prototypes, and capability transfer.',
 
   /** Guide, section 12, "Company Boilerplate". */
   boilerplate:
-    'Imagination Applied helps leaders and teams turn uncertainty into direction. Founded by keynote speaker, advisor, and theater director Josh Penzell, the company brings Artistic Intelligence into organizations through live experiences, executive advisory, and rehearsal-based transformation. Its practice, TheaterThink, helps people interpret what matters, compose the right ensemble, and learn by putting possibilities into motion—especially as AI changes how work gets made.',
+    'Imagination Applied is the company that brings Artistic Intelligence into organizations. Founded by keynote speaker, advisor, and theater director Josh Penzell, it helps leaders and teams interpret what matters, rehearse change, build working proof, and develop capability they can own. Its practice, TheaterThink, applies rehearsal-room craft to creativity, innovation, learning, strategy, and the age of AI.',
 
-  /** Guide, section 12, Website hero. Punctuation is canonical -- preserve it. */
-  hero: 'Don’t Just Prompt. Direct.',
+  /** Company promise. */
+  hero: 'Make What Is Worth Making.',
 
   /** Guide, section 3, "Optional internal line". */
   tagline: 'Artistic Intelligence, applied.',
@@ -44,35 +44,39 @@ export const NAV = [
   { href: '/how-we-work/', label: 'How we work' },
   { href: '/keynotes-and-workshops/', label: 'Keynotes & workshops' },
   { href: '/executive-advisory/', label: 'Executive advisory' },
-  { href: '/transformation-consulting/', label: 'Transformation consulting' },
+  { href: '/transformation-consulting/', label: 'Prototypes & capability' },
   { href: '/publications/', label: 'Research' },
   { href: '/about/', label: 'About' },
   { href: '/contact/', label: 'Contact' },
 ] as const;
 
 /**
- * The three doors. Titles and Outcome lines are verbatim from the guide,
- * section 7, "Three Ways to Work Together".
+ * The four commercial ways to work together.
  */
 export const DOORS = [
   {
     href: '/keynotes-and-workshops/',
     title: 'Keynotes and Workshops',
-    for: 'For conferences, leadership meetings, offsites, and learning events that need a shared language and a memorable experience.',
-    outcome: 'A room sees the challenge differently and leaves with a move it can use.',
+    for: 'Shift what a room can see through a Josh-led keynote, executive briefing, or rehearsal-based workshop.',
+    outcome: 'A shared language, a memorable experience, and a move people can use.',
   },
   {
     href: '/executive-advisory/',
     title: 'Executive Advisory',
-    for: 'For leaders making consequential choices about AI, adoption, capability, work design, and organizational direction.',
+    for: 'Interpret a consequential choice before budget, technology, or momentum hardens around the wrong question.',
     outcome: 'Clearer interpretation, better decisions, and a rehearsal plan for what comes next.',
   },
   {
     href: '/transformation-consulting/',
-    title: 'Transformation Consulting',
-    for: 'For organizations ready to move from inspiration to changes in behavior, workflow, learning, or operating practice.',
-    outcome:
-      'A series of bounded experiments that create evidence, trust, and scalable direction.',
+    title: 'Prototype Sprints',
+    for: 'Turn an important idea into a working proof: a learning experience, decision tool, workflow, automation, or prototype.',
+    outcome: 'Something real enough to test, learn from, and decide what deserves to scale.',
+  },
+  {
+    href: '/transformation-consulting/#own',
+    title: 'Capability Studios',
+    for: 'Use ongoing jams, coaching, and guided builds to make the practice part of how your team works.',
+    outcome: 'Internal capability and a team that can keep directing the work without us.',
   },
 ] as const;
 
