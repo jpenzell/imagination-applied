@@ -42,6 +42,7 @@ export const SITE = {
 
 export const NAV = [
   { href: '/how-we-work/', label: 'How we work' },
+  { href: '/lab/', label: 'Lab' },
   { href: '/keynotes-and-workshops/', label: 'Keynotes & workshops' },
   { href: '/executive-advisory/', label: 'Executive advisory' },
   { href: '/transformation-consulting/', label: 'Prototypes & capability' },

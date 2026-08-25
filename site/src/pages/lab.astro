@@ -1,0 +1,127 @@
+---
+import Base from '../layouts/Base.astro';
+import { SITE } from '../consts';
+
+const title = 'The Lab';
+const description =
+  'Interactive tools and rehearsal rooms from Imagination Applied for exploring Artistic Intelligence, creative direction, human–AI teams, and technology.';
+
+const items = [
+  {
+    eyebrow: 'Transparent comparison model',
+    title: 'Everyday Technology Impact Calculator',
+    description:
+      'Compare AI, streaming, water, carbon, transport, and familiar daily activities. Change the assumptions and inspect the evidence boundary.',
+    href: 'https://www.joshpenzell.com/tools/ai-vs-streaming?utm_source=imaginationapplied.ai&utm_medium=referral&utm_campaign=shared_lab&utm_content=ai_vs_streaming',
+    cta: 'Run the calculator',
+  },
+  {
+    eyebrow: 'Creative-direction diagnostic',
+    title: 'Director Type',
+    description:
+      'Notice how you tend to direct AI and people—Visionary, Collaborator, Improviser, or Technician—and get a practical next rehearsal.',
+    href: 'https://www.joshpenzell.com/director-quiz?utm_source=imaginationapplied.ai&utm_medium=referral&utm_campaign=shared_lab&utm_content=director_type',
+    cta: 'Find your Director Type',
+  },
+  {
+    eyebrow: 'Human–AI team rehearsal',
+    title: 'CreativeQ Rehearsal Lab',
+    description:
+      'Experiment with team composition, novelty, convention, and interaction rules without pretending an emerging instrument is settled science.',
+    href: 'https://www.joshpenzell.com/creativeq?utm_source=imaginationapplied.ai&utm_medium=referral&utm_campaign=shared_lab&utm_content=creativeq',
+    cta: 'Run the rehearsal',
+  },
+  {
+    eyebrow: 'Ideas you can question',
+    title: 'JoshP.GPT',
+    description:
+      'Explore Josh’s published work on Artistic Intelligence, TheaterThink, Human Caffeine, creativity, leadership, and AI in conversation.',
+    href: 'https://www.joshpenzell.com/joshp-gpt?utm_source=imaginationapplied.ai&utm_medium=referral&utm_campaign=shared_lab&utm_content=joshp_gpt',
+    cta: 'Ask the guide',
+  },
+];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Imagination Applied Lab',
+  url: `${SITE.origin}/lab/`,
+  description,
+  publisher: { '@type': 'Organization', name: SITE.name, url: SITE.origin },
+  hasPart: items.map((item) => ({
+    '@type': 'WebApplication',
+    name: item.title,
+    url: item.href,
+  })),
+};
+---
+
+<Base title={title} description={description} path="/lab/" jsonLd={jsonLd}>
+  <section class="wrap hero lab-hero">
+    <p class="eyebrow">Imagination Applied Lab</p>
+    <h1>The rehearsal room for questions that need to be made visible.</h1>
+    <p class="lede">
+      These are not polished answers disguised as tools. Each lab lets you change the
+      conditions, see what follows, and notice what the first version of the question left out.
+    </p>
+    <div class="actions">
+      <a class="btn" href="#instruments">Enter the Lab</a>
+      <a class="btn btn-secondary" href="/contact/">Bring a rehearsal into your organization</a>
+    </div>
+  </section>
+
+  <section id="instruments" class="wrap section-rule">
+    <p class="eyebrow">Compare. Diagnose. Rehearse. Question.</p>
+    <h2>Choose the instrument that matches the thing you are trying to see.</h2>
+    <p class="muted">
+      Results are useful starting points, not labels to obey. The interactive instruments are
+      hosted on Josh’s site so there is one maintained version, one evidence trail, and no drift.
+    </p>
+    <ul class="cards lab-grid">
+      {
+        items.map((item) => (
+          <li class="card card-link lab-card">
+            <p class="eyebrow">{item.eyebrow}</p>
+            <h3><a href={item.href}>{item.title}</a></h3>
+            <p>{item.description}</p>
+            <p class="lab-cta"><a href={item.href}>{item.cta} →</a></p>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="wrap section-rule">
+    <div class="evidence-grid">
+      <div class="evidence-copy">
+        <p class="eyebrow">The company and the guide</p>
+        <h2>The Lab belongs to Imagination Applied. Josh guides the inquiry.</h2>
+        <p>
+          Artistic Intelligence is the territory. TheaterThink is the method. Josh Penzell is
+          the guide. Imagination Applied turns the work into experiences, prototypes, and
+          capability that organizations can own.
+        </p>
+      </div>
+      <div class="card lab-principle">
+        <h3>Lab rule</h3>
+        <p>
+          Show the assumptions. Keep uncertainty visible. Separate unlike dimensions. Say what
+          remains outside the frame.
+        </p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .lab-hero { max-width: 70rem; }
+  .lab-grid { margin-top: 2rem; }
+  .lab-card { display: flex; min-height: 22rem; flex-direction: column; }
+  .lab-card .eyebrow { color: var(--teal); }
+  .lab-card > p:not(.eyebrow):not(.lab-cta) { flex: 1; }
+  .lab-cta { margin-top: 1.25rem; font-weight: 700; }
+  .lab-principle { align-self: center; border-top: .35rem solid var(--orange); }
+  @media (max-width: 720px) {
+    .lab-card { min-height: 0; }
+  }
+</style>
