@@ -28,7 +28,7 @@ interface Env {
 const DEFAULT_ENDPOINT = 'https://joshpenzell.com/api/partner/leads';
 const MAX = { name: 120, email: 200, organization: 200, topic: 40, message: 6000 } as const;
 
-const TOPICS = new Set(['advisory', 'consulting', 'workshop', 'speaking', 'research', 'other']);
+const TOPICS = new Set(['learning-design', 'rehearsal-day', 'rehearsal-30', 'practice', 'advisory', 'prototype', 'capability', 'consulting', 'workshop', 'speaking', 'research', 'other']);
 
 function page(title: string, body: string, status: number): Response {
   // Plain HTML so a failure is readable without JavaScript, and styled with
