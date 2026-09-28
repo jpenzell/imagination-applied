@@ -12,7 +12,7 @@ export default defineConfig({
     sitemap({
       // The 404 is a real built page but not a destination, so it stays out of
       // the sitemap (it also carries noindex).
-      filter: (page) => !page.endsWith('/404/'),
+      filter: (page) => !page.endsWith('/thanks/') && !['/404/', '/contact/thanks/', '/transformation-consulting/', '/press/forgotten-playbook-library/', '/press/the-past-tests-you/', '/press/stories-that-rehearsed-tomorrow/'].some(path => page.endsWith(path)),
     }),
   ],
   build: {
