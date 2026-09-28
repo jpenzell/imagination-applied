@@ -1,3 +1,4 @@
+import { DOORS } from '../consts.ts';
 /**
  * The editable surface of imaginationapplied.ai.
  *
@@ -41,29 +42,29 @@ export const BLOCKS: BlockDef[] = [
   // raw HTML. Exposing them to the admin means Josh can fix a title without
   // a developer, and the fix still lands in the static bytes.
   {
-    blockId: 'ia.seo.home.artistic-intelligence',
+    blockId: 'ia.seo.home.artistic-intelligence.v2',
     type: 'seo',
     page: `${IA} — SEO`,
     label: 'Home page SEO',
     defaultValue: {
-      title: 'Imagination Applied | Artistic Intelligence at Work',
+      title: 'Imagination Applied | AI Work Rehearsals for Teams',
       description:
-        'Imagination Applied helps leaders and teams direct creativity, judgment, and technology through live experiences, advisory, prototypes, and capability transfer.',
+        'Imagination Applied helps leaders and teams rehearse consequential AI work before the consequences are real.',
     },
   },
   {
-    blockId: 'ia.seo.how-we-work',
+    blockId: 'ia.seo.how-we-work.v2',
     type: 'seo',
     page: `${IA} — SEO`,
     label: 'How we work SEO',
     defaultValue: {
       title: 'How we work',
       description:
-        'TheaterThink is our rehearsal-based practice: direct the work, cast the ensemble, rehearse before the stakes are irreversible. Three moves, in order.',
+        'TheaterThink is our rehearsal-based practice: direct the work, cast the ensemble, rehearse before the stakes are irreversible. Direct, Cast, Rehearse, Interpret.',
     },
   },
   {
-    blockId: 'ia.seo.keynotes',
+    blockId: 'ia.seo.keynotes.v2',
     type: 'seo',
     page: `${IA} — SEO`,
     label: 'Keynotes and workshops SEO',
@@ -74,36 +75,36 @@ export const BLOCKS: BlockDef[] = [
     },
   },
   {
-    blockId: 'ia.seo.advisory',
+    blockId: 'ia.seo.advisory.v2',
     type: 'seo',
     page: `${IA} — SEO`,
     label: 'Executive advisory SEO',
     defaultValue: {
-      title: 'Executive advisory',
+      title: 'Transformation Advisory',
       description:
         'For leaders making consequential choices about direction, capability, work design, AI, and organizational change.',
     },
   },
   {
-    blockId: 'ia.seo.consulting',
+    blockId: 'ia.seo.consulting.v2',
     type: 'seo',
     page: `${IA} — SEO`,
     label: 'Transformation consulting SEO',
     defaultValue: {
-      title: 'Prototypes and capability',
+      title: 'The Rehearsal Room',
       description:
         'Build working proof, learn through bounded experiments, and transfer the practice until your team can run it without us.',
     },
   },
   {
-    blockId: 'ia.seo.about',
+    blockId: 'ia.seo.about.v2',
     type: 'seo',
     page: `${IA} — SEO`,
     label: 'About SEO',
     defaultValue: {
       title: 'About',
       description:
-        'Imagination Applied is the company that brings Artistic Intelligence into organizations through experiences, advisory, prototypes, and capability transfer.',
+        'Imagination Applied is the company that brings Artistic Intelligence into organizations through AI work rehearsals, keynotes and Transformation Advisory.',
     },
   },
   {
@@ -118,32 +119,32 @@ export const BLOCKS: BlockDef[] = [
     },
   },
   {
-    blockId: 'ia.seo.contact',
+    blockId: 'ia.seo.contact.v2',
     type: 'seo',
     page: `${IA} — SEO`,
     label: 'Contact SEO',
     defaultValue: {
       title: 'Contact',
       description:
-        'Tell us what the work is actually about. Imagination Applied works with leaders and teams on creativity, change, AI, prototypes, and capability.',
+        'Tell us what the work is actually about. Imagination Applied works with leaders and teams on AI work rehearsals, ongoing practice, keynotes and advisory.',
     },
   },
 
   // ---- home ---------------------------------------------------------
   {
-    blockId: 'ia.home.hero.headline',
+    blockId: 'ia.home.hero.headline.v2',
     type: 'text',
     page: `${IA} — Home`,
     label: 'Hero headline (the final word renders in orange)',
-    defaultValue: 'Make What Is Worth Making.',
+    defaultValue: 'Do not roll out the future. Rehearse it.',
   },
   {
-    blockId: 'ia.home.hero.lede',
+    blockId: 'ia.home.hero.lede.v2',
     type: 'text',
     page: `${IA} — Home`,
     label: 'Hero supporting line',
     defaultValue:
-      'Imagination Applied helps leaders and teams turn uncertainty into direction—then rehearse, build, and transfer the work until it can live without us.',
+      'Bring one consequential workflow and the people who own it. We help your team direct AI, test human judgment and decide what to pilot, revise or stop.',
   },
   {
     blockId: 'ia.home.tension.heading',
@@ -173,7 +174,7 @@ export const BLOCKS: BlockDef[] = [
 
   // ---- the ways to work together -----------------------------------
   {
-    blockId: 'ia.doors.items',
+    blockId: 'ia.doors.items.v2',
     type: 'list',
     page: `${IA} — Ways to work together`,
     label: 'The four ways to work together',
@@ -184,42 +185,17 @@ export const BLOCKS: BlockDef[] = [
       { key: 'for', label: 'Who it is for', type: 'textarea' },
       { key: 'outcome', label: 'Outcome', type: 'textarea' },
     ],
-    defaultValue: [
-      {
-        title: 'Keynotes and Workshops',
-        href: '/keynotes-and-workshops/',
-        for: 'Shift what a room can see through a Josh-led keynote, executive briefing, or rehearsal-based workshop.',
-        outcome: 'A shared language, a memorable experience, and a move people can use.',
-      },
-      {
-        title: 'Executive Advisory',
-        href: '/executive-advisory/',
-        for: 'Interpret a consequential choice before budget, technology, or momentum hardens around the wrong question.',
-        outcome: 'Clearer interpretation, better decisions, and a rehearsal plan for what comes next.',
-      },
-      {
-        title: 'Prototype Sprints',
-        href: '/transformation-consulting/#build',
-        for: 'Turn an important idea into a working proof: a learning experience, decision tool, workflow, automation, or prototype.',
-        outcome: 'Something real enough to test, learn from, and decide what deserves to scale.',
-      },
-      {
-        title: 'Capability Studios',
-        href: '/transformation-consulting/#own',
-        for: 'Use ongoing jams, coaching, and guided builds to make the practice part of how your team works.',
-        outcome: 'Internal capability and a team that can keep directing the work without us.',
-      },
-    ],
+    defaultValue: DOORS,
   },
 
   // ---- global -------------------------------------------------------
   {
-    blockId: 'ia.global.description',
+    blockId: 'ia.global.description.v2',
     type: 'text',
     page: `${IA} — Global`,
     label: 'Company description (footer, meta, JSON-LD)',
     defaultValue:
-      'Imagination Applied helps leaders and teams direct creativity, judgment, and technology through live experiences, advisory, prototypes, and capability transfer.',
+      'Imagination Applied helps leaders and teams rehearse consequential AI work before the consequences are real.',
   },
   {
     blockId: 'ia.global.contactEmail',
