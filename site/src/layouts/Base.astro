@@ -44,8 +44,8 @@ if (!title || !description) {
 
 // Editable from the joshpenzell.com admin.
 const description_global = await text(
-  'ia.global.description',
-  defaultText('ia.global.description')
+  'ia.global.description.v2',
+  defaultText('ia.global.description.v2')
 );
 
 const canonical = new URL(path, SITE.origin).href;
@@ -196,7 +196,7 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
         <div class="house-item">
           <p class="house-label">The company</p>
           <p class="house-name">Imagination Applied</p>
-          <p class="muted">Where the work becomes experiences, prototypes, and capability. You are here.</p>
+          <p class="muted">Where teams rehearse consequential AI work. Explore <a href="/rehearsal-room/">The Rehearsal Room</a>.</p>
         </div>
         <div class="house-item">
           <p class="house-label">The voice</p>
@@ -226,5 +226,29 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
         </div>
       </div>
     </footer>
+    <script>
+      // Keep only bounded campaign labels and a path for this tab's inquiry journey.
+      const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'];
+      const params = new URLSearchParams(location.search);
+      const token = (value: unknown): string => typeof value === 'string' && /^[a-z0-9][a-z0-9_.-]{0,99}$/i.test(value) ? value : '';
+      const path = (value: unknown): string => typeof value === 'string' && /^\/[a-z0-9/-]{0,239}$/i.test(value) && !value.startsWith('//') ? value : '/';
+      let attribution: Record<string, string> = { landingPage: path(location.pathname) };
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('ia-inquiry-attribution') || 'null');
+        if (saved && typeof saved === 'object') {
+          attribution.landingPage = path(saved.landingPage);
+          for (const key of keys) attribution[key] = token(saved[key]);
+        }
+      } catch { /* Attribution is optional when storage is unavailable. */ }
+      if (keys.some(key => token(params.get(key)))) {
+        attribution = { landingPage: path(location.pathname) };
+        for (const key of keys) attribution[key] = token(params.get(key));
+      }
+      try { sessionStorage.setItem('ia-inquiry-attribution', JSON.stringify(attribution)); } catch { /* Form still works. */ }
+      for (const key of [...keys, 'landingPage']) {
+        const field = document.querySelector<HTMLInputElement>(`input[type="hidden"][name="${key}"]`);
+        if (field) field.value = attribution[key] || '';
+      }
+    </script>
   </body>
 </html>

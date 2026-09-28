@@ -10,11 +10,11 @@ const pub = PUBLICATIONS[0];
 // Use a new key for the Artistic Intelligence positioning so a legacy saved
 // homepage SEO row cannot silently override the launch title and description.
 const meta = await seo(
-  'ia.seo.home.artistic-intelligence',
-  defaultSeo('ia.seo.home.artistic-intelligence')
+  'ia.seo.home.artistic-intelligence.v2',
+  defaultSeo('ia.seo.home.artistic-intelligence.v2')
 );
-const headline = await text('ia.home.hero.headline', defaultText('ia.home.hero.headline'));
-const lede = await text('ia.home.hero.lede', defaultText('ia.home.hero.lede'));
+const headline = await text('ia.home.hero.headline.v2', defaultText('ia.home.hero.headline.v2'));
+const lede = await text('ia.home.hero.lede.v2', defaultText('ia.home.hero.lede.v2'));
 const tensionHeading = await text(
   'ia.home.tension.heading',
   defaultText('ia.home.tension.heading')
@@ -31,7 +31,7 @@ interface Door {
   for: string;
   outcome: string;
 }
-const doors = await list<Door>('ia.doors.items', DEFAULTS['ia.doors.items'] as Door[]);
+const doors = await list<Door>('ia.doors.items.v2', DEFAULTS['ia.doors.items.v2'] as Door[]);
 
 // The hero's last word carries the whole brand ("...Direct."), so it is set in
 // the accent. Split rather than hard-code, so an edited headline still works.
@@ -86,7 +86,7 @@ const jsonLd = {
       // in here because LinkedIn returns 999 to any non-browser request, so it
       // could not be verified -- and an unverified sameAs actively misinforms
       // a crawler. Add it once the exact profile URL is confirmed.
-      sameAs: [SITE.founderSite],
+      sameAs: [SITE.founderSite, "https://www.linkedin.com/in/josh-penzell/"],
     },
     {
       '@type': 'WebSite',
@@ -126,8 +126,8 @@ const jsonLd = {
     <h1>{headLead} <span class="turn">{headTurn}</span></h1>
     <p class="lede">{lede}</p>
     <div class="actions">
-      <a class="btn" href="/contact/">Start a conversation</a>
-      <a class="btn btn-secondary" href="/how-we-work/">See how we work</a>
+      <a class="btn" href="/contact/?topic=rehearsal-day">Book a Rehearsal Room conversation</a>
+      <a class="btn btn-secondary" href="/rehearsal-room/">Explore the work labs</a>
     </div>
   </section>
 
@@ -138,9 +138,9 @@ const jsonLd = {
   </section>
 
   <section class="wrap section-rule">
-    <h2>Four ways to work together</h2>
+    <h2>Ways to work together</h2>
     <p class="muted">
-      See it. Rehearse it. Build it. Own it. Start where the work is now.
+      Start with the work in front of you: a learning experience, an AI workflow, a consequential decision or a room that needs new perspective.
     </p>
     <ul class="cards">
       {
@@ -159,41 +159,10 @@ const jsonLd = {
   </section>
 
   <section class="wrap section-rule">
-    <p class="eyebrow">A common engagement path</p>
-    <h2>From a room that can see it to a team that can own it</h2>
-    <p class="muted">
-      These are not four competing products. They are moves that can stand alone or build
-      into one practical journey.
-    </p>
-    <ol class="moves">
-      <li class="move">
-        <h3>Kick off</h3>
-        <p class="move-sub">Keynote or workshop</p>
-        <p>Create a shared language and make the real opportunity visible.</p>
-      </li>
-      <li class="move">
-        <h3>Work it</h3>
-        <p class="move-sub">Ongoing jams</p>
-        <p>Use real decisions and workflows to practice the moves together.</p>
-      </li>
-      <li class="move">
-        <h3>Build proof</h3>
-        <p class="move-sub">Prototype support</p>
-        <p>Make something concrete enough to test, improve, and decide what deserves to scale.</p>
-      </li>
-      <li class="move">
-        <h3>Transfer it</h3>
-        <p class="move-sub">Internal capability</p>
-        <p>Leave the team with artifacts, routines, and the ability to continue without us.</p>
-      </li>
-    </ol>
-  </section>
-
-  <section class="wrap section-rule">
-    <h2>The method: direct, cast, rehearse</h2>
+    <h2>The method: direct, cast, rehearse, interpret</h2>
     <p>
       Our practice is called TheaterThink. It is not a metaphor we decorate the work with.
-      It is how the work is actually run: three moves, in order.
+      It is how the work is actually run: four moves, with evidence guiding the next attempt.
     </p>
     <ol class="moves">
       {

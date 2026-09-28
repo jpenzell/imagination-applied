@@ -1,7 +1,7 @@
 // Site-wide constants.
 //
 // Copy in this file is drawn from Josh_Penzell_Imagination_Applied_Brand_Guide_2026.docx
-// (v1.0, July 2026), which the guide itself declares authoritative over older
+// (v2.0, September 14, 2026), which the guide itself declares authoritative over older
 // website copy. Where a line is quoted from the guide it is marked. Do not
 // replace guide language with a paraphrase without updating the guide first.
 
@@ -12,14 +12,14 @@ export const SITE = {
 
   /** Guide, section 3, "Recommended description". */
   description:
-    'Imagination Applied helps leaders and teams direct creativity, judgment, and technology through live experiences, advisory, prototypes, and capability transfer.',
+    'Imagination Applied helps leaders and teams rehearse consequential AI work before the consequences are real.',
 
   /** Guide, section 12, "Company Boilerplate". */
   boilerplate:
-    'Imagination Applied is the company that brings Artistic Intelligence into organizations. Founded by keynote speaker, advisor, and theater director Josh Penzell, it helps leaders and teams interpret what matters, rehearse change, build working proof, and develop capability they can own. Its practice, TheaterThink, applies rehearsal-room craft to creativity, innovation, learning, strategy, and the age of AI.',
+    'Imagination Applied is the company that brings Artistic Intelligence into organizations. Founded by keynote speaker, advisor, and theater director Josh Penzell, it helps leaders and teams rehearse consequential AI work before the consequences are real. The Rehearsal Room brings people, workflows and AI together through the TheaterThink® method: Direct, Cast, Rehearse, Interpret.',
 
   /** Company promise. */
-  hero: 'Make What Is Worth Making.',
+  hero: 'Do not roll out the future. Rehearse it.',
 
   /** Guide, section 3, "Optional internal line". */
   tagline: 'Artistic Intelligence, applied.',
@@ -41,67 +41,31 @@ export const SITE = {
 } as const;
 
 export const NAV = [
+  { href: '/rehearsal-room/', label: 'The Rehearsal Room' },
+  { href: '/learning-design/', label: 'Learning design' },
   { href: '/how-we-work/', label: 'How we work' },
+  { href: '/keynotes-and-workshops/', label: 'Keynotes' },
+  { href: '/executive-advisory/', label: 'Advisory' },
   { href: '/lab/', label: 'Lab' },
-  { href: '/keynotes-and-workshops/', label: 'Keynotes & workshops' },
-  { href: '/executive-advisory/', label: 'Executive advisory' },
-  { href: '/transformation-consulting/', label: 'Prototypes & capability' },
   { href: '/publications/', label: 'Research' },
   { href: '/about/', label: 'About' },
   { href: '/contact/', label: 'Contact' },
 ] as const;
 
-/**
- * The four commercial ways to work together.
- */
 export const DOORS = [
-  {
-    href: '/keynotes-and-workshops/',
-    title: 'Keynotes and Workshops',
-    for: 'Shift what a room can see through a Josh-led keynote, executive briefing, or rehearsal-based workshop.',
-    outcome: 'A shared language, a memorable experience, and a move people can use.',
-  },
-  {
-    href: '/executive-advisory/',
-    title: 'Executive Advisory',
-    for: 'Interpret a consequential choice before budget, technology, or momentum hardens around the wrong question.',
-    outcome: 'Clearer interpretation, better decisions, and a rehearsal plan for what comes next.',
-  },
-  {
-    href: '/transformation-consulting/',
-    title: 'Prototype Sprints',
-    for: 'Turn an important idea into a working proof: a learning experience, decision tool, workflow, automation, or prototype.',
-    outcome: 'Something real enough to test, learn from, and decide what deserves to scale.',
-  },
-  {
-    href: '/transformation-consulting/#own',
-    title: 'Capability Studios',
-    for: 'Use ongoing jams, coaching, and guided builds to make the practice part of how your team works.',
-    outcome: 'Internal capability and a team that can keep directing the work without us.',
-  },
+ {href:'/learning-design/',title:'Learning Experience Design & Advisory',for:'Design useful learning with your team, from a focused review to a complete course or curriculum.',outcome:'Clear learning design, practical experiences and support through delivery. AI is optional.'},
+ {href:'/keynotes-and-workshops/',title:'Keynotes',for:'Create shared language for leadership, creativity and AI with Josh in the room.',outcome:'A memorable experience and a next move people can use.'},
+ {href:'/rehearsal-room/',title:'The Rehearsal Room',for:'Bring one real workflow and the people who own it. Try the work before the stakes are real.',outcome:'Observed risks, a rehearsed workflow and a Pilot / Revise / Stop decision.'},
+ {href:'/rehearsal-room/#practice',title:'Rehearsal Practice',for:'Build capability through recurring scenes, coaching and failure drills.',outcome:'Evidence of performance and a practice the team can keep using.'},
+ {href:'/executive-advisory/',title:'Transformation Advisory',for:'Work through consequential choices about AI, work design and human control.',outcome:'Direction, governance and a rehearsal plan for what comes next.'},
 ] as const;
 
-/** Guide, section 7, "The Three Practice Modules". Order is canonical. */
+/** Canonical working arc, brand guide v2.0. */
 export const PRACTICE = [
-  {
-    name: 'Directing',
-    subtitle: 'Getting Everyone in the Same Play',
-    oneLiner:
-      'Most work does not fail on skill. It fails because everyone is secretly in a different play.',
-    move: 'Name what the work is actually about—the point, audience, stakes, and intended effect—before briefing people or AI.',
-  },
-  {
-    name: 'Casting',
-    subtitle: 'Casting for Creativity',
-    oneLiner: 'Talent belongs to people. Creativity happens between them.',
-    move: 'Compose an ensemble with the right blend of familiarity, difference, trust, and productive surprise.',
-  },
-  {
-    name: 'Rehearsing',
-    subtitle: 'Rehearsable Change',
-    oneLiner: 'Change becomes possible when people can try the future before they are judged by it.',
-    move: 'Design bounded attempts that make assumptions and consequences visible, then interpret and revise.',
-  },
+ {name:'Direct',subtitle:'What play are we in?',oneLiner:'Name what matters before asking people or AI to act.',move:'Define the point, audience, stakes, boundaries and evidence of a good result.'},
+ {name:'Cast',subtitle:'Who and what belong in the room?',oneLiner:'Compose the ensemble the work needs.',move:'Bring together people, AI, data, tools, permissions and different perspectives.'},
+ {name:'Rehearse',subtitle:'What happens when the work moves?',oneLiner:'Try the workflow while the cost of being wrong is low.',move:'Run a normal scene and a pressure scene, including ambiguity, exceptions and failure.'},
+ {name:'Interpret',subtitle:'What did the attempt teach us?',oneLiner:'Read the evidence and decide what deserves to happen next.',move:'Notice consequences and choose: Pilot, Revise or Stop.'},
 ] as const;
 
 /**

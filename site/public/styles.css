@@ -339,7 +339,7 @@ section {
   pointer-events: none;
   opacity: 0.9;
 }
-.hero > * {
+.hero > :not(.hero-path) {
   position: relative;
 }
 .hero h1 {
@@ -955,3 +955,9 @@ section {
   font-size: 0.88rem;
   line-height: 1.95;
 }
+
+/* Keep the primary action visible and the decorative mark behind the content. */
+.hero { padding-top: 3rem; }
+.hero h1 { max-width: 18ch; }
+.hero-path { opacity: .18; }
+@media(min-width:60rem){ .moves { grid-template-columns: repeat(4,minmax(0,1fr)); } }

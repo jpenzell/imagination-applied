@@ -28,7 +28,15 @@ interface Env {
 const DEFAULT_ENDPOINT = 'https://joshpenzell.com/api/partner/leads';
 const MAX = { name: 120, email: 200, organization: 200, topic: 40, message: 6000 } as const;
 
-const TOPICS = new Set(['advisory', 'consulting', 'workshop', 'speaking', 'research', 'other']);
+const TOPICS = new Set(['learning-design', 'rehearsal-day', 'rehearsal-30', 'practice', 'advisory', 'prototype', 'capability', 'consulting', 'workshop', 'speaking', 'research', 'other']);
+
+// Campaign fields are labels, never free text or contact information.
+function campaignToken(value: unknown): string {
+  return typeof value === 'string' && /^[a-z0-9][a-z0-9_.-]{0,99}$/i.test(value) ? value : '';
+}
+function landingPath(value: unknown): string {
+  return typeof value === 'string' && /^\/[a-z0-9/-]{0,239}$/i.test(value) && !value.startsWith('//') ? value : '';
+}
 
 function page(title: string, body: string, status: number): Response {
   // Plain HTML so a failure is readable without JavaScript, and styled with
@@ -121,6 +129,13 @@ const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         topic,
         message,
         sourceDetail: 'imaginationapplied.ai/contact',
+        campaign: {
+          source: campaignToken(form.get('utm_source')),
+          medium: campaignToken(form.get('utm_medium')),
+          name: campaignToken(form.get('utm_campaign')),
+          content: campaignToken(form.get('utm_content')),
+        },
+        landingPage: landingPath(form.get('landingPage')) || '/contact/',
       }),
     });
   } catch (err) {
@@ -129,13 +144,20 @@ const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   if (!res.ok) {
-    console.error('contact: leads endpoint returned', res.status, await res.text().catch(() => ''));
+    console.error('contact: leads endpoint returned', res.status);
     // 429 is the rate limiter, and is worth saying plainly rather than
     // reporting as a generic failure the sender cannot act on.
     if (res.status === 429) {
       return problem('That is a few more messages than we allow at once. Please try again in a little while.', 429, env);
     }
     return problem('We could not deliver that message. Please try again shortly.', 502, env);
+  }
+
+  // A missing API route can fall back to the SPA with HTTP 200. Never tell a
+  // visitor the inquiry was delivered when the upstream returned a web page.
+  if (!res.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+    console.error('contact: leads endpoint returned an unexpected response type');
+    return problem('We could not confirm delivery. Please try again shortly.', 502, env);
   }
 
   return Response.redirect(new URL('/contact/thanks/', request.url).href, 303);

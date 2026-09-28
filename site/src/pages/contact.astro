@@ -9,7 +9,7 @@ import { SITE } from '../consts';
 // still renders and submits with scripting disabled.
 
 // Editable from the joshpenzell.com admin; falls back to the default above.
-const meta = await seo('ia.seo.contact', defaultSeo('ia.seo.contact'));
+const meta = await seo('ia.seo.contact.v2', defaultSeo('ia.seo.contact.v2'));
 // Editable from the admin too, so the address can change without a deploy.
 const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global.contactEmail'));
 ---
@@ -35,11 +35,16 @@ const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global
     </p>
     <p class="muted">
       Booking Josh for a stage? That goes through{' '}
-      <a href={SITE.founderSite}>joshpenzell.com</a>. Prefer plain email?
+      <a href={`${SITE.founderSite}/speaking`}>joshpenzell.com</a>. Prefer plain email?
       <a href={`mailto:${contactEmail}`}>{contactEmail}</a>.
     </p>
 
     <form class="form" method="POST" action="/api/contact" style="margin-top:2rem">
+      <input type="hidden" name="utm_source" />
+      <input type="hidden" name="utm_medium" />
+      <input type="hidden" name="utm_campaign" />
+      <input type="hidden" name="utm_content" />
+      <input type="hidden" name="landingPage" value="/contact/" />
       <div class="field">
         <label for="name">Your name</label>
         <input id="name" name="name" type="text" required autocomplete="name" />
@@ -57,12 +62,14 @@ const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global
 
       <div class="field">
         <label for="topic">What is this about?</label>
-        <select id="topic" name="topic">
-          <option value="advisory">Executive advisory</option>
-          <option value="prototype">A prototype sprint</option>
-          <option value="capability">An ongoing capability studio</option>
-          <option value="workshop">A keynote, workshop, or learning program</option>
-          <option value="speaking">Speaking</option>
+        <select id="topic" name="topic" required>
+          <option value="" disabled selected>Choose a starting point</option>
+          <option value="learning-design">Learning Experience Design &amp; Advisory</option>
+          <option value="rehearsal-day">One-Day AI Work Lab</option>
+          <option value="rehearsal-30">30-Day AI Work Rehearsal</option>
+          <option value="practice">Rehearsal Practice</option>
+          <option value="advisory">Transformation Advisory</option>
+          <option value="speaking">A keynote or workshop</option>
           <option value="research">The research</option>
           <option value="other">Something else</option>
         </select>
@@ -71,8 +78,7 @@ const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global
       <div class="field">
         <label for="message">What are you stuck on?</label>
         <p class="hint">
-          The specific situation is more useful than a general description of your
-          company.
+          Tell us the workflow, who is involved and what needs to change. Please leave out confidential information.
         </p>
         <textarea id="message" name="message" required></textarea>
       </div>
@@ -85,8 +91,13 @@ const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global
 
       <button class="btn" type="submit">Send</button>
       <p class="muted" style="font-size:0.82rem;margin-top:1rem">
-        We use what you send here to reply to you. Nothing more.
+        We use your message to reply and manage your inquiry. Campaign labels help us understand how people find our services.
       </p>
     </form>
   </section>
+  <script>
+    const topic = new URLSearchParams(location.search).get('topic');
+    const select = document.querySelector<HTMLSelectElement>('#topic');
+    if (select && Array.from(select.options).some(option => option.value === topic)) select.value = topic!;
+  </script>
 </Base>
