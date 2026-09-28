@@ -40,6 +40,11 @@ const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global
     </p>
 
     <form class="form" method="POST" action="/api/contact" style="margin-top:2rem">
+      <input type="hidden" name="utm_source" />
+      <input type="hidden" name="utm_medium" />
+      <input type="hidden" name="utm_campaign" />
+      <input type="hidden" name="utm_content" />
+      <input type="hidden" name="landingPage" value="/contact/" />
       <div class="field">
         <label for="name">Your name</label>
         <input id="name" name="name" type="text" required autocomplete="name" />
@@ -86,7 +91,7 @@ const contactEmail = await text('ia.global.contactEmail', defaultText('ia.global
 
       <button class="btn" type="submit">Send</button>
       <p class="muted" style="font-size:0.82rem;margin-top:1rem">
-        We use what you send here to reply to you. Nothing more.
+        We use your message to reply and manage your inquiry. Campaign labels help us understand how people find our services.
       </p>
     </form>
   </section>
