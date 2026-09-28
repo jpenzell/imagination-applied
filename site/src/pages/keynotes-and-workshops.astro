@@ -4,7 +4,7 @@ import { seo } from '../lib/content';
 import { defaultSeo } from '../lib/blocks';
 import { SITE, DOORS } from '../consts';
 
-const door = DOORS[0];
+const door = DOORS.find(door => door.title === 'Keynotes')!;
 
 // Canonical talk titles and subtitles: Brand Guide section 7, "The Public Talk
 // Portfolio". Titles are fixed -- older names are variants, not products.
@@ -16,22 +16,6 @@ const TALKS = [
     promise:
       'AI has changed the script. This keynote shows leaders how to create direction, align an ensemble, and rehearse what comes next.',
     when: 'When the event needs the full worldview, as an opening or closing keynote.',
-  },
-  {
-    title: 'AI at the Speed of Live',
-    subtitle: 'Don’t Just Prompt. Direct.',
-    role: 'Flagship live, experiential keynote',
-    promise:
-      'Josh directs AI in real time with the audience, making the difference between prompting and directing visible onstage.',
-    when: 'When the buyer wants a participatory mainstage experience and concrete AI relevance.',
-  },
-  {
-    title: 'TheaterThink Workshop Suite',
-    subtitle: 'Directing, Casting, and Rehearsing What Comes Next',
-    role: 'Interactive workshops and deeper learning experiences',
-    promise:
-      'Participants apply the craft to a real team, project, or AI-enabled workflow rather than to a case study.',
-    when: 'When a room needs to practice the moves, not just see them.',
   },
   {
     title: 'Casting for Creativity',
@@ -52,7 +36,7 @@ const TALKS = [
 ];
 
 // Editable from the joshpenzell.com admin; falls back to the default above.
-const meta = await seo('ia.seo.keynotes', defaultSeo('ia.seo.keynotes'));
+const meta = await seo('ia.seo.keynotes.v2', defaultSeo('ia.seo.keynotes.v2'));
 ---
 
 <Base
@@ -103,27 +87,9 @@ const meta = await seo('ia.seo.keynotes', defaultSeo('ia.seo.keynotes'));
     </div>
 
     <div class="section-rule">
-      <h2>Live-build sessions</h2>
-      <h3>Oops, We Built a Training Program</h3>
-      <p>
-        Participants watch AI make plausible mistakes, revise the direction, and build a
-        real learning solution in motion. It is the clearest demonstration of the
-        difference between prompting and directing, because the failures are real and
-        happen in the room.
-      </p>
-      <h3>Rehearsing What Comes Next: A Certificate for L&amp;D Leaders</h3>
-      <p>
-        A one-day hands-on lab that translates Artistic Intelligence into usable practice
-        without requiring theater or AI expertise. The arc runs direct the work, cast the
-        ensemble, rehearse the solution, interpret what emerged. Participants leave with a
-        completed application to a real workplace challenge.
-      </p>
-      <h3>Rehearsal labs for real work</h3>
-      <p>
-        Custom workshops begin with an actual decision, team, workflow, or idea—not a
-        fictional case study. Participants make the work visible, try a bounded version,
-        and leave with both a next move and a clearer read on what the problem was.
-      </p>
+      <h2>Bring the idea into the work</h2>
+      <p>A keynote creates shared language. The Rehearsal Room gives a team the chance to use it on a real workflow. Choose a One-Day AI Work Lab or a 30-Day AI Work Rehearsal, then build an ongoing practice from what the team learns.</p>
+      <p><a href="/rehearsal-room/">Explore The Rehearsal Room →</a></p>
     </div>
 
     <div class="section-rule">
@@ -133,7 +99,7 @@ const meta = await seo('ia.seo.keynotes', defaultSeo('ia.seo.keynotes'));
         reel, and the full stage history.
       </p>
       <div class="actions">
-        <a class="btn" href={SITE.founderSite}>Bring Josh to your stage</a>
+        <a class="btn" href={`${SITE.founderSite}/speaking`}>Bring Josh to your stage</a>
         <a class="btn btn-secondary" href="/contact/">Ask about a workshop</a>
       </div>
     </div>

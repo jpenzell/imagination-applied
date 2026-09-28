@@ -4,16 +4,16 @@ import { seo } from '../lib/content';
 import { defaultSeo } from '../lib/blocks';
 import { DOORS } from '../consts';
 
-const door = DOORS[1];
+const door = DOORS.find(door => door.title === 'Transformation Advisory')!;
 
 // Editable from the joshpenzell.com admin; falls back to the default above.
-const meta = await seo('ia.seo.advisory', defaultSeo('ia.seo.advisory'));
+const meta = await seo('ia.seo.advisory.v2', defaultSeo('ia.seo.advisory.v2'));
 ---
 
 <Base title={meta.title} description={meta.description} path="/executive-advisory/">
   <section class="wrap page-head">
     <p class="eyebrow">Ways to work together</p>
-    <h1>Executive advisory</h1>
+    <h1>Transformation Advisory</h1>
     <p class="lede">{door.for}</p>
   </section>
 
@@ -80,7 +80,7 @@ const meta = await seo('ia.seo.advisory', defaultSeo('ia.seo.advisory'));
         <a href="/publications/">See the research →</a>
       </p>
       <div class="actions">
-        <a class="btn" href="/contact/">Start a conversation</a>
+        <a class="btn" href="/contact/?topic=advisory">Start a conversation</a>
       </div>
     </div>
   </section>
