@@ -44,8 +44,8 @@ if (!title || !description) {
 
 // Editable from the joshpenzell.com admin.
 const description_global = await text(
-  'ia.global.description',
-  defaultText('ia.global.description')
+  'ia.global.description.v2',
+  defaultText('ia.global.description.v2')
 );
 
 const canonical = new URL(path, SITE.origin).href;
@@ -196,7 +196,7 @@ const fullTitle = path === '/' ? title : `${title} | ${SITE.name}`;
         <div class="house-item">
           <p class="house-label">The company</p>
           <p class="house-name">Imagination Applied</p>
-          <p class="muted">Where the work becomes experiences, prototypes, and capability. You are here.</p>
+          <p class="muted">Where teams rehearse consequential AI work. Explore <a href="/rehearsal-room/">The Rehearsal Room</a>.</p>
         </div>
         <div class="house-item">
           <p class="house-label">The voice</p>
