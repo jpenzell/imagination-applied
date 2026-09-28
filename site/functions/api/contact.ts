@@ -30,6 +30,14 @@ const MAX = { name: 120, email: 200, organization: 200, topic: 40, message: 6000
 
 const TOPICS = new Set(['learning-design', 'rehearsal-day', 'rehearsal-30', 'practice', 'advisory', 'prototype', 'capability', 'consulting', 'workshop', 'speaking', 'research', 'other']);
 
+// Campaign fields are labels, never free text or contact information.
+function campaignToken(value: unknown): string {
+  return typeof value === 'string' && /^[a-z0-9][a-z0-9_.-]{0,99}$/i.test(value) ? value : '';
+}
+function landingPath(value: unknown): string {
+  return typeof value === 'string' && /^\/[a-z0-9/-]{0,239}$/i.test(value) && !value.startsWith('//') ? value : '';
+}
+
 function page(title: string, body: string, status: number): Response {
   // Plain HTML so a failure is readable without JavaScript, and styled with
   // the site's own stylesheet so it does not look like a crash.
@@ -121,6 +129,13 @@ const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         topic,
         message,
         sourceDetail: 'imaginationapplied.ai/contact',
+        campaign: {
+          source: campaignToken(form.get('utm_source')),
+          medium: campaignToken(form.get('utm_medium')),
+          name: campaignToken(form.get('utm_campaign')),
+          content: campaignToken(form.get('utm_content')),
+        },
+        landingPage: landingPath(form.get('landingPage')) || '/contact/',
       }),
     });
   } catch (err) {
