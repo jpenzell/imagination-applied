@@ -14,63 +14,63 @@ import type { SiteContentBlockDef } from "./site-content-registry";
 
 export const IMAGINATION_APPLIED_BLOCKS: SiteContentBlockDef[] = [
   {
-    "blockId": "ia.seo.home.artistic-intelligence",
+    "blockId": "ia.seo.home.artistic-intelligence.v2",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "Home page SEO",
     "defaultValue": {
-      "title": "Imagination Applied",
-      "description": "Imagination Applied helps leaders and teams turn uncertainty into direction through keynotes, advisory work, and rehearsal-based transformation."
+      "title": "Imagination Applied | AI Work Rehearsals for Teams",
+      "description": "Imagination Applied helps leaders and teams rehearse consequential AI work before the consequences are real."
     }
   },
   {
-    "blockId": "ia.seo.how-we-work",
+    "blockId": "ia.seo.how-we-work.v2",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "How we work SEO",
     "defaultValue": {
       "title": "How we work",
-      "description": "TheaterThink is our rehearsal-based practice: direct the work, cast the ensemble, rehearse before the stakes are irreversible. Three moves, in order."
+      "description": "TheaterThink is our rehearsal-based practice: direct the work, cast the ensemble, rehearse before the stakes are irreversible. Direct, Cast, Rehearse, Interpret."
     }
   },
   {
-    "blockId": "ia.seo.keynotes",
+    "blockId": "ia.seo.keynotes.v2",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "Keynotes and workshops SEO",
     "defaultValue": {
       "title": "Keynotes and workshops",
-      "description": "For conferences, leadership meetings, offsites, and learning events that need a shared language and a memorable experience."
+      "description": "Josh-led keynotes and rehearsal-based workshops on Artistic Intelligence, creativity, leadership, and the age of AI."
     }
   },
   {
-    "blockId": "ia.seo.advisory",
+    "blockId": "ia.seo.advisory.v2",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "Executive advisory SEO",
     "defaultValue": {
-      "title": "Executive advisory",
-      "description": "For leaders making consequential choices about AI, adoption, capability, work design, and organizational direction."
+      "title": "Transformation Advisory",
+      "description": "For leaders making consequential choices about direction, capability, work design, AI, and organizational change."
     }
   },
   {
-    "blockId": "ia.seo.consulting",
+    "blockId": "ia.seo.consulting.v2",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "Transformation consulting SEO",
     "defaultValue": {
-      "title": "Transformation consulting",
-      "description": "For organizations ready to move from inspiration to changes in behavior, workflow, learning, or operating practice."
+      "title": "The Rehearsal Room",
+      "description": "Build working proof, learn through bounded experiments, and transfer the practice until your team can run it without us."
     }
   },
   {
-    "blockId": "ia.seo.about",
+    "blockId": "ia.seo.about.v2",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "About SEO",
     "defaultValue": {
       "title": "About",
-      "description": "Imagination Applied brings Artistic Intelligence into organizations through live experiences, executive advisory, and rehearsal-based transformation. Founded by Josh Penzell."
+      "description": "Imagination Applied is the company that brings Artistic Intelligence into organizations through AI work rehearsals, keynotes and Transformation Advisory."
     }
   },
   {
@@ -84,42 +84,42 @@ export const IMAGINATION_APPLIED_BLOCKS: SiteContentBlockDef[] = [
     }
   },
   {
-    "blockId": "ia.seo.contact",
+    "blockId": "ia.seo.contact.v2",
     "type": "seo",
     "page": "Imagination Applied — SEO",
     "label": "Contact SEO",
     "defaultValue": {
       "title": "Contact",
-      "description": "Tell us what the work is actually about. Imagination Applied works with leaders and teams on AI adoption, advisory, and rehearsal-based transformation."
+      "description": "Tell us what the work is actually about. Imagination Applied works with leaders and teams on AI work rehearsals, ongoing practice, keynotes and advisory."
     }
   },
   {
-    "blockId": "ia.home.hero.headline",
+    "blockId": "ia.home.hero.headline.v2",
     "type": "text",
     "page": "Imagination Applied — Home",
     "label": "Hero headline (the final word renders in orange)",
-    "defaultValue": "Don’t Just Prompt. Direct."
+    "defaultValue": "Do not roll out the future. Rehearse it."
   },
   {
-    "blockId": "ia.home.hero.lede",
+    "blockId": "ia.home.hero.lede.v2",
     "type": "text",
     "page": "Imagination Applied — Home",
     "label": "Hero supporting line",
-    "defaultValue": "AI can make almost anything. The real leadership challenge is deciding what is worth making—and creating the conditions to make it real."
+    "defaultValue": "Bring one consequential workflow and the people who own it. We help your team direct AI, test human judgment and decide what to pilot, revise or stop."
   },
   {
     "blockId": "ia.home.tension.heading",
     "type": "text",
     "page": "Imagination Applied — Home",
     "label": "Tension section heading",
-    "defaultValue": "The problem is not capability. It is direction."
+    "defaultValue": "Possibility is abundant. Direction is not."
   },
   {
     "blockId": "ia.home.tension.body",
     "type": "richtext",
     "page": "Imagination Applied — Home",
     "label": "Tension section body (HTML)",
-    "defaultValue": "<p>Organizations are surrounded by possibility and starved for direction. They can generate more options, more content, more analysis than ever. But more output does not produce shared meaning, good judgment, or movement.</p><p>Teams can be competent and still be in different plays. Leaders can move quickly and still move in the wrong direction. AI can produce a beautiful answer to a question nobody meant to ask.</p><p>That decision—what is worth making—is not hidden inside a better prompt. It lives in interpretation. In the point of view you bring, the people and tools you put in the room, and what you learn when the idea finally has to move.</p>"
+    "defaultValue": "<p>Organizations are surrounded by possibility and starved for direction. They can generate more options, more content, and more analysis than ever. But output does not produce shared meaning, good judgment, or movement.</p><p>This is true in innovation, learning, strategy, culture, and change. AI accelerates it: a model can produce a beautiful answer to a question nobody meant to ask.</p><p>The decision—what is worth making—lives in interpretation. In the point of view you bring, the ensemble you compose, and what you learn when the idea finally has to move.</p>"
   },
   {
     "blockId": "ia.home.research.blurb",
@@ -129,10 +129,10 @@ export const IMAGINATION_APPLIED_BLOCKS: SiteContentBlockDef[] = [
     "defaultValue": "Advice about AI adoption is cheap. We test ours, publish the code and the checksums, and state the limitations in the body of the work rather than in a footnote."
   },
   {
-    "blockId": "ia.doors.items",
+    "blockId": "ia.doors.items.v2",
     "type": "list",
     "page": "Imagination Applied — Ways to work together",
-    "label": "The three doors",
+    "label": "The four ways to work together",
     "itemTitleKey": "title",
     "itemFields": [
       {
@@ -158,31 +158,43 @@ export const IMAGINATION_APPLIED_BLOCKS: SiteContentBlockDef[] = [
     ],
     "defaultValue": [
       {
-        "title": "Keynotes and Workshops",
+        "href": "/learning-design/",
+        "title": "Learning Experience Design & Advisory",
+        "for": "Design useful learning with your team, from a focused review to a complete course or curriculum.",
+        "outcome": "Clear learning design, practical experiences and support through delivery. AI is optional."
+      },
+      {
         "href": "/keynotes-and-workshops/",
-        "for": "For conferences, leadership meetings, offsites, and learning events that need a shared language and a memorable experience.",
-        "outcome": "A room sees the challenge differently and leaves with a move it can use."
+        "title": "Keynotes",
+        "for": "Create shared language for leadership, creativity and AI with Josh in the room.",
+        "outcome": "A memorable experience and a next move people can use."
       },
       {
-        "title": "Executive Advisory",
+        "href": "/rehearsal-room/",
+        "title": "The Rehearsal Room",
+        "for": "Bring one real workflow and the people who own it. Try the work before the stakes are real.",
+        "outcome": "Observed risks, a rehearsed workflow and a Pilot / Revise / Stop decision."
+      },
+      {
+        "href": "/rehearsal-room/#practice",
+        "title": "Rehearsal Practice",
+        "for": "Build capability through recurring scenes, coaching and failure drills.",
+        "outcome": "Evidence of performance and a practice the team can keep using."
+      },
+      {
         "href": "/executive-advisory/",
-        "for": "For leaders making consequential choices about AI, adoption, capability, work design, and organizational direction.",
-        "outcome": "Clearer interpretation, better decisions, and a rehearsal plan for what comes next."
-      },
-      {
-        "title": "Transformation Consulting",
-        "href": "/transformation-consulting/",
-        "for": "For organizations ready to move from inspiration to changes in behavior, workflow, learning, or operating practice.",
-        "outcome": "A series of bounded experiments that create evidence, trust, and scalable direction."
+        "title": "Transformation Advisory",
+        "for": "Work through consequential choices about AI, work design and human control.",
+        "outcome": "Direction, governance and a rehearsal plan for what comes next."
       }
     ]
   },
   {
-    "blockId": "ia.global.description",
+    "blockId": "ia.global.description.v2",
     "type": "text",
     "page": "Imagination Applied — Global",
     "label": "Company description (footer, meta, JSON-LD)",
-    "defaultValue": "Imagination Applied helps leaders and teams turn uncertainty into direction through keynotes, advisory work, and rehearsal-based transformation."
+    "defaultValue": "Imagination Applied helps leaders and teams rehearse consequential AI work before the consequences are real."
   },
   {
     "blockId": "ia.global.contactEmail",
