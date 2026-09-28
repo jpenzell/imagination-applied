@@ -8,7 +8,7 @@ const pub = PUBLICATIONS[0];
 
 <Base
   title="Imagination Applied Press"
-  description="The publishing imprint of Imagination Applied: open research, thirteen books across three series, and the forthcoming Artistic Intelligence."
+  description="The publishing imprint of Imagination Applied: open research and practical books. Explore the current book catalog and research."
   path="/press/"
 >
   <section class="wrap page-head">
@@ -54,19 +54,18 @@ const pub = PUBLICATIONS[0];
       <p class="eyebrow">Line two</p>
       <h2>The book series</h2>
       <p>
-        {TOTAL_TITLES} titles across three series. Practical books for people doing the
-        thing, not reading about it.
+        Practical books for people doing the work. The Press store has the current catalog, publication status and purchase links.
       </p>
       <ul class="cards">
         {
           SERIES.map((s) => (
             <li class="card card-link">
               <h3 style="margin-top:0">
-                <a href={`/press/${s.slug}/`}>{s.name}</a>
+                <a href={`https://press.imaginationapplied.ai/collections/${s.slug === "forgotten-playbook-library" ? "forgotten-playbook" : s.slug === "the-past-tests-you" ? "past-tests-you" : s.slug}/`}>{s.name}</a>
               </h3>
               <p>{s.tagline}</p>
               <p class="outcome">
-                <strong>{s.titles.length} {s.titles.length === 1 ? 'title' : 'titles'}</strong>
+                <strong>Explore the collection</strong>
                 {s.audience}
               </p>
             </li>
