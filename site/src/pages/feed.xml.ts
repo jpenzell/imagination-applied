@@ -12,7 +12,7 @@ export async function GET(context: APIContext) {
       title: pub.title,
       description: pub.description,
       link: `/publications/${pub.slug}/`,
-      pubDate: new Date(`${pub.datePublished}T00:00:00Z`),
+      pubDate: new Date(`${pub.dateModified}T00:00:00Z`),
       author: pub.author,
     })),
     customData: '<language>en-us</language>',

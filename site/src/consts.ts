@@ -68,45 +68,31 @@ export const PRACTICE = [
  {name:'Interpret',subtitle:'What did the attempt teach us?',oneLiner:'Read the evidence and decide what deserves to happen next.',move:'Notice consequences and choose: Pilot, Revise or Stop.'},
 ] as const;
 
-/**
- * The single research publication, keyed to the v3.1.0 package.
- * Title, description and social copy are taken from publication/LAUNCH_KIT.md
- * so the site cannot drift from the reviewed language.
- */
+/** Current research revision. The frozen 2025 release remains linked on its page. */
 export const PUBLICATIONS = [
   {
     slug: 'adoption-without-confidence',
-    title: 'The Developers Using AI Without Trusting It',
-    subtitle:
-      'What 26,102 current users in Stack Overflow’s 2025 survey reveal about adoption, sentiment, and calibrated skepticism',
-    /** LAUNCH_KIT.md, "Meta description". */
+    title: 'Adoption Without Confidence',
+    subtitle: 'AI use, attitude and trust in the 2025 and 2026 Stack Overflow surveys',
     description:
-      'A secondary analysis of 26,102 current AI-tool users finds favorable stance toward AI carries substantially more information about daily use than trust in output accuracy.',
-    /** LAUNCH_KIT.md, "Open Graph title" / "Open Graph description". */
-    ogTitle: 'Developers Are Using AI Without Trusting It',
+      'Among current AI users in the 2026 analysis, 54% of very unfavorable users reported daily use, compared with 93% of very favorable users. The survey redesign limits comparisons with 2025.',
+    ogTitle: 'Daily AI use can coexist with an unfavorable view of the tools',
     ogDescription:
-      'Trust in accuracy is not the same thing as willingness to use AI. New analysis of Stack Overflow’s 2025 survey separates the two.',
+      'The 2026 Stack Overflow analysis separates use, attitude and conditions for trust. Read the findings, methods and limits.',
     formalTitle:
-      'Adoption Without Confidence? Favorable Stance, Accuracy Trust, and Reported AI-Use Frequency in the 2025 Stack Overflow Survey',
+      'Adoption Without Confidence? Favorable Stance, Trust, and Reported AI-Use Frequency in the 2025 and 2026 Stack Overflow Surveys',
     author: 'Josh Penzell',
-    version: '3.1.0',
-    /**
-     * Publication date: the day this became publicly available and citable at
-     * imaginationapplied.ai. Kept in step with the root CITATION.cff so the
-     * page, the citation and the DOI record cannot disagree. The v3.1.0
-     * package build date (2026-07-24) lives in RELEASE_NOTES.md.
-     */
+    version: '3.2.0',
     datePublished: '2026-08-12',
+    dateModified: '2026-11-07',
     series: 'Open Research Series',
     license: 'MIT',
     licenseUrl: 'https://opensource.org/licenses/MIT',
-    /**
-     * Version DOI — cites this exact release, which is what a reproducibility
-     * claim needs. The concept DOI below always resolves to the latest version.
-     * Both are recorded in the root CITATION.cff.
-     */
-    doi: '10.5281/zenodo.21896528' as string | null,
+    doi: null as string | null,
+    previousVersionDoi: '10.5281/zenodo.21896528',
     conceptDoi: '10.5281/zenodo.21896527',
-    ogImage: '/publications/adoption-without-confidence/assets/daily-use-by-stance.png',
+    researchRepo: 'https://github.com/jpenzell/ai-adoption-paradox/tree/v3.2.0',
+    researchRelease: 'https://github.com/jpenzell/ai-adoption-paradox/releases/tag/v3.2.0',
+    ogImage: '/publications/adoption-without-confidence/daily-use-by-attitude-2026.png',
   },
 ] as const;

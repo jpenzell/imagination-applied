@@ -3,12 +3,12 @@
 Source for [imaginationapplied.ai](https://imaginationapplied.ai) and for the research
 published under the Open Research Series.
 
-One repository holds both, deliberately: when a page says "here is the source," that
-should be literally true.
+This repository holds the site, the frozen 2025 research package, and public assets for the 2026 revision. Current analysis code and verification evidence are maintained in [ai-adoption-paradox](https://github.com/jpenzell/ai-adoption-paradox).
 
 ```
 site/                                    Astro site (static, zero client JavaScript)
-publications/adoption-without-confidence/  Reproducibility package, v3.1.0
+publications/adoption-without-confidence/       Frozen 2025 package, v3.1.0
+publications/adoption-without-confidence-2026/  2026 revision public assets, v3.2.0
 ```
 
 ## The research
@@ -28,6 +28,8 @@ That must report 58 files OK. The build never writes into this directory;
 file checksums are. `publications/adoption-without-confidence/data/README_data.md`
 documents how to obtain the official CSVs and verify that what you downloaded matches
 what was analyzed.
+
+The 2026 revision is staged separately from `publications/adoption-without-confidence-2026/`. Original download URLs and the 2025 citation remain available as historical material. The old DOI identifies only v3.1.0; the current revision is not assigned that DOI.
 
 ## The site
 

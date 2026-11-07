@@ -663,6 +663,11 @@ section {
     gap: 4.5rem;
   }
 }
+.pub-body,
+.sidebar {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 /* The article gets the book treatment: serif, generous measure. This is the
    guide's "editorial serif when the work needs reflection." */
 .pub-body {

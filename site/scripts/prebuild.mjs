@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(siteRoot, '..');
 const pkg = path.join(repoRoot, 'publications', 'adoption-without-confidence');
+const currentPkg = path.join(repoRoot, 'publications', 'adoption-without-confidence-2026');
 
 const SLUG = 'adoption-without-confidence';
 const publicDir = path.join(siteRoot, 'public', 'publications', SLUG);
@@ -35,13 +36,8 @@ const DOWNLOADS = {
   'MANIFEST.sha256': 'MANIFEST.sha256',
 };
 
-// CITATION.cff is deliberately NOT taken from the package. The package's copy
-// is frozen at the v3.1.0 build (publisher "Imagination Applied Open Research
-// Series", dated 2026-07-24, no URL) because the manifest covers it. The live
-// citation lives at the repo root and carries the publisher, publication date,
-// canonical URL and DOI. Serving the frozen one here would hand a reader a
-// machine-readable citation that contradicts the human-readable one printed on
-// the same page. The frozen copy remains in the repo as the historical record.
+// Current and archived citations are kept separately from the frozen package.
+// The current citation has no DOI until a distinct 2026 record is assigned.
 const ROOT_CITATION = path.join(repoRoot, 'CITATION.cff');
 
 async function main() {
@@ -61,44 +57,36 @@ async function main() {
 
   if (!existsSync(ROOT_CITATION)) throw new Error('Missing root CITATION.cff');
   await cp(ROOT_CITATION, path.join(publicDir, 'CITATION.cff'));
+  await cp(path.join(repoRoot, 'CITATION-2025.cff'), path.join(publicDir, 'CITATION-2025.cff'));
+
+  const currentDownloads = {
+    'executive-brief-2026.pdf': 'executive-brief.pdf',
+    'executive-brief-2026.docx': 'executive-brief.docx',
+    'carousel-2026.pdf': 'carousel.pdf',
+    'daily-use-by-attitude-2026.png': 'daily-use-by-attitude-2026.png',
+    'MANIFEST-2026.sha256': 'MANIFEST.sha256',
+  };
+  for (const [dest, src] of Object.entries(currentDownloads)) {
+    await cp(path.join(currentPkg, src), path.join(publicDir, dest));
+  }
 
   // Figures, referenced relatively by the blog markdown.
   await cp(path.join(pkg, 'publication', 'assets'), path.join(publicDir, 'assets'), {
     recursive: true,
   });
 
-  // The article body. Copied out and rewritten only where the rendering
-  // context demands it: image paths become absolute, and the duplicated H1 +
-  // italic subtitle are dropped because the page template renders both from
-  // frontmatter. No wording is altered -- the language in this package went
-  // through three review rounds and RELEASE_NOTES.md carries a binding
-  // "Language to avoid" list.
-  const raw = await readFile(path.join(pkg, 'publication', 'BLOG_POST.md'), 'utf8');
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
-  if (!match) throw new Error('BLOG_POST.md: could not parse frontmatter');
+  // Render the new brief on the current page. The old article HTML and all old
+  // download URLs remain byte-identical archive assets staged above.
+  const raw = await readFile(path.join(currentPkg, 'executive-brief.md'), 'utf8');
+  const lines = raw.split(/\r?\n/);
+  const byline = lines.findIndex((line) => line.startsWith('Josh Penzell |'));
+  if (byline < 0) throw new Error('2026 brief: expected byline not found');
+  const body = lines.slice(byline + 1).join('\n')
+    .replaceAll('](daily-use-by-attitude-2026.png)', `](/publications/${SLUG}/daily-use-by-attitude-2026.png)`)
+    .replaceAll('https://github.com/jpenzell/ai-adoption-paradox', 'https://github.com/jpenzell/ai-adoption-paradox/tree/v3.2.0');
+  await writeFile(path.join(contentDir, `${SLUG}.md`), body.trimStart(), 'utf8');
 
-  const [, frontmatter, bodyRaw] = match;
-
-  let body = bodyRaw.replaceAll('](assets/', `](/publications/${SLUG}/assets/`);
-
-  const beforeH1 = body;
-  body = body.replace(/^\s*# The Developers Using AI Without Trusting It\r?\n/m, '');
-  if (body === beforeH1) throw new Error('Expected H1 not found -- refusing to guess');
-
-  const beforeSub = body;
-  body = body.replace(
-    /^\s*\*What 26,102 current users in Stack Overflow's 2025 survey reveal about adoption, sentiment, and calibrated skepticism\*\r?\n/m,
-    ''
-  );
-  if (body === beforeSub) throw new Error('Expected subtitle line not found -- refusing to guess');
-
-  await writeFile(
-    path.join(contentDir, `${SLUG}.md`),
-    `---\n${frontmatter}\n---\n${body.trimStart()}`,
-    'utf8'
-  );
-
-  console.log(`prebuild: staged ${Object.keys(DOWNLOADS).length} downloads + figures + article`);
+  console.log(`prebuild: staged ${Object.keys(DOWNLOADS).length} historical downloads + 2026 assets + article`);
 }
 
 await main();
