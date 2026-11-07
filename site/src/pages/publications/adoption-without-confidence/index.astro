@@ -1,8 +1,7 @@
 ---
 import Base from '../../../layouts/Base.astro';
 import { PUBLICATIONS, SITE } from '../../../consts';
-// The article body is staged by scripts/prebuild.mjs out of the canonical,
-// manifest-verified package. Wording is untouched; see that script.
+// The 2026 brief is staged by prebuild; the 2025 release remains a frozen archive.
 import { Content } from '../../../content/adoption-without-confidence.md';
 
 const pub = PUBLICATIONS[0];
@@ -10,12 +9,18 @@ const base = `/publications/${pub.slug}`;
 const pageUrl = new URL(`${base}/`, SITE.origin).href;
 
 const DOWNLOADS = [
-  { href: `${base}/paper.pdf`, label: 'This article (PDF)' },
-  { href: `${base}/paper.docx`, label: 'This article (Word)' },
-  { href: `${base}/open-research-note.pdf`, label: 'Open Research Note (PDF)' },
-  { href: `${base}/research-report.pdf`, label: 'Full research report (PDF)' },
-  { href: `${base}/executive-brief.pdf`, label: 'Executive brief (PDF)' },
-  { href: `${base}/carousel.pdf`, label: 'Slide summary (PDF)' },
+  { href: `${base}/executive-brief-2026.pdf`, label: '2026 executive brief (PDF)' },
+  { href: `${base}/executive-brief-2026.docx`, label: '2026 executive brief (Word)' },
+  { href: `${base}/carousel-2026.pdf`, label: '2026 slide summary (PDF)' },
+];
+const ARCHIVE_DOWNLOADS = [
+  { href: `${base}/paper.html`, label: '2025 article (HTML)' },
+  { href: `${base}/paper.pdf`, label: '2025 article (PDF)' },
+  { href: `${base}/paper.docx`, label: '2025 article (Word)' },
+  { href: `${base}/open-research-note.pdf`, label: '2025 Open Research Note (PDF)' },
+  { href: `${base}/research-report.pdf`, label: '2025 full research report (PDF)' },
+  { href: `${base}/executive-brief.pdf`, label: '2025 executive brief (PDF)' },
+  { href: `${base}/carousel.pdf`, label: '2025 slide summary (PDF)' },
 ];
 
 // Citation string is the one in the package README, extended with the live URL.
@@ -30,6 +35,7 @@ const jsonLd = {
   url: pageUrl,
   mainEntityOfPage: { '@type': 'WebPage', '@id': pageUrl },
   datePublished: pub.datePublished,
+  dateModified: pub.dateModified,
   inLanguage: 'en',
   version: pub.version,
   isPartOf: { '@type': 'PublicationIssue', name: pub.series },
@@ -45,7 +51,7 @@ const jsonLd = {
   },
   license: pub.licenseUrl,
   image: new URL(pub.ogImage, SITE.origin).href,
-  codeRepository: SITE.repo,
+  codeRepository: pub.researchRepo,
   ...(pub.doi ? { identifier: { '@type': 'PropertyValue', propertyID: 'DOI', value: pub.doi } } : {}),
 };
 ---
@@ -55,7 +61,7 @@ const jsonLd = {
   description={pub.description}
   path={`${base}/`}
   image={pub.ogImage}
-  imageAlt="Bar chart showing daily AI use rising from 18.8% among very unfavorable current users to 88.1% among very favorable current users."
+  imageAlt="Daily AI use among current users in the 2026 analysis: 54.3% for very unfavorable users and 93.0% for very favorable users."
   ogType="article"
   jsonLd={jsonLd}
 >
@@ -65,9 +71,9 @@ const jsonLd = {
     <p class="lede">{pub.subtitle}</p>
     <p class="muted">
       {pub.author} ·{' '}
-      <time datetime={pub.datePublished}>
+      Updated <time datetime={pub.dateModified}>
         {
-          new Date(pub.datePublished).toLocaleDateString('en-US', {
+          new Date(pub.dateModified).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
@@ -76,6 +82,7 @@ const jsonLd = {
         }
       </time>
     </p>
+    <p class="muted">This revision adds the 2026 survey. The original 2025 release was published August 12, 2026 and remains available below.</p>
   </section>
 
   <div class="wrap pub-layout">
@@ -91,8 +98,9 @@ const jsonLd = {
 
       <h2>Reproduce</h2>
       <ul>
-        <li><a href={SITE.repo}>Source repository</a></li>
-        <li><a href={`${base}/MANIFEST.sha256`}>File manifest (SHA-256)</a></li>
+        <li><a href={pub.researchRelease}>2026 research release</a></li>
+        <li><a href={pub.researchRepo}>Analysis, methods and verification</a></li>
+        <li><a href={`${base}/MANIFEST-2026.sha256`}>2026 file manifest (SHA-256)</a></li>
         <li><a href={`${base}/CITATION.cff`}>CITATION.cff</a></li>
       </ul>
       <p class="muted" style="font-size:0.82rem">
@@ -103,21 +111,21 @@ const jsonLd = {
       <h2>Details</h2>
       <dl>
         <div class="meta-row"><dt>Version</dt><dd>{pub.version}</dd></div>
-        <div class="meta-row"><dt>Published</dt><dd>{pub.datePublished}</dd></div>
+        <div class="meta-row"><dt>Updated</dt><dd>{pub.dateModified}</dd></div>
         <div class="meta-row"><dt>Licence</dt><dd><a href={pub.licenseUrl}>{pub.license}</a></dd></div>
-        <div class="meta-row">
-          <dt>DOI</dt>
-          <dd>{pub.doi ? <a href={`https://doi.org/${pub.doi}`}>{pub.doi}</a> : 'Pending'}</dd>
-        </div>
-        <div class="meta-row">
-          <dt>All versions</dt>
-          <dd>
-            <a href={`https://doi.org/${pub.conceptDoi}`}>{pub.conceptDoi}</a>
-          </dd>
-        </div>
+        <div class="meta-row"><dt>2026 DOI</dt><dd>Not yet assigned</dd></div>
       </dl>
 
-      <h2>Cite this</h2>
+      <h2>2025 release archive</h2>
+      <p class="muted">Version 3.1.0, published August 12, 2026. These files and the DOI identify the earlier analysis, before the 2026 survey was added.</p>
+      <ul>
+        {ARCHIVE_DOWNLOADS.map((d) => <li><a href={d.href}>{d.label}</a></li>)}
+        <li><a href={`https://doi.org/${pub.previousVersionDoi}`}>2025 version DOI: {pub.previousVersionDoi}</a></li>
+        <li><a href={`${base}/CITATION-2025.cff`}>2025 CITATION.cff</a></li>
+        <li><a href={`${base}/MANIFEST.sha256`}>2025 file manifest</a></li>
+      </ul>
+
+      <h2>Cite the 2026 revision</h2>
       <p class="citation">{citation}</p>
     </aside>
   </div>

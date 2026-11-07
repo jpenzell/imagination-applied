@@ -52,8 +52,8 @@ const meta = await seo('ia.seo.publications', defaultSeo('ia.seo.publications'))
               <p>{pub.description}</p>
               <p class="outcome">
                 <strong>{pub.author}</strong>
-                <time datetime={pub.datePublished}>
-                  {new Date(pub.datePublished).toLocaleDateString('en-US', {
+                <time datetime={pub.dateModified}>
+                  {new Date(pub.dateModified).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
                     timeZone: 'UTC',
@@ -74,7 +74,7 @@ const meta = await seo('ia.seo.publications', defaultSeo('ia.seo.publications'))
         the versioned research note.
       </p>
       <div class="actions">
-        <a class="btn btn-secondary" href={SITE.repo}>Source and data on GitHub</a>
+        <a class="btn btn-secondary" href={pubs[0].researchRepo}>Analysis source on GitHub</a>
         <a class="btn btn-secondary" href="/feed.xml">Subscribe by RSS</a>
       </div>
     </div>
