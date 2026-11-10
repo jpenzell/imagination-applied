@@ -29,7 +29,9 @@ from pathlib import Path
 
 IS_MAC = sys.platform == "darwin"
 
-# name, globs (relative to home), tier, what it is, method, app that must not be running
+# name, globs (relative to home), tier, what it is, method, app(s) that must not be running
+# (paths and names below were checked against a real Mac on 2026-11-10: Claude desktop 2.x,
+# the ChatGPT app that embeds Codex, Claude Code native install)
 LOCATIONS = [
     ("Chrome caches",
      ["Library/Caches/Google/Chrome", "Library/Caches/Google/Chrome Canary",
@@ -52,38 +54,50 @@ LOCATIONS = [
       "Library/Application Support/Claude/DawnWebGPUCache",
       "Library/Application Support/Claude/DawnGraphiteCache",
       "Library/Application Support/Claude/Service Worker/CacheStorage",
-      "Library/Caches/Claude", "Library/Caches/com.anthropic.claudefordesktop"],
+      "Library/Application Support/Claude/GraphiteDawnCache",
+      "Library/Application Support/Claude/GPUPersistentCache",
+      "Library/Caches/Claude", "Library/Caches/com.anthropic.claudefordesktop",
+      "Library/Caches/com.anthropic.claudefordesktop.ShipIt"],
      "safe", "Electron caches of the Claude desktop app", "clear", "Claude"),
     ("Cowork sessions / VM",
      ["Library/Application Support/Claude/local-agent-mode-sessions",
       "Library/Application Support/Claude/cowork*", "Library/Application Support/Claude/vm*",
+      "Library/Application Support/Claude/claude-code-vm",
+      "Library/Application Support/Claude/claude-code-sessions",
+      "Library/Application Support/Claude/scratch-workspaces",
       "Library/Application Support/Claude/sessions"],
-     "report", "Cowork session and VM data inside the Claude app folder; never reclaimed", None, None),
+     "report", "Cowork VM bundle (vm_bundles), Claude Code VM and session data inside the Claude app folder; "
+               "never reclaimed", None, None),
     ("Claude desktop data",
      ["Library/Application Support/Claude"],
      "report", "settings, local MCP state, Cowork session data; the caches above are the reclaimable part", None, None),
     ("Claude Code transcripts",
-     [".claude/projects"],
+     [".claude/projects", ".claude/sessions"],
      "review", "every Claude Code conversation as JSONL; this is your history, prune old ones only with a backup", None, None),
     ("Claude Code scratch",
      [".claude/shell-snapshots", ".claude/debug", ".claude/statsig", ".claude/file-history",
       ".claude/todos", ".claude/session-env"],
      "safe-old", "shell snapshots, debug logs, todo lists older than 14 days", "older:14", None),
     ("Claude Code other data",
-     [".claude/plans", ".claude/backups", ".claude/downloads", ".claude/ide", ".claude/plugins"],
+     [".claude/plans", ".claude/backups", ".claude/downloads", ".claude/ide", ".claude/plugins", ".claude/cache"],
      "report", "plans, settings backups, native-install downloads, plugin caches", None, None),
     ("Codex sessions",
-     [".codex/sessions", ".codex/archived_sessions", ".codex/history.jsonl", ".codex/memories"],
-     "review", "Codex session logs (10GB+ is normal); back up before pruning", None, None),
+     [".codex/sessions", ".codex/archived_sessions", ".codex/history.jsonl", ".codex/memories",
+      ".codex/memories_v2", ".codex/*.sqlite", ".codex/*.sqlite-wal"],
+     "review", "Codex session logs and thread-history database (10GB+ is normal); back up before pruning",
+     None, None),
     ("Codex logs",
      [".codex/log", ".codex/logs"],
      "safe-old", "Codex CLI logs older than 14 days", "older-files:14", None),
     ("Codex app caches",
-     ["Library/Caches/com.openai.codex"],
-     "safe", "Codex desktop app caches", "clear", "Codex"),
+     ["Library/Caches/com.openai.codex", "Library/Caches/Codex"],
+     "safe", "Codex updater (Sparkle) downloads and the Codex desktop UI's page caches", "clear",
+     ["Codex", "ChatGPT"]),
     ("Codex app data",
-     ["Library/Application Support/com.openai.codex", ".codex/sqlite"],
-     "report", "Codex desktop app state", None, None),
+     ["Library/Application Support/Codex", "Library/Application Support/com.openai.codex",
+      "Library/Application Support/OpenAI", ".codex/sqlite", ".codex/plugins", ".codex/cache",
+      ".codex/computer-use", ".codex/generated_images"],
+     "report", "Codex desktop app state (the ChatGPT app embeds Codex), plugins, computer-use service", None, None),
     ("ChatGPT desktop caches",
      ["Library/Caches/com.openai.chat", "Library/Caches/com.openai.atlas",
       "Library/Containers/com.openai.chat/Data/Library/Caches",
@@ -102,7 +116,7 @@ LOCATIONS = [
     ("pip cache", ["Library/Caches/pip", ".cache/pip"], "safe", "downloaded wheels", "clear", None),
     ("Homebrew cache", ["Library/Caches/Homebrew"], "safe", "downloaded bottles; `brew cleanup` territory", "clear", None),
     ("uv / pnpm / yarn caches",
-     [".cache/uv", "Library/Caches/uv", "Library/pnpm/store", "Library/Caches/Yarn"],
+     [".cache/uv", "Library/Caches/uv", "Library/pnpm/store", "Library/Caches/pnpm", "Library/Caches/Yarn"],
      "safe", "package manager stores", "clear", None),
     ("Playwright / Puppeteer browsers",
      ["Library/Caches/ms-playwright", ".cache/puppeteer"],
@@ -192,8 +206,21 @@ def parse_local_snapshots(text: str) -> list:
     return [line.strip() for line in text.splitlines() if "com.apple.TimeMachine" in line]
 
 
+def blocked_by(row: dict, running: set):
+    """The running app that makes this row unsafe to touch right now, or None.
+    A row's app may be one name or a list (the Codex caches belong to Codex.app and to the
+    ChatGPT app that embeds it)."""
+    apps = row.get("app")
+    if not apps:
+        return None
+    for a in ([apps] if isinstance(apps, str) else apps):
+        if a in running:
+            return a
+    return None
+
+
 def reclaimable_mb(rows: list, tiers=("safe", "safe-old"), running: set = frozenset()) -> int:
-    return sum(r["mb"] for r in rows if r["tier"] in tiers and not (r["app"] and r["app"] in running))
+    return sum(r["mb"] for r in rows if r["tier"] in tiers and not blocked_by(r, running))
 
 
 def _older_than(path: Path, days: int) -> bool:
@@ -243,8 +270,9 @@ def reclaim(tier: str, home: Path = None, dry_run: bool = True, running: set = f
     for r in rows:
         if r["tier"] != tier or not r["paths"]:
             continue
-        if r["app"] and r["app"] in running:
-            result["skipped"].append({"name": r["name"], "why": f"{r['app']} is running"})
+        who = blocked_by(r, running)
+        if who:
+            result["skipped"].append({"name": r["name"], "why": f"{who} is running"})
             continue
         freed_kb = 0
         n = 0
@@ -295,8 +323,9 @@ def render(rows: list, snapshots: list = None, disk_free_gb=None, running: set =
         if r["mb"] == 0 and not r["paths"]:
             continue
         note = ""
-        if r["app"] and r["app"] in running:
-            note = f"  [{r['app']} is running; skipped until it quits]"
+        who = blocked_by(r, running)
+        if who:
+            note = f"  [{who} is running; skipped until it quits]"
         lines.append(f"{r['mb'] / 1024:7.2f}  {r['tier']:9} {r['name']:26} {r['what']}{note}")
     missing = [r["name"] for r in rows if not r["paths"]]
     if missing:

@@ -22,11 +22,12 @@ It does three things the usual "memory cleaner" apps don't:
    applied. After a bad day (three pressure episodes) it does this on its own and leaves a
    diagnosis file for you.
 
-**Status:** working prototype. Three parts, all tested, none yet run on a Mac:
+**Status:** working prototype. Three parts, all tested; first real run on a Mac (8 GB
+M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 42 tests (policy + macOS parsers on recorded output) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 46 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 11 tests |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 1 end-to-end run in real Chromium |
 
@@ -38,7 +39,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py   # 53 tests, should say OK twice
+python3 test_guardian.py && python3 test_scratch.py   # 57 tests, should say OK twice
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
 python3 guardian.py install       # launchd agent: starts at login, restarts if it dies
@@ -288,9 +289,10 @@ Chrome tab census.
 
 ## Limits, honestly
 
-- Memory is measured as resident set size from `ps`. Activity Monitor's "Memory" column
-  also counts compressed pages, so under heavy pressure guardian's numbers read lower
-  than Activity Monitor's for the same process. Rankings stay the same.
+- Memory is the physical footprint from libproc (`proc_pid_rusage`), the number in
+  Activity Monitor's "Memory" column, so compressed and swapped pages count. The first
+  real run showed why: `ps` RSS read a 1.9 GB renderer as 150 MB on an 8 GB Mac with 9 GB
+  of swap in use. RSS is only the fallback for processes libproc will not report.
 - It cannot see inside Chrome. It knows a renderer is 3 GB, not which tab that is. Use
   `chrome://discards` or the `chrome` subcommand for that.
 - It cannot free wired GPU memory or kernel leaks, and some slowness is not memory at all

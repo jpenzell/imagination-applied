@@ -25,6 +25,8 @@ run python3 guardian.py chrome
 echo; echo "### raw readings (compare with Activity Monitor and df -h)"
 sysctl -n kern.memorystatus_vm_pressure_level kern.memorystatus_level vm.swapusage vm.loadavg hw.memsize
 vm_stat | head -3; vm_stat | grep compressor
+echo; echo "### Activity Monitor's Memory column (top MEM = physical footprint) for the biggest processes"
+top -l 1 -o mem -stats pid,mem,cmprs,command 2>/dev/null | sed -n '/^PID/,$p' | head -16
 pmset -g therm
 df -h /
 tmutil listlocalsnapshots / 2>&1 | head -5
@@ -33,7 +35,7 @@ ls -d ~/Library/Application\ Support/Claude ~/Library/Application\ Support/Claud
       ~/Library/Application\ Support/com.openai.* ~/Library/Containers/com.openai.* \
       ~/Library/Caches/com.openai.* ~/Library/Caches/com.anthropic.* ~/.codex ~/.codex/* ~/.claude ~/.claude/* 2>/dev/null
 echo; echo "### parent chain of every claude / codex / node / Python process (for classify())"
-ps -axo pid=,ppid=,comm= | grep -iE 'claude|codex|node|python|chatgpt|chrome' | grep -v grep | head -60
+ps -axo pid=,ppid=,comm= | grep -iE 'claude|codex|node|python|chatgpt|chrome' | grep -v grep | head -120
 
 if [ "${1:-}" = "--install" ]; then
   run python3 guardian.py autopilot on

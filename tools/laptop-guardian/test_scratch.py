@@ -38,6 +38,11 @@ class ScratchTests(unittest.TestCase):
         # review / report tiers
         mk(self.home / ".claude/projects/p1/session.jsonl", 4096)
         mk(self.home / ".codex/sessions/2026/s.jsonl", 8192)
+        mk(self.home / ".codex/thread_history_1.sqlite", 4096)
+        # the ChatGPT app embeds Codex: its caches are safe but wait for Codex OR ChatGPT to quit
+        mk(self.home / "Library/Caches/Codex/Default/Cache/data_1", 2048)
+        mk(self.home / "Library/Caches/com.openai.codex/org.sparkle-project.Sparkle/update.zip", 1024)
+        mk(self.home / ".codex/computer-use/Codex Computer Use.app/Contents/MacOS/svc", 64)
         mk(self.home / "Downloads/big.zip", 16384)
         # a symlink that points outside home: must never be followed or deleted through
         self.outside = self.tmp / "outside"
@@ -57,7 +62,9 @@ class ScratchTests(unittest.TestCase):
         self.assertEqual(self.by(rows, "Chrome caches")["tier"], "safe")
         self.assertEqual(self.by(rows, "Claude desktop caches")["mb"], 3)
         self.assertEqual(self.by(rows, "Claude Code transcripts")["tier"], "review")
-        self.assertEqual(self.by(rows, "Codex sessions")["mb"], 8)
+        self.assertEqual(self.by(rows, "Codex sessions")["mb"], 12, "thread-history sqlite counts as sessions")
+        self.assertEqual(self.by(rows, "Codex app caches")["mb"], 3)
+        self.assertEqual(self.by(rows, "Other app caches")["mb"], 0, "named caches are not counted twice")
         self.assertEqual(self.by(rows, "Downloads")["tier"], "report")
         self.assertEqual(rows[0]["name"], "Downloads", "sorted biggest first")
 
@@ -67,8 +74,11 @@ class ScratchTests(unittest.TestCase):
 
     def test_reclaimable_excludes_running_apps(self):
         rows = self.rows()
-        self.assertEqual(scratch.reclaimable_mb(rows, ("safe",)), 3 + 3 + 0)   # chrome + claude + npm(0.5 -> 0)
-        self.assertEqual(scratch.reclaimable_mb(rows, ("safe",), running={"Google Chrome"}), 3)
+        self.assertEqual(scratch.reclaimable_mb(rows, ("safe",)), 3 + 3 + 3 + 0)   # chrome + claude + codex + npm(0.5 -> 0)
+        self.assertEqual(scratch.reclaimable_mb(rows, ("safe",), running={"Google Chrome"}), 6)
+        self.assertEqual(scratch.reclaimable_mb(rows, ("safe",), running={"ChatGPT"}), 6,
+                         "the Codex caches wait for either Codex or the ChatGPT app that embeds it")
+        self.assertEqual(scratch.reclaimable_mb(rows, ("safe",), running={"Codex"}), 6)
 
     def test_dry_run_deletes_nothing(self):
         before = sum(1 for _ in self.home.rglob("*"))
@@ -90,10 +100,19 @@ class ScratchTests(unittest.TestCase):
         self.assertEqual(r["skipped"], [])
 
     def test_running_app_caches_are_skipped(self):
+        r = scratch.reclaim("safe", self.home, dry_run=False, running={"ChatGPT"})
+        self.assertIn({"name": "Codex app caches", "why": "ChatGPT is running"}, r["skipped"])
+        self.assertTrue((self.home / "Library/Caches/Codex/Default/Cache/data_1").exists())
+        self.assertFalse((self.home / "Library/Application Support/Google/Chrome/Default/Cache/data_0").exists())
+        self.assertTrue((self.home / ".codex/thread_history_1.sqlite").exists())
+        mk(self.home / "Library/Application Support/Google/Chrome/Default/Cache/data_0", 2048)
+        mk(self.home / "Library/Application Support/Claude/Cache/blob", 3072)
+        mk(self.home / ".npm/_cacache/index-v5/a", 512)
         r = scratch.reclaim("safe", self.home, dry_run=False, running={"Google Chrome", "Claude"})
         self.assertTrue((self.home / "Library/Application Support/Google/Chrome/Default/Cache/data_0").exists())
         self.assertTrue((self.home / "Library/Application Support/Claude/Cache/blob").exists())
         self.assertFalse((self.home / ".npm/_cacache/index-v5/a").exists())
+        self.assertFalse((self.home / "Library/Caches/Codex/Default/Cache/data_1").exists())
         self.assertEqual({s["name"] for s in r["skipped"]}, {"Chrome caches", "Claude desktop caches"})
 
     def test_safe_old_only_deletes_old_entries(self):
