@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the disk layer. Builds a fake home directory; never touches the real one."""
 import os
+import shutil
 import tempfile
 import time
 import unittest
@@ -20,6 +21,8 @@ def mk(path: Path, size_kb: int = 4, age_days: float = 0):
 class ScratchTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        # every run builds ~50 MB of fake home; 156 runs once left 7.8 GB in /var/folders
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.home = self.tmp / "home"
         # safe tier
         mk(self.home / "Library/Application Support/Google/Chrome/Default/Cache/data_0", 2048)
@@ -150,6 +153,56 @@ class ScratchTests(unittest.TestCase):
         nothing = scratch.reclaim("safe", self.home, dry_run=False, rows=[])
         self.assertEqual(nothing["freed_mb"], 0, "an empty row list must not fall back to a full census")
         self.assertTrue((self.home / "Library/Application Support/Google/Chrome/Default/Cache/data_0").exists())
+
+    def test_rows_never_count_a_byte_twice(self):
+        """Claude's folder holds its caches and the Cowork VM; Application Support holds Claude's
+        folder. Each remainder row is its folder minus what is named elsewhere."""
+        mk(self.home / "Library/Application Support/Claude/config/settings.bin", 2048)
+        mk(self.home / "Library/Application Support/SomeApp/data.bin", 5120)
+        mk(self.home / "Library/Containers/com.example.app/Data/blob", 1024)
+        mk(self.home / "Documents/report.docx", 7168)
+        rows = self.rows()
+        self.assertEqual(self.by(rows, "Claude desktop caches")["mb"], 3)
+        self.assertEqual(self.by(rows, "Cowork sessions / VM")["mb"], 4)
+        self.assertEqual(self.by(rows, "Claude desktop data")["mb"], 2, "3 + 4 + 2 on disk; only the 2 is 'other'")
+        self.assertEqual(self.by(rows, "Other Application Support")["mb"], 5,
+                         "Claude's whole folder and Chrome's caches are named elsewhere")
+        self.assertEqual(self.by(rows, "App containers")["mb"], 1)
+        self.assertEqual(self.by(rows, "Documents")["mb"], 7)
+        under_support = sum(self.by(rows, n)["mb"] for n in (
+            "Claude desktop caches", "Cowork sessions / VM", "Claude desktop data",
+            "Other Application Support", "Chrome caches"))
+        self.assertEqual(under_support, scratch.du_kb(self.home / "Library/Application Support") // 1024)
+
+    def test_guard_apps_lists_every_app_that_guards_a_cache(self):
+        self.assertLessEqual({"Google Chrome", "Claude", "ChatGPT", "Codex", "Dropbox"}, scratch.guard_apps())
+
+    def test_system_buckets_measure_temp_and_swap_outside_home(self):
+        temp, vm = self.tmp / "T", self.tmp / "VM"
+        mk(temp / "tmpabc12345/home/big.bin", 6144)
+        mk(vm / "swapfile0", 2048)
+        mk(vm / "swapfile1", 1024)
+        got = {b["name"]: b["mb"] for b in scratch.system_buckets(temp_dir=temp, vm_dir=vm)}
+        self.assertEqual((got["Temporary files"], got["Swap files"]), (6, 3))
+
+    def test_ledger_names_what_ate_the_disk_and_admits_what_it_cannot_see(self):
+        rows = [{"name": "Codex sessions", "mb": 9600}, {"name": "Chrome caches", "mb": 1600}]
+        old = scratch.ledger_entry(rows, [{"name": "Temporary files", "mb": 90}], 20.7, 1_000_000)
+        rows2 = [{"name": "Codex sessions", "mb": 9650}, {"name": "Chrome caches", "mb": 400}]
+        new = scratch.ledger_entry(rows2, [{"name": "Temporary files", "mb": 7900}], 12.1, 1_007_200)
+        d = scratch.ledger_diff(old, new)
+        self.assertEqual(d["used_mb"], round(8.6e9 / 1048576))
+        self.assertEqual(d["changes"][0], ("Temporary files", 7810))
+        self.assertEqual(d["changes"][1], ("Chrome caches", -1200))
+        self.assertEqual(d["unexplained_mb"], d["used_mb"] - (7810 - 1200 + 50))
+        text = "\n".join(scratch.render_ledger_diff(d))
+        self.assertIn("free space fell 8.0 GB", text)
+        self.assertIn("+7.6 GB  Temporary files", text)
+        self.assertIn("-1.2 GB  Chrome caches", text)
+        self.assertIn("+1.5 GB  not explained by anything measured", text)
+        self.assertNotIn("Codex sessions", text, "50 MB is below the noise floor")
+        same = scratch.render_ledger_diff(scratch.ledger_diff(old, old))
+        self.assertIn("nothing measured changed", "\n".join(same))
 
     def test_tmutil_listing_parses(self):
         out = ("Snapshots for disk /:\n"

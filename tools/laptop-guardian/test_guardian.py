@@ -491,8 +491,10 @@ class ApplyTests(unittest.TestCase):
     """apply_decisions must respect mode, quiet, protect and dry-run. Uses a temp log dir."""
 
     def setUp(self):
+        import shutil
         import tempfile
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.old = (g.LOG_DIR, g.EVENTS_PATH)
         g.LOG_DIR = g.Path(self.tmp)
         g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
@@ -685,8 +687,10 @@ class RefreshTests(unittest.TestCase):
     only with consent. Nothing here touches a real app."""
 
     def setUp(self):
+        import shutil
         import tempfile
         self.tmp = g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.saved = (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH)
         g.CONFIG_DIR = self.tmp / "cfg"
         g.CONFIG_PATH = g.CONFIG_DIR / "config.json"
@@ -866,12 +870,125 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(self.cfg["refresh"]["apps"], {"ChatGPT": "ask"}, "default is to ask, for ChatGPT only")
 
 
+class DiskTests(unittest.TestCase):
+    """The ledger, the fast-drop alert and cache clearing on quit. Found on the first real Mac:
+    free disk fell 8 GB in two hours and nothing guardian measured had grown."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.saved = (g.LOG_DIR, g.EVENTS_PATH, g.SAMPLES_PATH, g.sample_system, g.list_processes)
+        g.LOG_DIR = self.tmp / "logs"
+        g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
+        g.SAMPLES_PATH = g.LOG_DIR / "samples.tsv"
+        self.cfg = g.load_config(g.Path("/nonexistent"))
+        self.cfg["notify"] = False
+        import scratch
+        self.scratch = scratch
+        self.saved_scratch = (scratch.census, scratch.system_buckets, scratch.reclaim)
+        self.free = 20.7
+        self.rows = [{"name": "Codex sessions", "mb": 9600}]
+        self.temp_mb = 90
+        g.sample_system = lambda: {"disk_free_gb": self.free}
+        scratch.census = lambda home=None, only_app=None: [dict(r) for r in self.rows]
+        scratch.system_buckets = lambda *a, **k: [{"name": "Temporary files", "mb": self.temp_mb}]
+
+    def tearDown(self):
+        g.LOG_DIR, g.EVENTS_PATH, g.SAMPLES_PATH, g.sample_system, g.list_processes = self.saved
+        self.scratch.census, self.scratch.system_buckets, self.scratch.reclaim = self.saved_scratch
+
+    def test_drop_detector(self):
+        hist = [(0, 20.7), (600, 20.5), (1800, 19.0), (3000, 16.6)]
+        self.assertEqual(g.disk_drop(hist, 3000, 3600, 3), 4.1)
+        self.assertEqual(g.disk_drop(hist, 3000, 3600, 5), 0.0, "below the threshold")
+        self.assertEqual(g.disk_drop(hist, 3000, 600, 3), 0.0, "only one reading in a 10 minute window")
+        self.assertEqual(g.disk_drop([(0, 12.0), (600, 19.4)], 600, 3600, 3), 0.0, "space coming back is not a drop")
+        self.assertEqual(g.disk_drop([], 0, 3600, 3), 0.0)
+
+    def test_fast_drop_alert_names_what_grew(self):
+        g.write_ledger()
+        self.free, self.temp_mb = 12.1, 7900
+        rec = g.disk_drop_job(self.cfg, 8.6)
+        self.assertIn("Disk space fell 8.6GB in the last 60 minutes (12.1GB free)", rec["text"])
+        self.assertIn("Temporary files +7.6GB", rec["text"])
+        self.assertEqual(len(g.read_ledger()), 2)
+        self.assertEqual([e["trigger"] for e in g.read_events(1) if e["kind"] == "disk"], ["fast-drop"])
+        report = g.render_report(1)
+        self.assertIn("## Disk", report)
+        self.assertIn("+7.6 GB  Temporary files", report)
+
+    def test_first_alert_without_a_baseline_says_so(self):
+        rec = g.disk_drop_job(self.cfg, 3.2)
+        self.assertIn("First measurement taken", rec["text"])
+
+    def test_ledger_baseline_picks_the_oldest_entry_in_the_window(self):
+        now = g.time.time()
+        mk = lambda hours_ago: {"ts": g.datetime.fromtimestamp(now - hours_ago * 3600).isoformat(timespec="seconds"),
+                                "free_gb": 20, "items": {}}
+        entries = [mk(50), mk(20), mk(6), mk(0)]
+        self.assertEqual(g.ledger_baseline(entries, 24, now), entries[1])
+        self.assertEqual(g.ledger_baseline(entries, 3, now), entries[2], "nothing in the window: the previous one")
+        self.assertIsNone(g.ledger_baseline(entries[:1], 24, now))
+
+    def test_quit_needs_two_samples_and_a_relaunch_resets_it(self):
+        st, guard = {}, {"Google Chrome", "ChatGPT"}
+        self.assertEqual(g.quit_tracker(st, {"Google Chrome", "ChatGPT"}, guard), [])
+        self.assertEqual(g.quit_tracker(st, {"ChatGPT"}, guard), [], "gone for one sample: could be a relaunch")
+        self.assertEqual(g.quit_tracker(st, {"ChatGPT", "Google Chrome"}, guard), [], "it came back")
+        self.assertEqual(g.quit_tracker(st, {"ChatGPT"}, guard), [])
+        self.assertEqual(g.quit_tracker(st, {"ChatGPT"}, guard), ["Google Chrome"])
+        self.assertEqual(g.quit_tracker(st, {"ChatGPT"}, guard), [], "reported once")
+        self.assertEqual(g.quit_tracker({}, set(), guard), [], "never seen running is not a quit")
+
+    def test_caches_are_cleared_on_quit_unless_the_app_is_back(self):
+        calls = []
+        self.rows = [{"name": "Chrome caches", "tier": "safe", "app": "Google Chrome", "mb": 1600, "paths": []}]
+
+        def reclaim(tier, home=None, dry_run=True, running=frozenset(), rows=None):
+            calls.append((tier, dry_run, sorted(running), [r["name"] for r in rows]))
+            return {"freed_mb": 1600, "items": [{"name": "Chrome caches", "mb": 1600}], "skipped": []}
+        self.scratch.reclaim = reclaim
+        g.list_processes = lambda: [P(31, "/Applications/Claude.app/Contents/MacOS/Claude")]
+        rec = g.clear_caches_on_quit("Google Chrome", self.cfg)
+        self.assertEqual(calls, [("safe", False, ["Claude"], ["Chrome caches"])])
+        self.assertEqual((rec["trigger"], rec["app"], rec["freed_mb"]), ("quit", "Google Chrome", 1600))
+        g.list_processes = lambda: [P(10, CHROME)]
+        self.assertIsNone(g.clear_caches_on_quit("Google Chrome", self.cfg), "it is running again: hands off")
+        self.assertEqual(len(calls), 1)
+
+    def test_disk_trend_reads_the_samples(self):
+        g.LOG_DIR.mkdir(parents=True)
+        now = g.datetime.now()
+        rows = ["ts\tlevel\tfree_pct\tswap_used_mb\tcompressed_mb\tload1\tdisk_free_gb\ttop"]
+        for minutes_ago, free in ((90, 20.7), (50, 19.0), (1, 16.6)):
+            rows.append("\t".join([(now - g.timedelta(minutes=minutes_ago)).isoformat(timespec="seconds"),
+                                   "2", "27", "8000", "3000", "5.0", str(free), "x=1"]))
+        g.SAMPLES_PATH.write_text("\n".join(rows) + "\n")
+        self.assertEqual(g.disk_trend(1), -2.4)
+        self.assertEqual(g.disk_trend(24), -4.1)
+        self.assertIsNone(g.disk_trend(0.001))
+
+    def test_big_items_lists_and_never_touches(self):
+        d = self.tmp / "Downloads"
+        (d / "course-build").mkdir(parents=True)
+        (d / "course-build" / "video.mp4").write_bytes(b"x" * (3 * 1024 * 1024))
+        (d / "notes.txt").write_bytes(b"x" * 1024)
+        (d / ".hidden").write_bytes(b"x" * (5 * 1024 * 1024))
+        items = g.big_items([d, self.tmp / "missing"], top=5)
+        self.assertEqual([(mb, g.os.path.basename(p)) for mb, _when, p in items], [(3, "course-build"), (0, "notes.txt")])
+        self.assertTrue((d / "course-build" / "video.mp4").exists())
+
+
 class AutopilotTests(unittest.TestCase):
     """Bounded self-tuning, config history/undo, and the hygiene schedule."""
 
     def setUp(self):
+        import shutil
         import tempfile
         self.tmp = g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.saved = (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH)
         g.CONFIG_DIR = self.tmp / "cfg"
         g.CONFIG_PATH = g.CONFIG_DIR / "config.json"

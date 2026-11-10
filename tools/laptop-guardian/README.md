@@ -27,8 +27,8 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 65 tests (policy + macOS parsers on output recorded from a real Mac) |
-| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 12 tests |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 73 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 16 tests |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
@@ -39,7 +39,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py   # 77 tests, should say OK twice
+python3 test_guardian.py && python3 test_scratch.py   # 89 tests, should say OK twice
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
 python3 guardian.py install       # launchd agent: starts at login, restarts if it dies
@@ -88,6 +88,31 @@ autopilot: ON   mode=act   agent loaded: True   paused: False
   last self-tuning: never
   Last 24h: 1 pressure episodes, under pressure 4% of the time, 3 actions. Usual suspects: Google Chrome, agent:codex.
 ```
+
+## Disk: what the free space was spent on
+
+Free disk is the ceiling for swap, so on a small Mac it matters as much as memory.
+
+```bash
+python3 guardian.py disk                 # free space, trend, where it went, who gets it back
+python3 guardian.py disk --snapshot      # measure everything now (about a minute) and compare
+python3 guardian.py disk --big           # biggest items in Downloads, Documents, Desktop
+python3 guardian.py disk --big --in ~/Documents/Codex
+```
+
+- **A ledger.** Every six hours (and on demand) guardian measures every place it knows, with
+  no byte counted twice, plus the places outside the home folder: the per-user temp folder,
+  swap files, /Applications, Apple's model and update downloads, system logs. `disk` and
+  `report` show what changed between snapshots and how much of the change nothing measured
+  explains. The first real Mac lost 8 GB in two hours while every home folder guardian
+  watched grew 0.1 GB; it was leftover temp folders, which is why the ledger looks there.
+- **A fast-drop alert.** When free space falls 3 GB within an hour, guardian measures and
+  names what grew.
+- **Caches cleared at the right moment.** An app's caches cannot be cleared while it runs,
+  and AI apps and browsers are always running. In act mode, when one of them quits and less
+  than 40 GB is free, its caches are cleared right then.
+- **Yours to decide.** Documents, Downloads, agent session histories and VM images are
+  measured and listed, never touched.
 
 ## Refresh when idle: getting memory back from an AI app that has grown
 

@@ -127,6 +127,14 @@ LOCATIONS = [
     ("Logs", ["Library/Logs"], "safe-old", "log files older than 30 days (folders stay)", "older-files:30", None),
     ("Trash", [".Trash"], "safe-old", "items in the Trash older than 30 days", "older:30", None),
     ("Downloads", ["Downloads"], "report", "yours to sort; often the biggest folder", None, None),
+    ("Documents", ["Documents"], "report", "your documents", None, None),
+    ("Desktop", ["Desktop"], "report", "files on the Desktop", None, None),
+    ("Movies, Music, Pictures", ["Movies", "Music", "Pictures"], "report", "media libraries", None, None),
+    ("Mail and Messages", ["Library/Mail", "Library/Messages"], "report", "mail and message stores", None, None),
+    ("App containers", ["Library/Containers", "Library/Group Containers"],
+     "report", "sandboxed apps' data not named above", None, None),
+    ("Other Application Support", ["Library/Application Support"],
+     "report", "app data not named above", None, None),
     ("iOS device backups",
      ["Library/Application Support/MobileSync/Backup"],
      "review", "iPhone/iPad backups; delete from Finder > device > Manage Backups", None, None),
@@ -140,6 +148,10 @@ LOCATIONS = [
 ]
 
 TIER_ORDER = {"safe": 0, "safe-old": 1, "review": 2, "report": 3}
+
+# Rows that mean "this folder minus everything named elsewhere", so that no byte is counted
+# twice and the rows can be added up and compared with the change in free space.
+REMAINDER = {"Other app caches", "Claude desktop data", "Other Application Support", "App containers"}
 
 
 def du_kb(path: Path) -> int:
@@ -172,26 +184,128 @@ def census(home: Path = None, only_app: str = None) -> list:
     With only_app, measure just the rows guarded by that app (its caches): seconds, not minutes,
     which matters when the app is closed and waiting to be reopened."""
     home = home or Path.home()
-    rows = []
-    named_cache_paths = set()
+    memo = {}
+
+    def du(p: Path) -> int:
+        if p not in memo:
+            memo[p] = du_kb(p)
+        return memo[p]
+
+    found = []
     for name, globs, tier, what, method, app in LOCATIONS:
         if only_app and only_app not in ([app] if isinstance(app, str) else (app or [])):
             continue
         paths = []
         for g in globs:
             paths += expand(home, g)
-        if name != "Other app caches":
-            for p in paths:
-                if str(p).startswith(str(home / "Library/Caches")):
-                    named_cache_paths.add(p)
-        kb = sum(du_kb(p) for p in paths)
-        if name == "Other app caches":
-            kb -= sum(du_kb(p) for p in named_cache_paths)
-            kb = max(0, kb)
+        found.append((name, tier, what, method, app, paths))
+    rows = []
+    for name, tier, what, method, app, paths in found:
+        kb = sum(du(p) for p in paths)
+        if name in REMAINDER:
+            inside = {q for other in found if other[0] != name for q in other[5]
+                      if any(p in q.parents for p in paths)}
+            outermost = [q for q in inside if not any(r in q.parents for r in inside)]
+            kb = max(0, kb - sum(du(q) for q in outermost))
         rows.append({"name": name, "tier": tier, "what": what, "method": method, "app": app,
                      "paths": [str(p) for p in paths], "mb": kb // 1024})
     rows.sort(key=lambda r: (-r["mb"], TIER_ORDER[r["tier"]]))
     return rows
+
+
+def guard_apps() -> set:
+    """Every app whose running state guards a cache row."""
+    out = set()
+    for _name, _globs, _tier, _what, _method, app in LOCATIONS:
+        out.update([app] if isinstance(app, str) else (app or []))
+    return out
+
+
+# --------------------------------------------------------------------------
+# The ledger: what the free space was spent on
+# --------------------------------------------------------------------------
+# First real Mac: free disk fell 8 GB in two hours while every folder guardian measured
+# grew 0.1 GB. The space had gone to the per-user temp folder under /var/folders (leftover
+# test fixtures). The ledger measures the places outside the home folder too, and says how
+# much of a change it cannot explain.
+
+def user_temp_dir():
+    """macOS per-user temp folder (/var/folders/xx/yyyy/T), which is not $TMPDIR-dependent."""
+    try:
+        t = os.confstr(65537)          # _CS_DARWIN_USER_TEMP_DIR; Python has no name for it
+        if t:
+            return Path(t)
+    except (ValueError, OSError, AttributeError):
+        pass
+    import tempfile
+    t = tempfile.gettempdir()
+    return Path(t) if "/var/folders/" in t else None
+
+
+def system_buckets(temp_dir: Path = None, vm_dir: Path = Path("/System/Volumes/VM")) -> list:
+    """Space users on the same disk that live outside the home folder. Measured, never touched."""
+    if not IS_MAC and temp_dir is None:
+        return []
+    out = []
+
+    def add(name: str, what: str, paths: list):
+        kb = sum(du_kb(Path(p)) for p in paths if p and Path(p).exists())
+        out.append({"name": name, "what": what, "mb": kb // 1024})
+
+    add("Temporary files", "scratch space of apps, agents and test runs; macOS clears what is 3 days old",
+        [temp_dir or user_temp_dir()])
+    swap = 0
+    try:
+        for e in os.scandir(vm_dir):
+            if e.is_file(follow_symlinks=False):
+                swap += e.stat(follow_symlinks=False).st_size
+    except OSError:
+        pass
+    out.append({"name": "Swap files", "what": "memory that did not fit in RAM; shrinks when apps are closed",
+                "mb": swap // (1024 * 1024)})
+    if IS_MAC:
+        add("Applications", "installed apps; they grow when they update", ["/Applications"])
+        add("Apple downloads", "on-device models and macOS updates",
+            ["/System/Library/AssetsV2", "/Library/Updates"])
+        add("System logs", "diagnostic logs kept by macOS", ["/private/var/db/diagnostics", "/private/var/db/uuidtext"])
+    return out
+
+
+def ledger_entry(rows: list, buckets: list, free_gb, ts: float) -> dict:
+    items = {r["name"]: r["mb"] for r in rows}
+    items.update({b["name"]: b["mb"] for b in buckets})
+    return {"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(ts)), "free_gb": free_gb, "items": items}
+
+
+def ledger_diff(old: dict, new: dict) -> dict:
+    """What changed between two ledger entries. 'unexplained_mb' is the part of the change in
+    free space that no measured place accounts for (positive: space went somewhere unseen)."""
+    names = set(old["items"]) | set(new["items"])
+    changes = [(n, new["items"].get(n, 0) - old["items"].get(n, 0)) for n in names]
+    changes = sorted((c for c in changes if c[1]), key=lambda c: -abs(c[1]))
+    used_mb = None
+    if old.get("free_gb") is not None and new.get("free_gb") is not None:
+        used_mb = round((old["free_gb"] - new["free_gb"]) * 1e9 / (1024 * 1024))
+    unexplained = None if used_mb is None else used_mb - sum(mb for _, mb in changes)
+    return {"from": old["ts"], "to": new["ts"], "used_mb": used_mb, "changes": changes, "unexplained_mb": unexplained}
+
+
+def render_ledger_diff(diff: dict, min_mb: int = 100, top: int = 8) -> list:
+    sign = lambda mb: f"{'+' if mb >= 0 else '-'}{abs(mb) / 1024:.1f} GB"
+    used = diff["used_mb"]
+    head = f"since {diff['from'][5:16].replace('T', ' ')}: " + (
+        "free space unknown" if used is None else
+        f"free space {'fell' if used > 0 else 'rose'} {abs(used) / 1024:.1f} GB")
+    lines = [head]
+    shown = [c for c in diff["changes"] if abs(c[1]) >= min_mb][:top]
+    for name, mb in shown:
+        lines.append(f"    {sign(mb):>9}  {name}")
+    if not shown:
+        lines.append("    nothing measured changed by more than 0.1 GB")
+    un = diff["unexplained_mb"]
+    if un is not None and abs(un) >= max(min_mb, 300):
+        lines.append(f"    {sign(un):>9}  not explained by anything measured")
+    return lines
 
 
 def local_snapshots() -> list:

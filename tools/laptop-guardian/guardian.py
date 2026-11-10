@@ -40,7 +40,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -113,6 +113,10 @@ DEFAULT_CONFIG = {
     "safe_kill_classes": ["automation_browser", "model_worker", "dev_server", "mcp_orphan"],
     "ai_apps": ["Claude", "ChatGPT", "Codex", "Cowork", "Claude Code"],
     "scratch": {"auto_reclaim_in_act_mode": True, "cooldown_hours": 6},
+    # Disk: a ledger entry every N hours, an alert when free space falls fast, and clearing a
+    # quit app's caches while the disk is tight.
+    "disk": {"ledger_hours": 6, "alert_drop_gb": 3, "alert_window_minutes": 60,
+             "clear_caches_on_quit": True, "clear_on_quit_below_gb": 40},
     # Refresh when idle. Per app: "ask" (a dialog, default), "auto" (when its agent is idle and
     # you are away; act mode only) or "never". Only apps listed here are ever touched.
     "refresh": {
@@ -165,6 +169,8 @@ TUNABLE = {
     "agent_sessions.idle_seconds": (300, 7200),
     "hygiene.safe_tier_when_reclaimable_gb": (1, 50),
     "refresh.min_gb": (3, 20),
+    "disk.alert_drop_gb": (1, 20),
+    "disk.clear_on_quit_below_gb": (10, 200),
     "refresh.agent_idle_minutes": (5, 240),
     "refresh.cooldown_hours": (1, 48),
 }
@@ -1517,6 +1523,213 @@ def refresh_cmd(cfg: dict, args):
 
 
 # --------------------------------------------------------------------------
+# Disk: the ledger (what the free space was spent on), the fast-drop alert, and clearing an
+# app's caches the moment it quits
+# --------------------------------------------------------------------------
+
+def ledger_path() -> Path:
+    return LOG_DIR / "disk-ledger.jsonl"
+
+
+def read_ledger(limit: int = 400) -> list:
+    p = ledger_path()
+    if not p.exists():
+        return []
+    out = []
+    for line in p.read_text().splitlines()[-limit:]:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+def write_ledger(rows: list = None) -> dict:
+    """Measure everything (a full census: a minute or two; call it from the worker) and append
+    one ledger entry."""
+    import scratch
+    rows = scratch.census() if rows is None else rows
+    entry = scratch.ledger_entry(rows, scratch.system_buckets(), sample_system().get("disk_free_gb"), time.time())
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    with ledger_path().open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return entry
+
+
+def ledger_baseline(entries: list, hours: float, now: float = None):
+    """The oldest entry inside the window (never the latest one), or None."""
+    if len(entries) < 2:
+        return None
+    cutoff = datetime.fromtimestamp(now or time.time()) - timedelta(hours=hours)
+    inside = [e for e in entries[:-1] if datetime.fromisoformat(e["ts"]) >= cutoff]
+    return inside[0] if inside else entries[-2]
+
+
+def disk_drop(history: list, now: float, window_s: float, drop_gb: float) -> float:
+    """How far free space fell inside the window (highest reading to the latest), or 0.0 if
+    that is less than drop_gb. history is [(ts, free_gb), ...] oldest first."""
+    recent = [f for t, f in history if now - t <= window_s and f is not None]
+    if len(recent) < 2:
+        return 0.0
+    fell = max(recent) - recent[-1]
+    return round(fell, 1) if fell >= drop_gb else 0.0
+
+
+def disk_drop_job(cfg: dict, fell_gb: float, quiet: str = "") -> dict:
+    """Free space is falling fast: measure, compare with the previous ledger entry, and say
+    which place grew. (The first real Mac lost 8 GB in two hours to leftover temp folders.)"""
+    import scratch
+    entries = read_ledger()
+    prev = entries[-1] if entries else None
+    new = write_ledger()
+    minutes = cfg["disk"]["alert_window_minutes"]
+    text = f"Disk space fell {fell_gb:.1f}GB in the last {minutes} minutes ({new['free_gb']}GB free)."
+    grew = []
+    if prev:
+        diff = scratch.ledger_diff(prev, new)
+        grew = [(n, mb) for n, mb in diff["changes"] if mb >= 200][:3]
+        if grew:
+            text += f" Grew since {prev['ts'][11:16]}: " + ", ".join(f"{n} +{mb / 1024:.1f}GB" for n, mb in grew) + "."
+        else:
+            text += " Nothing guardian measures grew; see `guardian.py disk`."
+    else:
+        text += " First measurement taken; the next alert will name what grew."
+    rec = log_event("disk", trigger="fast-drop", fell_gb=fell_gb, free_gb=new["free_gb"], grew=grew, text=text)
+    if not quiet:
+        notify("Guardian", text, cfg)
+    return rec
+
+
+def quit_tracker(state: dict, running: set, guard: set) -> list:
+    """Apps that were seen running and have now been gone for two samples in a row (so a
+    relaunch or an update that restarts the app is not mistaken for a quit)."""
+    seen, gone = state.setdefault("seen", set()), state.setdefault("gone", {})
+    out = []
+    for app in sorted(guard):
+        if app in running:
+            seen.add(app)
+            gone.pop(app, None)
+        elif app in seen:
+            gone[app] = gone.get(app, 0) + 1
+            if gone[app] >= 2:
+                out.append(app)
+                seen.discard(app)
+                gone.pop(app, None)
+    return out
+
+
+def clear_caches_on_quit(app: str, cfg: dict):
+    """The app has quit: its caches are rebuildable and nothing is using them. Clear them now,
+    because an app that is always open never gives another chance."""
+    import scratch
+    running = running_apps(classify(list_processes(), cfg, os.getuid()))
+    if app in running:
+        return None
+    rows = scratch.census(only_app=app)
+    r = scratch.reclaim("safe", dry_run=False, running=running, rows=rows)
+    rec = log_event("scratch", trigger="quit", app=app, freed_mb=r["freed_mb"], items=r["items"], skipped=r["skipped"])
+    if r["freed_mb"] >= 512:
+        notify("Guardian", f"{app} quit, so I cleared {r['freed_mb'] / 1024:.1f}GB of its caches. It rebuilds them as needed.", cfg)
+    return rec
+
+
+def disk_trend(hours: float):
+    """Change in free space over the last N hours from the 30 s samples (GB, or None)."""
+    if not SAMPLES_PATH.exists():
+        return None
+    cutoff = datetime.now() - timedelta(hours=hours)
+    vals = []
+    for line in SAMPLES_PATH.read_text().splitlines()[1:]:
+        parts = line.split("\t")
+        try:
+            if datetime.fromisoformat(parts[0]) >= cutoff:
+                vals.append(float(parts[6]))
+        except (ValueError, IndexError):
+            continue
+    return round(vals[-1] - vals[0], 1) if len(vals) >= 2 else None
+
+
+def big_items(folders: list, top: int = 12) -> list:
+    """The biggest top-level items in the given folders: (mb, modified date, path). Read-only."""
+    import scratch
+    out = []
+    for folder in folders:
+        try:
+            entries = [e for e in Path(folder).iterdir() if not e.name.startswith(".")]
+        except OSError:
+            continue
+        for e in entries:
+            try:
+                kb = scratch.du_kb(e) if e.is_dir() and not e.is_symlink() else e.lstat().st_size // 1024
+                out.append((kb // 1024, datetime.fromtimestamp(e.lstat().st_mtime).strftime("%Y-%m-%d"), str(e)))
+            except OSError:
+                continue
+    return sorted(out, reverse=True)[:top]
+
+
+def disk_cmd(cfg: dict, args):
+    import scratch
+    if args.big is not None or args.inside:
+        folders = [Path(args.inside).expanduser()] if args.inside else \
+            [HOME / "Downloads", HOME / "Documents", HOME / "Desktop"]
+        where = str(folders[0]).replace(str(HOME), "~") if args.inside else "Downloads, Documents and Desktop"
+        print(f"Biggest items in {where} (yours to decide; guardian never deletes these):")
+        for mb, when, path in big_items(folders, args.big or 15):
+            print(f"  {mb / 1024:7.2f} GB  last changed {when}  {path.replace(str(HOME), '~')}")
+        return
+    if args.snapshot:
+        print("measuring (a minute or two)...", flush=True)
+        write_ledger()
+    s = sample_system()
+    free, floor = s.get("disk_free_gb"), cfg["disk_floor_gb"]
+    print(f"Disk: {free} GB free (guardian's floor is {floor} GB; free disk is also the ceiling for swap)")
+    h1, h24 = disk_trend(1), disk_trend(24)
+    fmt = lambda v: "no data" if v is None else f"{v:+.1f} GB"
+    print(f"  last hour {fmt(h1)}    last 24 hours {fmt(h24)}")
+    entries = read_ledger()
+    if len(entries) >= 2:
+        for label, base in (("previous snapshot", entries[-2]), ("oldest in 24 hours", ledger_baseline(entries, 24))):
+            if base is None or (label.startswith("oldest") and base is entries[-2]):
+                continue
+            print(f"  Where it went, {label}:")
+            for line in scratch.render_ledger_diff(scratch.ledger_diff(base, entries[-1])):
+                print("    " + line)
+    elif entries:
+        print(f"  One snapshot so far ({entries[-1]['ts'][11:16]}); the next one will show what changed.")
+    else:
+        print("  No snapshot yet: run `guardian.py disk --snapshot`, or wait for the agent's first one.")
+    if entries:
+        latest = entries[-1]["items"]
+        running = running_apps(classify(list_processes(), cfg, os.getuid()))
+        mine, yours = [], []
+        for name, _globs, tier, _what, _method, app in scratch.LOCATIONS:
+            mb = latest.get(name, 0)
+            if mb < 200:
+                continue
+            if tier in ("safe", "safe-old"):
+                who = scratch.blocked_by({"app": app}, running)
+                mine.append((mb, name, f"when {who} quits or is refreshed" if who else
+                             "old entries only, at the next tidy-up" if tier == "safe-old" else "at the next tidy-up"))
+            else:
+                yours.append((mb, name))
+        outside = [(mb, n) for n, mb in latest.items() if n in ("Temporary files", "Swap files", "Applications",
+                                                                 "Apple downloads", "System logs") and mb >= 200]
+        if mine:
+            print("  Guardian gets back on its own:")
+            for mb, name, when in sorted(mine, reverse=True):
+                print(f"    {mb / 1024:6.1f} GB  {name:26} {when}")
+        if yours:
+            print("  Yours to decide (measured, never touched):")
+            for mb, name in sorted(yours, reverse=True)[:8]:
+                print(f"    {mb / 1024:6.1f} GB  {name}")
+        if outside:
+            print("  Outside your home folder:")
+            for mb, name in sorted(outside, reverse=True):
+                print(f"    {mb / 1024:6.1f} GB  {name}")
+    print("More: disk --snapshot (measure now)   disk --big (biggest items in your folders)   disk --big --in FOLDER")
+
+
+# --------------------------------------------------------------------------
 # Snapshot and status
 # --------------------------------------------------------------------------
 
@@ -1609,6 +1822,12 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     last_digest_day = None
     ai = {"day": None, "runs": 0, "retry_after": 0.0, "fail_notified": None}
     refresh_state = refresh_state_from_events()
+    disk_hist = deque(maxlen=400)
+    ledger = read_ledger(1)
+    last_ledger = datetime.fromisoformat(ledger[-1]["ts"]).timestamp() if ledger else 0.0
+    last_drop_alert = 0.0
+    quit_state = {}
+    guard = None
     up_since = time.time()
     cfg_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
     last_hygiene = None
@@ -1646,6 +1865,28 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 break
             if not simulate:
                 refresh_tick(cfg, snap, refresh_state, background, time.time(), dry_run=dry_run)
+                # ---- disk: ledger, fast-drop alert, caches of an app that just quit
+                dcfg, t_now = cfg["disk"], time.time()
+                free_gb = snap["sample"].get("disk_free_gb")
+                if free_gb is not None:
+                    disk_hist.append((t_now, free_gb))
+                fell = disk_drop(list(disk_hist), t_now, dcfg["alert_window_minutes"] * 60, dcfg["alert_drop_gb"])
+                if fell and t_now - last_drop_alert > 3 * 3600 and not background.busy():
+                    last_drop_alert = last_ledger = t_now
+                    background.submit("disk-drop", lambda fell=fell, q=snap["quiet"]: disk_drop_job(cfg, fell, q))
+                elif t_now - last_ledger > dcfg["ledger_hours"] * 3600 and not background.busy():
+                    last_ledger = t_now
+                    background.submit("ledger", write_ledger)
+                if guard is None:
+                    import scratch
+                    guard = scratch.guard_apps()
+                for app in quit_tracker(quit_state, running_apps(snap["procs"]), guard):
+                    tight = free_gb is not None and free_gb < dcfg["clear_on_quit_below_gb"]
+                    if not (cfg["mode"] == "act" and cfg["scratch"]["auto_reclaim_in_act_mode"]
+                            and dcfg["clear_caches_on_quit"] and tight and not dry_run):
+                        continue
+                    if not background.submit(f"quit:{app}", lambda app=app: clear_caches_on_quit(app, cfg)):
+                        quit_state["seen"].add(app)      # worker busy: notice the quit again next time
             today = datetime.now().date()
             if ai["day"] != today:
                 ai.update(day=today, runs=0)
@@ -1748,6 +1989,13 @@ def render_report(hours: float) -> str:
     if not s["episode_details"]:
         lines.append("- none")
     lines.append("")
+    entries = read_ledger()
+    base = ledger_baseline(entries, hours)
+    if base is not None:
+        import scratch
+        lines.append("## Disk (what the free space was spent on)")
+        lines += ["- " + ln.strip() for ln in scratch.render_ledger_diff(scratch.ledger_diff(base, entries[-1]))]
+        lines.append("")
     refreshes = [e for e in read_events(hours) if e.get("kind") == "refresh"
                  and e.get("phase") in ("done", "aborted", "declined")]
     if refreshes:
@@ -2167,6 +2415,8 @@ def doctor(cfg: dict, script: Path):
         if li:
             items = [x.strip() for x in li.split(",") if x.strip()]
             print(f"   login items ({len(items)}): {', '.join(items)[:200]}")
+    led = read_ledger(1)
+    print(f"{ok(led)} disk ledger: {'last snapshot ' + led[-1]['ts'] if led else 'no snapshot yet (the agent takes one after start, then every ' + str(cfg['disk']['ledger_hours']) + 'h)'}")
     ev = read_events(24)
     last_ask = next((e for e in reversed(ev) if e["kind"] == "ask"), None)
     if last_ask:
@@ -2215,6 +2465,8 @@ AUTOPILOT_TEXT = """Autopilot is ON. Always running (launchd restarts it if it d
   - after a bad day (3+ pressure episodes) asks Claude/Codex for a diagnosis and applies the
     threshold tuning it suggests, within fixed ranges; everything else waits for you
   - stays quiet while you present or are in a Zoom meeting
+  - keeps a ledger of what the disk is spent on, tells you when free space falls fast and what
+    grew, and clears an app's caches when it quits while the disk is tight. See: guardian.py disk
   - when an AI app listed under `refresh` (ChatGPT by default) is bloated and its agent idle,
     asks whether to refresh it: quit cleanly, clear its caches, reopen. See: guardian.py refresh
 What it never does: close an app you can see without your say-so, interrupt a running agent
@@ -2309,6 +2561,11 @@ def main(argv=None):
     p.add_argument("--now", action="store_true", help="do it now, unless its agent is working")
     p.add_argument("--force", action="store_true", help="with --now: even if its agent looks busy")
     p.add_argument("--mode", choices=["ask", "auto", "never"], help="set the consent for this app")
+    p = sub.add_parser("disk", help="free space, where it went, what guardian gets back, what is yours to decide")
+    p.add_argument("--snapshot", action="store_true", help="measure everything now (a minute or two) and compare")
+    p.add_argument("--big", nargs="?", type=int, const=15, default=None, metavar="N",
+                   help="list the N biggest items in Downloads, Documents and Desktop")
+    p.add_argument("--in", dest="inside", metavar="FOLDER", help="with --big: look inside this folder instead")
     sub.add_parser("doctor", help="check the install")
     sub.add_parser("install", help="install the launchd agent (starts at login)")
     sub.add_parser("uninstall", help="remove the launchd agent")
@@ -2349,6 +2606,8 @@ def main(argv=None):
         scratch_cmd(cfg, args)
     elif args.cmd == "refresh":
         refresh_cmd(cfg, args)
+    elif args.cmd == "disk":
+        disk_cmd(cfg, args)
     elif args.cmd == "doctor":
         doctor(cfg, script)
     elif args.cmd == "install":
