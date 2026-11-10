@@ -553,6 +553,45 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(r[0]["result"], "protected (GUI app)")
         self.assertEqual(self.killed, [])
 
+    def test_reclaim_runs_on_the_background_worker_and_logs_when_done(self):
+        """The census is ~110 s of `du` on a real Mac; the sampling loop must not wait for it."""
+        import threading
+        gate = threading.Event()
+        calls = []
+        import scratch
+        orig = scratch.census
+
+        def slow_census(home=None):
+            calls.append("census")
+            gate.wait(5)
+            return []
+        scratch.census = slow_census
+        try:
+            bg = g.Background()
+            d = g.Decision("reclaim", None, "Only 9GB free on disk.", "disk", "warn")
+            t0 = g.time.time()
+            applied = g.apply_decisions([d], self.cfg, dry_run=True, background=bg)
+            self.assertLess(g.time.time() - t0, 1.0, "apply_decisions returned without waiting for du")
+            self.assertEqual(applied[0]["result"], "census running in the background")
+            self.assertTrue(bg.busy())
+            self.assertEqual([e["action"] for e in g.read_events(1) if e["kind"] == "decision"], [],
+                             "nothing logged until the job finishes")
+            # a second reclaim while the first census runs is refused, not queued
+            applied2 = g.apply_decisions([d], self.cfg, dry_run=True, background=bg)
+            self.assertTrue(applied2[0]["result"].startswith("skipped: reclaim job"))
+            gate.set()
+            bg.thread.join(5)
+            self.assertFalse(bg.busy())
+            done = [e for e in g.read_events(1) if e["kind"] == "decision" and e["action"] == "reclaim"]
+            self.assertEqual([e["result"] for e in done],
+                             ["skipped: reclaim job still running", "would reclaim 0.0GB (safe tiers)"])
+            self.assertEqual(calls, ["census"])
+            # without a worker (watch --once) it still runs inline and logs normally
+            applied3 = g.apply_decisions([d], self.cfg, dry_run=True)
+            self.assertEqual(applied3[0]["result"], "would reclaim 0.0GB (safe tiers)")
+        finally:
+            scratch.census = orig
+
     def test_events_are_logged(self):
         self.cfg["mode"] = "observe"
         g.apply_decisions(self.kill_decision(), self.cfg)

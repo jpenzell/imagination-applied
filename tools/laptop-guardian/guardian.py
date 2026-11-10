@@ -38,6 +38,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -1011,8 +1012,37 @@ def running_apps(procs: list) -> set:
     return {p.app for p in procs if p.app and p.cls != "foreign"}
 
 
+class Background:
+    """One slot for slow work (the disk census is `du` over tens of GB: ~110 s on the first
+    real Mac) so the 30 s sampling loop never waits on it. A second job while one runs is
+    refused rather than queued; every caller has its own cooldown and will come back."""
+
+    def __init__(self):
+        self.thread = None
+        self.name = None
+
+    def busy(self) -> bool:
+        return self.thread is not None and self.thread.is_alive()
+
+    def submit(self, name: str, fn) -> bool:
+        if self.busy():
+            return False
+
+        def run():
+            try:
+                fn()
+            except Exception as e:  # pragma: no cover
+                log_event("error", error=repr(e), job=name)
+        self.name = name
+        self.thread = threading.Thread(target=run, name=f"guardian-{name}", daemon=True)
+        self.thread.start()
+        return True
+
+
 def apply_decisions(decisions: list, cfg: dict, quiet: str = "", dry_run: bool = False,
-                    simulated: bool = False, running: set = frozenset()) -> list:
+                    simulated: bool = False, running: set = frozenset(), background=None) -> list:
+    """Carry out decisions. With `background` (a Background), the disk reclaim, which needs a
+    census, runs on that worker and logs its own event when done; everything else is immediate."""
     mode = cfg["mode"]
     applied = []
     for d in decisions:
@@ -1029,20 +1059,30 @@ def apply_decisions(decisions: list, cfg: dict, quiet: str = "", dry_run: bool =
                 notify("Guardian", d.reason, cfg)
                 rec["result"] = "notified"
         elif d.action == "reclaim":
-            import scratch
-            rows = scratch.census()
-            could = scratch.reclaimable_mb(rows, ("safe", "safe-old"), running)
-            if mode == "act" and cfg["scratch"]["auto_reclaim_in_act_mode"] and not dry_run and not simulated:
-                freed = 0
-                for tier in ("safe", "safe-old"):
-                    freed += scratch.reclaim(tier, dry_run=False, running=running, rows=rows)["freed_mb"]
-                rec["result"] = f"reclaimed {freed / 1024:.1f}GB of caches/old logs"
-                if not quiet:
-                    notify("Guardian", f"{d.reason} Freed {freed / 1024:.1f}GB of rebuildable caches.", cfg)
-            else:
-                rec["result"] = f"would reclaim {could / 1024:.1f}GB (safe tiers)"
-                if mode != "observe" and not quiet and not dry_run:
-                    notify("Guardian", f"{d.reason} `guardian scratch --reclaim all --yes` would free {could / 1024:.1f}GB.", cfg)
+            def reclaim_job(rec=rec, d=d):
+                import scratch
+                rows = scratch.census()
+                could = scratch.reclaimable_mb(rows, ("safe", "safe-old"), running)
+                if mode == "act" and cfg["scratch"]["auto_reclaim_in_act_mode"] and not dry_run and not simulated:
+                    freed = 0
+                    for tier in ("safe", "safe-old"):
+                        freed += scratch.reclaim(tier, dry_run=False, running=running, rows=rows)["freed_mb"]
+                    rec["result"] = f"reclaimed {freed / 1024:.1f}GB of caches/old logs"
+                    if not quiet:
+                        notify("Guardian", f"{d.reason} Freed {freed / 1024:.1f}GB of rebuildable caches.", cfg)
+                else:
+                    rec["result"] = f"would reclaim {could / 1024:.1f}GB (safe tiers)"
+                    if mode != "observe" and not quiet and not dry_run:
+                        notify("Guardian", f"{d.reason} `guardian scratch --reclaim all --yes` would free {could / 1024:.1f}GB.", cfg)
+            if background is not None:
+                if background.submit("reclaim", lambda: (reclaim_job(), log_event("decision", **rec))):
+                    rec["result"] = "census running in the background"
+                else:
+                    rec["result"] = f"skipped: {background.name} job still running"
+                    log_event("decision", **rec)
+                applied.append(rec)
+                continue
+            reclaim_job()
         elif d.action == "renice":
             if mode != "act" or dry_run or quiet:
                 rec["result"] = ("would renice (dry-run)" if dry_run else
@@ -1163,6 +1203,7 @@ def parse_simulate(spec: str) -> dict:
 def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict = None):
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     engine = Engine(cfg)
+    background = None if once else Background()
     log_event("start", version=VERSION, mode=cfg["mode"], interval=cfg["interval_seconds"], dry_run=dry_run)
     snap = snapshot(cfg)
     s = snap["sample"]
@@ -1201,7 +1242,8 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
             if not simulate:
                 log_sample(snap["sample"], snap["groups"])
             applied = apply_decisions(decisions, cfg, quiet=snap["quiet"], dry_run=dry_run,
-                                      simulated=bool(simulate), running=running_apps(snap["procs"]))
+                                      simulated=bool(simulate), running=running_apps(snap["procs"]),
+                                      background=background)
             if once:
                 for a in applied:
                     print(json.dumps(a, default=str))
@@ -1219,12 +1261,16 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
             # Proactive hygiene (autopilot / act mode only): old logs and trash daily, safe
             # caches when they are big or the disk is tight. Nothing in the review tier, ever.
             now = datetime.now()
-            if cfg["mode"] == "act" and not snap["quiet"] and hygiene_due(now, last_hygiene, cfg, up_since):
+            if cfg["mode"] == "act" and not snap["quiet"] and hygiene_due(now, last_hygiene, cfg, up_since) \
+                    and not background.busy():
                 last_hygiene = now.timestamp()
-                h = run_hygiene(cfg, snap["sample"], running_apps(snap["procs"]), dry_run=dry_run)
-                log_event("hygiene", **h)
-                if h["freed_mb"] >= 256:
-                    notify("Guardian", f"Tidied up: freed {h['freed_mb'] / 1024:.1f}GB of caches and old logs.", cfg)
+
+                def hygiene_job(cfg=cfg, sample=snap["sample"], running=running_apps(snap["procs"])):
+                    h = run_hygiene(cfg, sample, running, dry_run=dry_run)
+                    log_event("hygiene", **h)
+                    if h["freed_mb"] >= 256:
+                        notify("Guardian", f"Tidied up: freed {h['freed_mb'] / 1024:.1f}GB of caches and old logs.", cfg)
+                background.submit("hygiene", hygiene_job)
             # Daily digest
             if now.hour == cfg["digest_hour"] and last_digest_day != now.date():
                 last_digest_day = now.date()
