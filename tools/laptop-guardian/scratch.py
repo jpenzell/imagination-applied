@@ -167,12 +167,16 @@ def expand(home: Path, pattern: str) -> list:
     return [p] if p.exists() and not p.is_symlink() else []
 
 
-def census(home: Path = None) -> list:
-    """Measure every known location. Returns rows sorted biggest first."""
+def census(home: Path = None, only_app: str = None) -> list:
+    """Measure every known location. Returns rows sorted biggest first.
+    With only_app, measure just the rows guarded by that app (its caches): seconds, not minutes,
+    which matters when the app is closed and waiting to be reopened."""
     home = home or Path.home()
     rows = []
     named_cache_paths = set()
     for name, globs, tier, what, method, app in LOCATIONS:
+        if only_app and only_app not in ([app] if isinstance(app, str) else (app or [])):
+            continue
         paths = []
         for g in globs:
             paths += expand(home, g)
@@ -265,7 +269,7 @@ def reclaim(tier: str, home: Path = None, dry_run: bool = True, running: set = f
     home = (home or Path.home()).resolve()
     if tier not in ("safe", "safe-old"):
         raise ValueError("only the safe and safe-old tiers can be reclaimed by guardian")
-    rows = rows or census(home)
+    rows = census(home) if rows is None else rows     # an empty list means "nothing", not "everything"
     result = {"tier": tier, "dry_run": dry_run, "freed_mb": 0, "items": [], "skipped": []}
     for r in rows:
         if r["tier"] != tier or not r["paths"]:

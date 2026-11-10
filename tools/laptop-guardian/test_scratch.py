@@ -136,6 +136,21 @@ class ScratchTests(unittest.TestCase):
         scratch.reclaim("safe-old", self.home, dry_run=False)
         self.assertTrue((self.home / "Library/Application Support/Claude/local-agent-mode-sessions/s1/vm.img").exists())
 
+    def test_census_for_one_app_measures_only_its_caches(self):
+        """Used while that app is closed and waiting to be reopened: it must be quick and narrow."""
+        rows = scratch.census(self.home, only_app="ChatGPT")
+        self.assertEqual({r["name"] for r in rows}, {"Codex app caches", "ChatGPT desktop caches"})
+        self.assertEqual(sum(r["mb"] for r in rows), 3)
+        r = scratch.reclaim("safe", self.home, dry_run=False, rows=rows)
+        self.assertFalse((self.home / "Library/Caches/Codex/Default/Cache/data_1").exists())
+        self.assertTrue((self.home / "Library/Application Support/Google/Chrome/Default/Cache/data_0").exists(),
+                        "Chrome's caches are not ChatGPT's")
+        self.assertTrue((self.home / ".codex/thread_history_1.sqlite").exists())
+        self.assertEqual(scratch.census(self.home, only_app="Nonexistent"), [])
+        nothing = scratch.reclaim("safe", self.home, dry_run=False, rows=[])
+        self.assertEqual(nothing["freed_mb"], 0, "an empty row list must not fall back to a full census")
+        self.assertTrue((self.home / "Library/Application Support/Google/Chrome/Default/Cache/data_0").exists())
+
     def test_tmutil_listing_parses(self):
         out = ("Snapshots for disk /:\n"
                "com.apple.TimeMachine.2026-11-09-120000.local\n"

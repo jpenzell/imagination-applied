@@ -27,8 +27,8 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 46 tests (policy + macOS parsers on output recorded from a real Mac) |
-| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 11 tests |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 65 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 12 tests |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
@@ -39,7 +39,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py   # 57 tests, should say OK twice
+python3 test_guardian.py && python3 test_scratch.py   # 77 tests, should say OK twice
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
 python3 guardian.py install       # launchd agent: starts at login, restarts if it dies
@@ -89,7 +89,41 @@ autopilot: ON   mode=act   agent loaded: True   paused: False
   Last 24h: 1 pressure episodes, under pressure 4% of the time, 3 actions. Usual suspects: Google Chrome, agent:codex.
 ```
 
-What autopilot never does: close an app you can see, delete transcripts, sessions,
+## Refresh when idle: getting memory back from an AI app that has grown
+
+Long-running AI apps pile up. On the first real Mac (8 GB) the ChatGPT app, which embeds
+Codex, held 10 GB in 99 processes: about 75 were helpers over an hour old that had done
+almost nothing, and 3.8 GB of its caches could never be cleared because it never quit.
+
+```bash
+python3 guardian.py refresh                       # what it sees and what it would do, read-only
+python3 guardian.py refresh ChatGPT --now         # do it now (refuses while Codex is working)
+python3 guardian.py refresh ChatGPT --mode auto   # ask | auto | never
+```
+
+A refresh quits the app the way Cmd+Q does, clears that app's caches, reopens it in the
+background, and writes what came back (memory before and after, disk freed) to the diary
+and to `report`. The running agent considers it only when all of these hold: the app is
+listed under `refresh.apps`, it holds more than `min_gb` (6), the Mac is under memory
+pressure, its agent has been idle for `agent_idle_minutes` (20; for Codex that means no
+session file written), the app is not the one in front, and it was not refreshed in the
+last six hours.
+
+Consent is per app:
+
+- **ask** (default, and only for ChatGPT out of the box): a dialog with *Not now*,
+  *Always when idle* and *Refresh now*. It waits until you are at the keyboard to ask.
+- **auto**: no dialog; it acts when the agent is idle and you have been away from the
+  keyboard for three minutes. Act mode only. Needs an activity signal for the app.
+- **never**: left alone. Any app not listed is never touched.
+
+It is never forced. If the app does not quit within 45 seconds it is left running, and
+nothing is cleared or relaunched. The AI diagnosis may tune the thresholds but can never
+change the consent. Chats and threads live in the app's own storage and are kept; open
+windows may need reopening.
+
+What autopilot never does: close an app you can see without your say-so, interrupt a
+running agent task, delete transcripts, sessions,
 downloads or anything outside rebuildable caches, or act while paused or while you are
 presenting. `autopilot off` drops back to nudge mode (still watching, only notifying).
 

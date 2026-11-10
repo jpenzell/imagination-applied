@@ -113,6 +113,22 @@ DEFAULT_CONFIG = {
     "safe_kill_classes": ["automation_browser", "model_worker", "dev_server", "mcp_orphan"],
     "ai_apps": ["Claude", "ChatGPT", "Codex", "Cowork", "Claude Code"],
     "scratch": {"auto_reclaim_in_act_mode": True, "cooldown_hours": 6},
+    # Refresh when idle. Per app: "ask" (a dialog, default), "auto" (when its agent is idle and
+    # you are away; act mode only) or "never". Only apps listed here are ever touched.
+    "refresh": {
+        "apps": {"ChatGPT": "ask"},
+        "activity_paths": {"ChatGPT": [".codex/sessions"], "Codex": [".codex/sessions"]},
+        "min_gb": 6,
+        "agent_idle_minutes": 20,
+        "user_idle_minutes": 3,
+        "cooldown_hours": 6,
+        "snooze_minutes": 120,
+        "only_under_pressure": True,
+        "clear_caches": True,
+        "reopen": True,
+        "quit_timeout_seconds": 45,
+        "settle_seconds": 75,
+    },
     "autopilot": False,
     "hygiene": {"hour": 4, "safe_tier_when_reclaimable_gb": 5, "safe_tier_when_disk_below_x_ram": 2},
     "protect": [
@@ -148,6 +164,9 @@ TUNABLE = {
     "agent_sessions.stale_after_hours": (6, 168),
     "agent_sessions.idle_seconds": (300, 7200),
     "hygiene.safe_tier_when_reclaimable_gb": (1, 50),
+    "refresh.min_gb": (3, 20),
+    "refresh.agent_idle_minutes": (5, 240),
+    "refresh.cooldown_hours": (1, 48),
 }
 CONFIG_HISTORY = CONFIG_DIR / "config-history.jsonl"
 
@@ -1121,6 +1140,383 @@ def apply_decisions(decisions: list, cfg: dict, quiet: str = "", dry_run: bool =
 
 
 # --------------------------------------------------------------------------
+# Refresh when idle: a bloated AI app is quit cleanly, its caches cleared and the app
+# reopened, but only while its agent is idle and only with the owner's say-so
+# --------------------------------------------------------------------------
+# First real Mac: the ChatGPT app (which embeds Codex) held 10 GB in 99 processes on an
+# 8 GB machine; about 75 of them were helpers over an hour old that had done almost nothing,
+# and 3.8 GB of its caches could never be cleared because the app never quits.
+
+def under_pressure(sample: dict, cfg: dict) -> bool:
+    free = sample.get("free_pct")
+    return sample.get("pressure_level", 1) >= cfg["pressure_warn_level"] or (
+        free is not None and free <= cfg["free_pct_floor"])
+
+
+def newest_mtime(paths: list) -> float:
+    """Most recent modification time under the given files/folders; 0.0 when there is none.
+    Codex appends to ~/.codex/sessions/**/*.jsonl while a task runs (477 files scan in 20 ms)."""
+    newest = 0.0
+    for raw in paths:
+        p = Path(raw)
+        try:
+            if p.is_file():
+                newest = max(newest, p.stat().st_mtime)
+                continue
+            for d, _dirs, files in os.walk(p, followlinks=False):
+                for f in files:
+                    try:
+                        m = os.lstat(os.path.join(d, f)).st_mtime
+                    except OSError:
+                        continue
+                    if m > newest:
+                        newest = m
+        except OSError:
+            continue
+    return newest
+
+
+def parse_front_app(text: str) -> str:
+    """Name of the frontmost app from `lsappinfo info -only name <asn>`.
+    macOS 27 prints '"Claude" ASN:0x0-0x88088: (in front)'; older systems '"LSDisplayName"="Claude"'."""
+    m = re.search(r'"LSDisplayName"\s*=\s*"([^"]+)"', text) or re.search(r'^\s*"([^"]+)"\s+ASN:', text, re.M)
+    return m.group(1) if m else ""
+
+
+def parse_hid_idle(text: str):
+    """Seconds since the last key or pointer event, from `ioreg -c IOHIDSystem` (nanoseconds)."""
+    vals = [int(v) for v in re.findall(r'"HIDIdleTime"\s*=\s*(\d+)', text)]
+    return min(vals) / 1e9 if vals else None
+
+
+def parse_dialog(out: str) -> str:
+    """Button name from osascript's 'button returned:Refresh now, gave up:false'; '' if nobody answered."""
+    if "gave up:true" in out:
+        return ""
+    m = re.search(r"button returned:([^,\n]*)", out)
+    return m.group(1).strip() if m else ""
+
+
+def ask_dialog(text: str, buttons: list, default: str, timeout: int = 120) -> str:
+    esc = lambda s: s.replace("\\", "/").replace('"', "'")
+    script = (f'display dialog "{esc(text)}" with title "Guardian" buttons {{'
+              + ", ".join(f'"{esc(b)}"' for b in buttons)
+              + f'}} default button "{esc(default)}" giving up after {int(timeout)}')
+    try:
+        r = subprocess.run(["osascript", "-e", "tell me to activate", "-e", script],
+                           capture_output=True, text=True, timeout=timeout + 15)
+    except Exception as e:
+        log_event("error", error=repr(e), job="dialog")
+        return ""
+    if r.returncode != 0:        # a dialog that cannot be shown must be visible in the diary
+        log_event("error", error=(r.stderr or "osascript failed").strip()[:200], job="dialog")
+    return parse_dialog(r.stdout)
+
+
+def bundle_path(comm: str):
+    m = APP_RE.search(comm)
+    return comm[:m.end() - 1] if m else None
+
+
+def app_family(procs: list, app: str):
+    """Every process that belongs to an app (its helpers and the services it spawned) and its
+    main process: the one launchd started, living in <App>.app/Contents/MacOS."""
+    fam = [p for p in procs if p.key in (app, f"{app} helpers (MCP servers)")]
+    pids = {p.pid for p in fam}
+    mains = [p for p in fam if p.app == app and p.ppid not in pids and p.chrome_type is None
+             and os.path.dirname(p.comm).endswith(f"/{app}.app/Contents/MacOS")]
+    mains.sort(key=lambda p: -p.rss_kb)
+    return fam, (mains[0] if mains else None)
+
+
+def refresh_due(mode: str, grp, sample: dict, cfg: dict, st: dict, now: float) -> str:
+    """'' when a refresh is worth considering, otherwise the reason it is not."""
+    rcfg = cfg["refresh"]
+    if mode not in ("ask", "auto"):
+        return "set to never"
+    if grp is None:
+        return "not running"
+    if grp["rss_mb"] < rcfg["min_gb"] * 1024:
+        return f"only {grp['rss_mb'] / 1024:.1f}GB (acts at {rcfg['min_gb']}GB)"
+    if rcfg["only_under_pressure"] and not under_pressure(sample, cfg):
+        return "no memory pressure"
+    if now - st.get("last", 0) < rcfg["cooldown_hours"] * 3600:
+        return f"refreshed {(now - st['last']) / 3600:.1f}h ago"
+    if now < st.get("snooze_until", 0):
+        return f"you said not now ({int((st['snooze_until'] - now) / 60)}min left)"
+    return ""
+
+
+def refresh_decide(mode: str, rcfg: dict, activity_age_s, is_front: bool, user_idle_s):
+    """('wait' | 'ask' | 'refresh', why). Never while the app's agent is working or the app is in
+    front. 'auto' also needs proof the agent is idle and the owner away from the keyboard;
+    'ask' waits until the owner is there to answer."""
+    if activity_age_s is not None and activity_age_s < rcfg["agent_idle_minutes"] * 60:
+        return "wait", f"its agent was working {int(activity_age_s // 60)}min ago"
+    if is_front:
+        return "wait", "you are using it"
+    if mode == "auto":
+        if activity_age_s is None:
+            return "wait", "cannot tell whether it is busy (use ask for this app)"
+        if user_idle_s is None or user_idle_s < rcfg["user_idle_minutes"] * 60:
+            return "wait", "you are at the keyboard"
+        return "refresh", "its agent is idle and you are away"
+    if user_idle_s is not None and user_idle_s > 600:
+        return "wait", "you are away; it will ask when you are back"
+    return "ask", "its agent is idle"
+
+
+class MacAppOps:
+    """Everything refresh does to the machine, in one place so tests can substitute it."""
+
+    def processes(self, cfg):
+        return classify(list_processes(), cfg, os.getuid())
+
+    def sample(self):
+        return sample_system()
+
+    def activity_age(self, app: str, cfg: dict):
+        paths = [HOME / p for p in (cfg["refresh"].get("activity_paths") or {}).get(app, [])]
+        paths = [p for p in paths if p.exists()]
+        if not paths:
+            return None
+        m = newest_mtime(paths)
+        return (time.time() - m) if m else None
+
+    def front_app(self) -> str:
+        asn = sh(["lsappinfo", "front"])
+        return parse_front_app(sh(["lsappinfo", "info", "-only", "name", asn])) if asn else ""
+
+    def user_idle(self):
+        return parse_hid_idle(sh(["ioreg", "-c", "IOHIDSystem", "-d", "4"]))
+
+    def quit(self, bundle: str, main: Proc, chromium_like: bool) -> str:
+        """Ask the app to quit the way Cmd+Q does. If macOS will not let us send that (no
+        Automation permission), Chromium-based apps also shut down cleanly on SIGTERM."""
+        try:
+            r = subprocess.run(["osascript", "-e", f'tell application "{bundle}" to quit'],
+                               capture_output=True, text=True, timeout=20)
+            if r.returncode == 0:
+                return "applescript"
+        except Exception:
+            pass
+        if chromium_like and still_same_process(main):
+            try:
+                os.kill(main.pid, signal.SIGTERM)
+                return "sigterm"
+            except OSError:
+                pass
+        return ""
+
+    def alive(self, p: Proc) -> bool:
+        return still_same_process(p)
+
+    def term(self, p: Proc):
+        if still_same_process(p):
+            try:
+                os.kill(p.pid, signal.SIGTERM)
+            except OSError:
+                pass
+
+    def clear_caches(self, app: str, running: set) -> int:
+        import scratch
+        rows = scratch.census(only_app=app)
+        return scratch.reclaim("safe", dry_run=False, running=running, rows=rows)["freed_mb"] if rows else 0
+
+    def cache_mb(self, app: str) -> int:
+        import scratch
+        return sum(r["mb"] for r in scratch.census(only_app=app) if r["tier"] == "safe")
+
+    def reopen(self, bundle: str):
+        subprocess.run(["open", "-g", "-a", bundle], capture_output=True, text=True, timeout=30)
+
+    def sleep(self, seconds: float):
+        time.sleep(seconds)
+
+    def ask(self, text: str, buttons: list, default: str) -> str:
+        return ask_dialog(text, buttons, default)
+
+
+def _refresh_measure(ops, cfg: dict, app: str):
+    fam, main = app_family(ops.processes(cfg), app)
+    s = ops.sample()
+    return ({"app_mb": round(sum(p.rss_mb for p in fam)), "processes": len(fam),
+             "swap_used_mb": s.get("swap_used_mb"), "free_pct": s.get("free_pct"),
+             "pressure_level": s.get("pressure_level"), "disk_free_gb": s.get("disk_free_gb")}, fam, main)
+
+
+def refresh_app(app: str, cfg: dict, ops=None, dry_run: bool = False, force: bool = False) -> dict:
+    """Quit the app cleanly, clear its caches, reopen it in the background, and record what came
+    back. It is never forced: if the agent is working, or the app does not quit, it is left alone."""
+    ops = ops or MacAppOps()
+    rcfg = cfg["refresh"]
+    before, fam, main = _refresh_measure(ops, cfg, app)
+    rec = {"app": app, "before": before, "dry_run": dry_run}
+
+    def done(phase: str, result: str, **more):
+        rec.update(phase=phase, result=result, **more)
+        log_event("refresh", **rec)
+        return rec
+
+    if main is None:
+        return done("aborted", "not running")
+    age = ops.activity_age(app, cfg)
+    if not force and age is not None and age < rcfg["agent_idle_minutes"] * 60:
+        return done("aborted", f"its agent was working {int(age)}s ago; left alone")
+    bundle = bundle_path(main.comm)
+    if dry_run:
+        return done("dry-run", "would quit, clear caches and reopen", would_clear_mb=ops.cache_mb(app))
+    log_event("refresh", app=app, phase="started", before=before)
+    how = ops.quit(bundle, main, any(p.chrome_type for p in fam))
+    if not how:
+        return done("aborted", "could not ask it to quit; left running")
+    deadline = rcfg["quit_timeout_seconds"]
+    while ops.alive(main) and deadline > 0:
+        ops.sleep(1)
+        deadline -= 1
+    if ops.alive(main):
+        return done("aborted", f"it did not quit within {rcfg['quit_timeout_seconds']}s; left running", quit_via=how)
+    ops.sleep(8)
+    leftovers = [p for p in fam if p.pid != main.pid and ops.alive(p)]
+    for p in leftovers:          # helpers of an app that has quit; nothing the owner can see
+        ops.term(p)
+    freed_mb = 0
+    if rcfg["clear_caches"]:
+        freed_mb = ops.clear_caches(app, running_apps(ops.processes(cfg)) - {app})
+    if rcfg["reopen"]:
+        ops.reopen(bundle)
+    ops.sleep(rcfg["settle_seconds"])
+    after, _, _ = _refresh_measure(ops, cfg, app)
+    back_mb = before["app_mb"] - after["app_mb"]
+    out = done("done", f"memory {before['app_mb'] / 1024:.1f}GB -> {after['app_mb'] / 1024:.1f}GB, "
+                       f"{freed_mb / 1024:.1f}GB of caches cleared",
+               after=after, quit_via=how, leftovers=len(leftovers), caches_freed_mb=freed_mb, memory_back_mb=back_mb)
+    notify("Guardian", f"Refreshed {app}: {before['app_mb'] / 1024:.1f}GB -> {after['app_mb'] / 1024:.1f}GB of memory, "
+                       f"{freed_mb / 1024:.1f}GB of disk back.", cfg)
+    return out
+
+
+REFRESH_BUTTONS = ["Not now", "Always when idle", "Refresh now"]
+
+
+def refresh_ask(app: str, cfg: dict, st: dict, gb: float, age_s, ops=None) -> dict:
+    """Ask the owner, then act on the answer. 'Always when idle' is remembered in the config."""
+    ops = ops or MacAppOps()
+    rcfg = cfg["refresh"]
+    idle = f" and its agent has been idle for {int(age_s // 60)} minutes" if age_s is not None else ""
+    text = (f"{app} has grown to {gb:.1f} GB{idle}. Refresh it now? Guardian quits it cleanly, clears its "
+            f"caches and reopens it. Chats and threads are kept; open windows may need reopening.")
+    log_event("refresh", app=app, phase="asked", gb=round(gb, 1))
+    answer = ops.ask(text, REFRESH_BUTTONS, "Refresh now")
+    now = time.time()
+    if answer == "Always when idle":
+        apply_config_change({"refresh": {"apps": {app: "auto"}}}, f"refresh {app}: always when idle (chosen in the dialog)")
+    if answer in ("Refresh now", "Always when idle"):
+        rec = refresh_app(app, cfg, ops)
+        if rec.get("phase") == "done":
+            st["last"] = time.time()
+        else:
+            st["snooze_until"] = now + 30 * 60
+        return rec
+    minutes = rcfg["snooze_minutes"] if answer == "Not now" else 30
+    st["snooze_until"] = now + minutes * 60
+    return log_event("refresh", app=app, phase="declined" if answer == "Not now" else "unanswered",
+                     snooze_minutes=minutes)
+
+
+def refresh_state_from_events(hours: float = 48) -> dict:
+    """Rebuild cooldowns and snoozes after a restart, so a restart never re-asks at once."""
+    state = {}
+    for e in read_events(hours):
+        if e.get("kind") != "refresh" or not e.get("app"):
+            continue
+        st = state.setdefault(e["app"], {"last": 0.0, "snooze_until": 0.0, "next_check": 0.0})
+        ts = datetime.fromisoformat(e["ts"]).timestamp()
+        if e.get("phase") == "done" and not e.get("dry_run"):
+            st["last"] = max(st["last"], ts)
+        elif e.get("phase") in ("declined", "unanswered"):
+            st["snooze_until"] = max(st["snooze_until"], ts + e.get("snooze_minutes", 30) * 60)
+    return state
+
+
+def refresh_tick(cfg: dict, snap: dict, state: dict, background, now: float, ops=None, dry_run: bool = False):
+    """Called once per sample. Cheap checks first; the dialog and the refresh run on the worker.
+    Returns the app a job was started for, or None."""
+    rcfg = cfg.get("refresh") or {}
+    if cfg["mode"] == "observe" or snap.get("quiet") or background is None or background.busy():
+        return None
+    for app, mode in (rcfg.get("apps") or {}).items():
+        st = state.setdefault(app, {"last": 0.0, "snooze_until": 0.0, "next_check": 0.0})
+        if now < st["next_check"]:
+            continue
+        grp = next((g for g in snap["groups"] if g["key"] == app), None)
+        if refresh_due(mode, grp, snap["sample"], cfg, st, now):
+            continue
+        st["next_check"] = now + 120
+        ops = ops or MacAppOps()
+        if mode == "auto" and cfg["mode"] != "act":
+            mode = "ask"                      # acting unasked is for act mode only
+        age = ops.activity_age(app, cfg)
+        verdict, _why = refresh_decide(mode, rcfg, age, ops.front_app() == app, ops.user_idle())
+        if verdict == "wait":
+            continue
+        gb = grp["rss_mb"] / 1024
+
+        def job(app=app, verdict=verdict, st=st, gb=gb, age=age, ops=ops):
+            if dry_run:
+                refresh_app(app, cfg, ops, dry_run=True)
+                st["snooze_until"] = time.time() + 3600
+            elif verdict == "ask":
+                refresh_ask(app, cfg, st, gb, age, ops)
+            else:
+                rec = refresh_app(app, cfg, ops)
+                if rec.get("phase") == "done":
+                    st["last"] = time.time()
+                else:                              # it would not quit, or the agent woke up
+                    st["snooze_until"] = time.time() + 1800
+        if background.submit(f"refresh:{app}", job):
+            return app
+    return None
+
+
+def refresh_cmd(cfg: dict, args):
+    ops = MacAppOps()
+    rcfg = cfg["refresh"]
+    if args.mode:
+        if not args.app:
+            print("name the app: guardian.py refresh ChatGPT --mode ask|auto|never")
+            return
+        apply_config_change({"refresh": {"apps": {args.app: args.mode}}}, f"refresh {args.app}: {args.mode}")
+        print(f"{args.app}: {args.mode} (the running agent picks it up within a minute)")
+        return
+    if args.now:
+        if not args.app:
+            print("name the app: guardian.py refresh ChatGPT --now")
+            return
+        rec = refresh_app(args.app, cfg, ops, force=args.force)
+        print(f"{args.app}: {rec['phase']}: {rec['result']}")
+        return
+    snap = snapshot(cfg)
+    state = refresh_state_from_events()
+    now = time.time()
+    apps = [args.app] if args.app else list((rcfg.get("apps") or {}))
+    print("Refresh when idle (quit cleanly, clear caches, reopen). Modes: ask, auto (when idle and you are away), never.")
+    for app in apps:
+        mode = (rcfg.get("apps") or {}).get(app, "never")
+        grp = next((g for g in snap["groups"] if g["key"] == app), None)
+        size = f"{grp['rss_mb'] / 1024:.1f}GB in {grp['n']} processes" if grp else "not running"
+        why = refresh_due(mode, grp, snap["sample"], cfg, state.get(app, {}), now)
+        if not why:
+            age = ops.activity_age(app, cfg)
+            verdict, reason = refresh_decide(mode, rcfg, age, ops.front_app() == app, ops.user_idle())
+            why = {"wait": "waiting: ", "ask": "would ask you now: ", "refresh": "would refresh now: "}[verdict] + reason
+        else:
+            why = "nothing to do: " + why
+        print(f"  {app:14} mode={mode:5}  {size:28}  {why}")
+    print("Do it now: guardian.py refresh APP --now      Change consent: guardian.py refresh APP --mode ask|auto|never")
+
+
+# --------------------------------------------------------------------------
 # Snapshot and status
 # --------------------------------------------------------------------------
 
@@ -1212,6 +1608,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
         log_event("health", note=f"disk free {s['disk_free_gb']}GB is below RAM size; swap ceiling is low")
     last_digest_day = None
     ai = {"day": None, "runs": 0, "retry_after": 0.0, "fail_notified": None}
+    refresh_state = refresh_state_from_events()
     up_since = time.time()
     cfg_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
     last_hygiene = None
@@ -1247,6 +1644,8 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 for a in applied:
                     print(json.dumps(a, default=str))
                 break
+            if not simulate:
+                refresh_tick(cfg, snap, refresh_state, background, time.time(), dry_run=dry_run)
             today = datetime.now().date()
             if ai["day"] != today:
                 ai.update(day=today, runs=0)
@@ -1349,6 +1748,14 @@ def render_report(hours: float) -> str:
     if not s["episode_details"]:
         lines.append("- none")
     lines.append("")
+    refreshes = [e for e in read_events(hours) if e.get("kind") == "refresh"
+                 and e.get("phase") in ("done", "aborted", "declined")]
+    if refreshes:
+        lines.append("## Refreshes (quit cleanly, clear caches, reopen)")
+        for e in refreshes[-10:]:
+            lines.append(f"- {e['ts']}: {e.get('app')}: {e.get('phase')}"
+                         + (f": {e['result']}" if e.get("result") else ""))
+        lines.append("")
     lines.append("## Actions")
     for e in s["actions"][-20:]:
         who = e["proc"]["key"] if e.get("proc") else "-"
@@ -1741,6 +2148,12 @@ def doctor(cfg: dict, script: Path):
     print(f"{ok(not PAUSE_PATH.exists())} {'PAUSED (run: resume)' if PAUSE_PATH.exists() else 'not paused'}")
     name, exe = find_ai_command(cfg)
     print(f"{ok(exe)} AI CLI for `ask`: {name + ' at ' + exe if exe else 'none found (claude or codex)'}")
+    if IS_MAC:
+        ops = MacAppOps()
+        idle, front = ops.user_idle(), ops.front_app()
+        print(f"{ok(idle is not None and front)} refresh signals: frontmost app {front or '?'}, "
+              f"keyboard idle {'?' if idle is None else str(int(idle)) + 's'}; consent "
+              + ", ".join(f"{a}={m}" for a, m in (cfg['refresh'].get('apps') or {}).items()))
     s = sample_system()
     if s.get("disk_free_gb") is not None and s.get("mem_total_mb"):
         enough = s["disk_free_gb"] * 1024 >= s["mem_total_mb"]
@@ -1802,8 +2215,11 @@ AUTOPILOT_TEXT = """Autopilot is ON. Always running (launchd restarts it if it d
   - after a bad day (3+ pressure episodes) asks Claude/Codex for a diagnosis and applies the
     threshold tuning it suggests, within fixed ranges; everything else waits for you
   - stays quiet while you present or are in a Zoom meeting
-What it never does: close an app you can see, delete your transcripts, sessions, downloads
-or anything outside rebuildable caches, or act while paused.
+  - when an AI app listed under `refresh` (ChatGPT by default) is bloated and its agent idle,
+    asks whether to refresh it: quit cleanly, clear its caches, reopen. See: guardian.py refresh
+What it never does: close an app you can see without your say-so, interrupt a running agent
+task, delete your transcripts, sessions, downloads or anything outside rebuildable caches,
+or act while paused.
 Watch it:  guardian.py report      Undo a tuning:  guardian.py config --undo      Off:  guardian.py autopilot off
 """
 
@@ -1888,6 +2304,11 @@ def main(argv=None):
     p.add_argument("--reclaim", choices=["safe", "safe-old", "all"])
     p.add_argument("--yes", action="store_true", help="actually delete (default is a dry run)")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("refresh", help="quit, clean and reopen a bloated AI app while it is idle (no flags: show the verdict)")
+    p.add_argument("app", nargs="?")
+    p.add_argument("--now", action="store_true", help="do it now, unless its agent is working")
+    p.add_argument("--force", action="store_true", help="with --now: even if its agent looks busy")
+    p.add_argument("--mode", choices=["ask", "auto", "never"], help="set the consent for this app")
     sub.add_parser("doctor", help="check the install")
     sub.add_parser("install", help="install the launchd agent (starts at login)")
     sub.add_parser("uninstall", help="remove the launchd agent")
@@ -1926,6 +2347,8 @@ def main(argv=None):
         chrome_tabs(close_duplicates=args.close_duplicates, json_out=args.json)
     elif args.cmd == "scratch":
         scratch_cmd(cfg, args)
+    elif args.cmd == "refresh":
+        refresh_cmd(cfg, args)
     elif args.cmd == "doctor":
         doctor(cfg, script)
     elif args.cmd == "install":

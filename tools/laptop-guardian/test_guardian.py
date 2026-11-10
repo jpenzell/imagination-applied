@@ -601,6 +601,271 @@ class ApplyTests(unittest.TestCase):
 
 
 
+GPT = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+GPT_REND = ("/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/157.0.8103.39/"
+            "Helpers/Codex (Aperitif Renderer).app/Contents/MacOS/Codex (Aperitif Renderer)")
+GPT_CODEX = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+GPT_NODE = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node"
+GPT_CUA = "/Users/j/.codex/computer-use/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService"
+GPT_CRASH = ("/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/157.0.8103.39/"
+             "Helpers/browser_crashpad_handler")
+
+
+def chatgpt_procs():
+    """The ChatGPT app as recorded on a real Mac: main, a big renderer, the Codex engine, a
+    per-task node worker that outlives the app, the computer-use service, a crashpad handler."""
+    return [P(1408, GPT, rss_mb=800),
+            P(1483, GPT_REND, GPT_REND + " --type=renderer", ppid=1408, rss_mb=1900),
+            P(1462, GPT_CODEX, GPT_CODEX + " app-server", ppid=1408, rss_mb=1300),
+            P(1709, GPT_NODE, GPT_NODE + " /tmp/x/trusted-worker.js", ppid=1462, rss_mb=280),
+            P(1525, GPT_CUA, ppid=1408, rss_mb=60),
+            P(1420, GPT_CRASH, ppid=1, rss_mb=3),
+            P(5176, "/Applications/Claude.app/Contents/MacOS/Claude", rss_mb=300)]
+
+
+class FakeOps:
+    """Stands in for the Mac: records what refresh would do to it."""
+
+    def __init__(self, quits=True, age=3600.0, front="Claude", idle=20.0, answer="Refresh now"):
+        self.procs = chatgpt_procs()
+        self.alive_pids = {p.pid for p in self.procs}
+        self.quits, self.age, self.front, self.idle, self.answer = quits, age, front, idle, answer
+        self.calls = []
+
+    def processes(self, cfg):
+        return g.classify([p for p in self.procs if p.pid in self.alive_pids], cfg, UID)
+
+    def sample(self):
+        return {"pressure_level": 2, "free_pct": 20, "swap_used_mb": 8000, "disk_free_gb": 16.6}
+
+    def activity_age(self, app, cfg):
+        return self.age
+
+    def front_app(self):
+        return self.front
+
+    def user_idle(self):
+        return self.idle
+
+    def quit(self, bundle, main, chromium_like):
+        self.calls.append(("quit", bundle, chromium_like))
+        if self.quits:      # the app and its own helpers exit; the per-task worker lingers
+            self.alive_pids -= {1408, 1483, 1462, 1525, 1420}
+        return "applescript"
+
+    def alive(self, p):
+        return p.pid in self.alive_pids
+
+    def term(self, p):
+        self.calls.append(("term", p.pid))
+        self.alive_pids.discard(p.pid)
+
+    def clear_caches(self, app, running):
+        self.calls.append(("clear", app, sorted(running)))
+        return 3800
+
+    def cache_mb(self, app):
+        return 3800
+
+    def reopen(self, bundle):
+        self.calls.append(("reopen", bundle))
+        self.procs.append(P(9000, GPT, rss_mb=600))
+        self.alive_pids.add(9000)
+
+    def sleep(self, seconds):
+        pass
+
+    def ask(self, text, buttons, default):
+        self.calls.append(("ask", text))
+        return self.answer
+
+
+class RefreshTests(unittest.TestCase):
+    """Refresh when idle: quit cleanly, clear caches, reopen; only when the agent is idle and
+    only with consent. Nothing here touches a real app."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = g.Path(tempfile.mkdtemp())
+        self.saved = (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH)
+        g.CONFIG_DIR = self.tmp / "cfg"
+        g.CONFIG_PATH = g.CONFIG_DIR / "config.json"
+        g.CONFIG_HISTORY = g.CONFIG_DIR / "config-history.jsonl"
+        g.LOG_DIR = self.tmp / "logs"
+        g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
+        self.cfg = g.load_config(g.Path("/nonexistent"))
+        self.cfg["notify"] = False
+        self.rcfg = self.cfg["refresh"]
+
+    def tearDown(self):
+        g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH = self.saved
+
+    def phases(self):
+        return [(e.get("phase"), e.get("app")) for e in g.read_events(1) if e["kind"] == "refresh"]
+
+    def test_family_and_main_process(self):
+        fam, main = g.app_family(g.classify(chatgpt_procs(), self.cfg, UID), "ChatGPT")
+        self.assertEqual(main.pid, 1408, "the crashpad handler (also ppid 1) is not the main process")
+        self.assertEqual({p.pid for p in fam}, {1408, 1483, 1462, 1709, 1525, 1420})
+        self.assertEqual(g.bundle_path(main.comm), "/Applications/ChatGPT.app")
+        self.assertEqual(g.bundle_path(GPT_REND), "/Applications/ChatGPT.app", "outermost bundle")
+
+    def test_parsers_on_recorded_macos_output(self):
+        macos27 = ('"Claude" ASN:0x0-0x88088: (in front) \n    bundleID=[ NULL ] \n    bundle path=[ NULL ] \n')
+        self.assertEqual(g.parse_front_app(macos27), "Claude")
+        self.assertEqual(g.parse_front_app('"LSDisplayName"="Google Chrome"\n'), "Google Chrome")
+        self.assertEqual(g.parse_front_app(""), "")
+        self.assertAlmostEqual(g.parse_hid_idle('    | |     "HIDIdleTime" = 86657115916\n'), 86.657, places=2)
+        self.assertIsNone(g.parse_hid_idle("nothing here"))
+        self.assertEqual(g.parse_dialog("button returned:Refresh now, gave up:false\n"), "Refresh now")
+        self.assertEqual(g.parse_dialog("button returned:, gave up:true\n"), "", "nobody answered")
+        self.assertEqual(g.parse_dialog(""), "")
+
+    def test_newest_mtime_sees_a_session_file_being_written(self):
+        d = self.tmp / "sessions" / "2026" / "09" / "09"
+        d.mkdir(parents=True)
+        old, new = d / "old.jsonl", d / "active.jsonl"
+        old.write_text("x")
+        new.write_text("y")
+        os.utime(old, (1000, 1000))
+        os.utime(new, (5000, 5000))
+        self.assertEqual(g.newest_mtime([self.tmp / "sessions"]), 5000)
+        self.assertEqual(g.newest_mtime([old, self.tmp / "missing"]), 1000)
+        self.assertEqual(g.newest_mtime([self.tmp / "missing"]), 0.0)
+
+    def test_decide_never_interrupts_an_agent_or_the_app_in_front(self):
+        d = lambda mode, age, front, idle: g.refresh_decide(mode, self.rcfg, age, front, idle)[0]
+        self.assertEqual(d("ask", 30, False, 5), "wait", "agent wrote 30 s ago")
+        self.assertEqual(d("auto", 30, False, 9999), "wait")
+        self.assertEqual(d("ask", 3600, True, 5), "wait", "you are using the app")
+        self.assertEqual(d("ask", 3600, False, 5), "ask")
+        self.assertEqual(d("ask", 3600, False, 3600), "wait", "nobody there to answer; ask later")
+        self.assertEqual(d("ask", None, False, 5), "ask", "no agent signal: the owner decides")
+        self.assertEqual(d("auto", 3600, False, 5), "wait", "auto waits until you are away")
+        self.assertEqual(d("auto", 3600, False, 600), "refresh")
+        self.assertEqual(d("auto", None, False, 600), "wait", "auto needs proof the agent is idle")
+        self.assertEqual(d("auto", 3600, False, None), "wait")
+
+    def test_due_checks_size_pressure_cooldown_and_snooze(self):
+        grp = {"key": "ChatGPT", "rss_mb": 10000}
+        hot, calm = sample(level=2, free=20), sample(level=1, free=60)
+        due = lambda mode="ask", grp=grp, s=hot, st=None, now=10 ** 6: g.refresh_due(mode, grp, s, self.cfg, st or {}, now)
+        self.assertEqual(due(), "")
+        self.assertEqual(due(mode="never"), "set to never")
+        self.assertEqual(due(mode="yes please"), "set to never", "an unknown mode is never consent")
+        self.assertEqual(due(grp=None), "not running")
+        self.assertIn("only 2.0GB", due(grp={"key": "ChatGPT", "rss_mb": 2048}))
+        self.assertEqual(due(s=calm), "no memory pressure")
+        self.assertIn("refreshed 1.0h ago", due(st={"last": 10 ** 6 - 3600}))
+        self.assertIn("you said not now", due(st={"snooze_until": 10 ** 6 + 600}))
+
+    def test_refresh_quits_cleans_reopens_and_records_before_and_after(self):
+        ops = FakeOps()
+        rec = g.refresh_app("ChatGPT", self.cfg, ops)
+        self.assertEqual(rec["phase"], "done")
+        self.assertEqual([c[0] for c in ops.calls], ["quit", "term", "clear", "reopen"])
+        self.assertEqual(ops.calls[0], ("quit", "/Applications/ChatGPT.app", True))
+        self.assertEqual(ops.calls[1], ("term", 1709), "only the helper that outlived the app")
+        self.assertEqual(ops.calls[2], ("clear", "ChatGPT", ["Claude"]), "other running apps stay guarded")
+        self.assertEqual(rec["before"]["app_mb"], 800 + 1900 + 1300 + 280 + 60 + 3)
+        self.assertEqual(rec["after"]["app_mb"], 600)
+        self.assertEqual((rec["memory_back_mb"], rec["caches_freed_mb"], rec["leftovers"]), (3743, 3800, 1))
+        self.assertEqual(self.phases(), [("started", "ChatGPT"), ("done", "ChatGPT")])
+        self.assertIn("ChatGPT: done: memory 4.2GB -> 0.6GB", g.render_report(1))
+
+    def test_refresh_leaves_a_working_agent_alone(self):
+        ops = FakeOps(age=30.0)
+        rec = g.refresh_app("ChatGPT", self.cfg, ops)
+        self.assertEqual(rec["phase"], "aborted")
+        self.assertEqual(ops.calls, [], "nothing was sent to the app")
+        self.assertEqual(g.refresh_app("ChatGPT", self.cfg, FakeOps(age=30.0), force=True)["phase"], "done")
+
+    def test_app_that_does_not_quit_is_left_running(self):
+        ops = FakeOps(quits=False)
+        rec = g.refresh_app("ChatGPT", self.cfg, ops)
+        self.assertEqual(rec["phase"], "aborted")
+        self.assertIn("did not quit", rec["result"])
+        self.assertEqual([c[0] for c in ops.calls], ["quit"], "no kill, no cache clearing, no relaunch")
+
+    def test_dry_run_and_not_running(self):
+        ops = FakeOps()
+        rec = g.refresh_app("ChatGPT", self.cfg, ops, dry_run=True)
+        self.assertEqual((rec["phase"], rec["would_clear_mb"], ops.calls), ("dry-run", 3800, []))
+        self.assertEqual(g.refresh_app("Codex", self.cfg, FakeOps())["result"], "not running")
+
+    def test_dialog_answers(self):
+        st = {}
+        ops = FakeOps(answer="Not now")
+        g.refresh_ask("ChatGPT", self.cfg, st, 10.1, 1500, ops)
+        self.assertEqual([c[0] for c in ops.calls], ["ask"])
+        self.assertIn("10.1 GB", ops.calls[0][1])
+        self.assertIn("idle for 25 minutes", ops.calls[0][1])
+        self.assertAlmostEqual(st["snooze_until"], g.time.time() + 120 * 60, delta=5)
+        st, ops = {}, FakeOps(answer="")
+        g.refresh_ask("ChatGPT", self.cfg, st, 10.1, 1500, ops)
+        self.assertAlmostEqual(st["snooze_until"], g.time.time() + 30 * 60, delta=5, msg="unanswered: ask again sooner")
+        self.assertEqual([c[0] for c in ops.calls], ["ask"])
+        st, ops = {}, FakeOps(answer="Always when idle")
+        rec = g.refresh_ask("ChatGPT", self.cfg, st, 10.1, 1500, ops)
+        self.assertEqual(rec["phase"], "done")
+        self.assertEqual(g.json.loads(g.CONFIG_PATH.read_text())["refresh"]["apps"], {"ChatGPT": "auto"})
+        self.assertAlmostEqual(st["last"], g.time.time(), delta=5)
+        self.assertEqual([p for p, _ in self.phases()],
+                         ["asked", "declined", "asked", "unanswered", "asked", "started", "done"])
+        g.undo_config_change()
+        self.assertNotIn("refresh", g.json.loads(g.CONFIG_PATH.read_text()), "the standing consent can be undone")
+
+    def test_tick_only_starts_a_job_when_everything_lines_up(self):
+        snap = lambda quiet="": {"groups": [{"key": "ChatGPT", "rss_mb": 10000, "n": 99}],
+                                 "sample": sample(level=2, free=20), "quiet": quiet}
+
+        def tick(ops, cfg=None, quiet="", state=None, bg=None):
+            bg = bg or g.Background()
+            app = g.refresh_tick(cfg or self.cfg, snap(quiet), {} if state is None else state, bg, g.time.time(), ops=ops)
+            if bg.thread:
+                bg.thread.join(5)
+            return app
+
+        ops = FakeOps(answer="Not now")
+        state = {}
+        self.assertEqual(tick(ops, state=state), "ChatGPT")
+        self.assertEqual([c[0] for c in ops.calls], ["ask"])
+        self.assertIsNone(tick(ops, state=state), "snoozed and throttled: not asked again")
+        self.assertEqual(len(ops.calls), 1)
+        self.assertIsNone(tick(FakeOps(age=30.0)), "Codex is working")
+        self.assertIsNone(tick(FakeOps(front="ChatGPT")), "you are using it")
+        self.assertIsNone(tick(FakeOps(), quiet="Keynote"), "presenting")
+        observe = dict(self.cfg, mode="observe")
+        self.assertIsNone(tick(FakeOps(), cfg=observe))
+        self.assertIsNone(g.refresh_tick(self.cfg, snap(), {}, None, g.time.time(), ops=FakeOps()), "watch --once")
+        # auto acts unasked only in act mode; in nudge mode it still asks
+        auto = g.json.loads(g.json.dumps(self.cfg))
+        auto["refresh"]["apps"]["ChatGPT"] = "auto"
+        ops = FakeOps(idle=900.0, answer="Not now")
+        self.assertEqual(tick(ops, cfg=auto), None, "nudge mode downgrades auto to ask; you are away, so it waits")
+        ops = FakeOps(idle=900.0)
+        self.assertEqual(tick(ops, cfg=dict(auto, mode="act")), "ChatGPT")
+        self.assertEqual([c[0] for c in ops.calls], ["quit", "term", "clear", "reopen"], "no dialog in auto")
+
+    def test_restart_remembers_cooldown_and_snooze(self):
+        g.refresh_app("ChatGPT", self.cfg, FakeOps())
+        g.refresh_ask("Codex", self.cfg, {}, 7.0, None, FakeOps(answer="Not now"))
+        g.refresh_app("Claude", self.cfg, FakeOps(), dry_run=True)
+        state = g.refresh_state_from_events()
+        now = g.time.time()
+        self.assertAlmostEqual(state["ChatGPT"]["last"], now, delta=5)
+        self.assertAlmostEqual(state["Codex"]["snooze_until"], now + 120 * 60, delta=5)
+        self.assertEqual(state.get("Claude", {}).get("last", 0.0), 0.0, "a dry run is not a refresh")
+        self.assertIn("refreshed 0.0h ago", g.refresh_due("ask", {"rss_mb": 10000}, sample(level=2), self.cfg,
+                                                           state["ChatGPT"], now))
+
+    def test_consent_is_never_self_tuned(self):
+        auto, review = g.split_tuning({"refresh": {"apps": {"ChatGPT": "auto"}, "min_gb": 4}})
+        self.assertEqual(auto, {"refresh": {"min_gb": 4}})
+        self.assertEqual(review, {"refresh": {"apps": {"ChatGPT": "auto"}}}, "the diagnosis cannot grant consent")
+        self.assertEqual(self.cfg["refresh"]["apps"], {"ChatGPT": "ask"}, "default is to ask, for ChatGPT only")
+
+
 class AutopilotTests(unittest.TestCase):
     """Bounded self-tuning, config history/undo, and the hygiene schedule."""
 
