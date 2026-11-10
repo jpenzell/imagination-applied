@@ -12,8 +12,12 @@ import guardian as g
 
 UID = os.getuid()
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Chrome 157 as recorded on a real Mac (2026-11-10): helpers are now "(Aperitif Renderer)"
 HELPER = ("/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/"
-          "Versions/142/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)")
+          "Versions/157.0.8103.50/Helpers/Google Chrome Helper (Aperitif Renderer).app/Contents/MacOS/"
+          "Google Chrome Helper (Aperitif Renderer)")
+HELPER_OLD = ("/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/"
+              "Versions/142/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)")
 PW_CHROME = "/Users/j/Library/Caches/ms-playwright/chromium-1200/chrome-mac/Chromium.app/Contents/MacOS/Chromium"
 
 
@@ -47,7 +51,7 @@ class ClassifyTests(unittest.TestCase):
         g.classify(procs, self.cfg, UID)
         self.assertEqual(procs[0].cls, "browser")
         self.assertEqual(procs[1].cls, "automation_browser")
-        self.assertEqual(procs[2].cls, "automation_browser")
+        self.assertEqual(procs[2].cls, "automation_browser/renderer")
         self.assertIn("[automation pid 20]", procs[2].key)
         self.assertNotEqual(procs[0].key, procs[1].key)
 
@@ -181,27 +185,89 @@ class ClassifyTests(unittest.TestCase):
         g.classify(procs, self.cfg, UID)
         self.assertEqual(procs[0].cls, "gui_app")
 
+    # ---- found on the first real-Mac run (2026-11-10, 8GB M-series Air, macOS 27, Chrome 157)
+
+    def test_chrome_157_aperitif_helper_is_still_a_renderer(self):
+        """The name marker 'Helper (Renderer)' no longer matches; --type=renderer must carry it."""
+        procs = [P(1901, CHROME, CHROME + " --restore-last-session"),
+                 P(13639, HELPER, HELPER + " --type=renderer --lang=en-US", ppid=1901, rss_mb=763),
+                 P(80, HELPER_OLD, HELPER_OLD + " --type=renderer", ppid=1901, rss_mb=100)]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual(procs[1].cls, "browser/renderer")
+        self.assertEqual(procs[2].cls, "browser/renderer", "the old name still works")
+        self.assertEqual({p.key for p in procs}, {"Google Chrome"})
+
+    def test_native_claude_code_bundle_is_an_agent_session_not_a_gui_app(self):
+        """Claude Code's native install is a real claude.app bundle; the first run showed it as gui_app 'claude'."""
+        cc = ("/Users/j/Library/Application Support/Claude/claude-code/2.1.321/e6736b2d954d/claude.app/"
+              "Contents/MacOS/claude")
+        disclaimer = "/Applications/Claude.app/Contents/Helpers/disclaimer"
+        procs = [P(5176, "/Applications/Claude.app/Contents/MacOS/Claude"),
+                 P(16375, disclaimer, disclaimer + " --pgroup -- " + cc + " --output-format stream-json", ppid=5176),
+                 P(16376, cc, cc + " --output-format stream-json --verbose", ppid=16375, rss_mb=250)]
+        g.classify(procs, self.cfg, UID)
+        self.assertFalse(procs[2].is_gui)
+        self.assertEqual(procs[2].cls, "agent_session")
+        self.assertEqual(procs[2].key, "agent:claude")
+        self.assertEqual(procs[1].key, "Claude", "the launcher helper inside Claude.app stays with Claude")
+
+    def test_chatgpt_app_engine_and_home_folder_services_fold_under_chatgpt(self):
+        """The ChatGPT app embeds Codex: a codex app-server, 30+ node workers, Aperitif renderers and a
+        'Codex Computer Use.app' service under ~/.codex were all seen; they belong to ChatGPT."""
+        gpt = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+        codex = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+        node = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node"
+        cua = "/Users/j/.codex/computer-use/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService"
+        rend = ("/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/157.0.8103.39/"
+                "Helpers/Codex (Aperitif Renderer).app/Contents/MacOS/Codex (Aperitif Renderer)")
+        procs = [P(1408, gpt, rss_mb=788),
+                 P(1462, codex, codex + " -c features.code_mode_host=true app-server", ppid=1408, rss_mb=1208),
+                 P(1709, node, node + " ./server.mjs", ppid=1462),
+                 P(1525, cua, ppid=1408),
+                 P(1483, rend, rend + " --type=renderer", ppid=1408, rss_mb=1990)]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual([p.cls for p in procs], ["ai_app", "ai_app", "ai_app", "mcp_server", "ai_app/renderer"])
+        self.assertEqual({p.key for p in procs[:3]} | {procs[4].key}, {"ChatGPT"})
+        self.assertEqual(procs[3].key, "ChatGPT helpers (MCP servers)")
+        groups = {gr["key"]: gr for gr in g.aggregate(procs, self.cfg)}
+        self.assertEqual(groups["ChatGPT"]["rss_mb"], 788 + 1208 + 100 + 1990)
+        self.assertNotIn("browser", {gr["class"] for gr in groups.values()})
+
 
 class MacParsingTests(unittest.TestCase):
     """The macOS readers, fed recorded output formats (documented formats; the first real run
     on a Mac should compare these against what the machine actually prints)."""
 
     def test_parse_ps_macos_format(self):
+        codex = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+        wserver = "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer"
         comm_out = (
             "    1 /sbin/launchd\n"
             "  512 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n"
             "  530 " + HELPER + "\n"
             " 9001 /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/"
-            "Resources/Python.app/Contents/MacOS/Python\n")
+            "Resources/Python.app/Contents/MacOS/Python\n"
+            " 1462 " + codex + "\n"
+            "  539 " + wserver + "\n")
+        # the 1462 and 539 lines are verbatim `ps -ww -ax -o pid=,ppid=,pgid=,uid=,pcpu=,rss=,etime=,time=,args=`
+        # output from a real Mac (2026-11-10): `time` minutes run past 59, uid 88 is _windowserver
         main_out = (
             "    1     0     1    0   0.0   9876 12-03:04:05 15:31.27 /sbin/launchd\n"
             f"  512     1   512  {UID}   3.2 412340    02:03:04 1-00:12:33.90 "
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --restore-last-session\n"
             f"  530   512   512  {UID}   0.4 912000       59:59 0:01.23 " + HELPER +
             " --type=renderer --lang=en-US --user-data-dir=/Users/j/Library/Application Support/Google/Chrome\n"
-            f" 9001     1  9001  {UID}   0.0  40000       00:30 0:00.05 python3 /Users/j/guardian.py watch\n")
+            f" 9001     1  9001  {UID}   0.0  40000       00:30 0:00.05 python3 /Users/j/guardian.py watch\n"
+            f" 1462  1408  1408   {UID}  43.2 278400 03:55:51  14:34.55 " + codex +
+            " -c features.code_mode_host=true app-server --analytics-default-enabled\n"
+            "  539     1   539    88  33.1  44368 03:57:22  89:46.54 " + wserver + " -daemon\n")
         procs = {p.pid: p for p in g.parse_ps(comm_out, main_out)}
-        self.assertEqual(set(procs), {1, 512, 530, 9001})
+        self.assertEqual(set(procs), {1, 512, 530, 9001, 1462, 539})
+        self.assertEqual(procs[1462].cputime_s, 14 * 60 + 34)
+        self.assertEqual(procs[1462].etime_s, 3 * 3600 + 55 * 60 + 51)
+        self.assertEqual(procs[539].cputime_s, 89 * 60 + 46)
+        self.assertEqual(procs[539].uid, 88)
+        self.assertEqual(procs[539].name, "WindowServer")
         self.assertEqual(procs[530].comm, HELPER, "comm with spaces and parentheses survives")
         self.assertEqual(procs[530].rss_kb, 912000)
         self.assertEqual(procs[530].etime_s, 59 * 60 + 59)
@@ -213,16 +279,19 @@ class MacParsingTests(unittest.TestCase):
         self.assertEqual(procs[9001].name, "Python")
 
     def test_parse_mac_sample_formats(self):
+        # verbatim from an 8GB M-series Air under pressure (2026-11-10); the therm block below is
+        # the Intel form, the Apple-silicon form (no CPU_Speed_Limit line at all) is tested after
         raw = {
-            "pressure": "2\n", "level": "37\n",
-            "swap": "total = 3072.00M  used = 1517.25M  free = 1554.75M  (encrypted)",
-            "memsize": "34359738368",
-            "loadavg": "{ 2.52 2.61 2.73 }",
+            "pressure": "2\n", "level": "26\n",
+            "swap": "total = 10240.00M  used = 9305.50M  free = 934.50M  (encrypted)",
+            "memsize": "8589934592",
+            "loadavg": "{ 5.81 6.24 6.75 }",
             "vm_stat": ("Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
-                        "Pages free:                               12345.\n"
-                        "Pages active:                            654321.\n"
-                        "Pages occupied by compressor:            100000.\n"
-                        "Decompressions:                        98765432.\n"),
+                        "Pages free:                                     5152.\n"
+                        "Pages active:                                  62418.\n"
+                        "Pages stored in compressor:                   368316.\n"
+                        "Pages occupied by compressor:                 192962.\n"
+                        "Decompressions:                             98765432.\n"),
             "therm": ("Note: No thermal warning level has been recorded\n"
                       "Note: No performance warning level has been recorded\n"
                       "CPU_Scheduler_Limit \t= 100\n"
@@ -232,13 +301,18 @@ class MacParsingTests(unittest.TestCase):
         s = g.parse_mac_sample(raw, {})
         self.assertEqual(s["pressure_level"], 2)
         self.assertTrue(s["pressure_read"])
-        self.assertEqual(s["free_pct"], 37)
-        self.assertEqual(s["swap_total_mb"], 3072.0)
-        self.assertEqual(s["swap_used_mb"], 1517.2)
-        self.assertEqual(s["mem_total_mb"], 32768)
-        self.assertEqual(s["load1"], 2.52)
-        self.assertEqual(s["compressed_mb"], 100000 * 16384 // (1024 * 1024))
+        self.assertEqual(s["free_pct"], 26)
+        self.assertEqual(s["swap_total_mb"], 10240.0)
+        self.assertEqual(s["swap_used_mb"], 9305.5)
+        self.assertEqual(s["mem_total_mb"], 8192)
+        self.assertEqual(s["load1"], 5.81)
+        self.assertEqual(s["compressed_mb"], 192962 * 16384 // (1024 * 1024),
+                         "'occupied by compressor' (3015MB, what top calls compressor), not 'stored in'")
         self.assertEqual(s["cpu_speed_limit"], 72)
+        apple_silicon = ("Note: No thermal warning level has been recorded\n"
+                         "Note: No performance warning level has been recorded\n"
+                         "Note: No CPU power status has been recorded\n")
+        self.assertEqual(g.parse_mac_sample({"therm": apple_silicon}, {})["cpu_speed_limit"], 100)
         # a Mac that prints nothing useful must degrade to safe defaults, not crash
         s2 = g.parse_mac_sample({k: "" for k in raw}, {})
         self.assertEqual(s2["pressure_level"], 1)
@@ -259,6 +333,19 @@ class MacParsingTests(unittest.TestCase):
 
     def test_ps_command_never_truncates(self):
         self.assertIn("-ww", g.ps_command("pid=,comm="))
+
+    def test_memory_is_physical_footprint_on_mac(self):
+        """Under pressure ps RSS read a 1.9GB renderer as 150MB; libproc's phys_footprint is what
+        Activity Monitor shows. Elsewhere it is None and RSS stands."""
+        if not g.IS_MAC:
+            self.assertIsNone(g.phys_footprint_kb(os.getpid()))
+            return
+        me = g.phys_footprint_kb(os.getpid())
+        self.assertIsInstance(me, int)
+        self.assertGreater(me, 1024, "a Python process has more than 1MB of footprint")
+        self.assertIsNone(g.phys_footprint_kb(2 ** 30), "an unknown pid reads as None, never 0")
+        mine = {p.pid: p for p in g.list_processes()}[os.getpid()]
+        self.assertLess(abs(mine.rss_kb - me) / me, 0.5, "list_processes carries the footprint, not RSS")
 
 
 class EngineTests(unittest.TestCase):

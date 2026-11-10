@@ -29,6 +29,7 @@ Prior art this borrows from, with thanks:
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import re
@@ -342,7 +343,9 @@ def bundle_of(path: str):
 # python3 really execute ".../Python.framework/.../Resources/Python.app/Contents/MacOS/Python",
 # so without this every Python process (guardian itself, Python MCP servers) would read as
 # a GUI app called "Python" and be exempt from renice.
-NOT_GUI_BUNDLES = {"Python", "Python3", "Python Launcher"}
+# Claude Code's native install is a bundle too (".../claude-code/<ver>/<hash>/claude.app/Contents/
+# MacOS/claude"), as is the codex binary the ChatGPT app ships ("CodexCLI.app"); both are CLIs.
+NOT_GUI_BUNDLES = {"Python", "Python3", "Python Launcher", "claude", "CodexCLI"}
 
 
 def is_gui_path(comm: str) -> bool:
@@ -396,11 +399,55 @@ def ps_command(cols: str) -> list:
     return ["ps", "-ww", "-ax" if IS_MAC else "-e", "-o", cols]
 
 
+# On macOS `ps` reports resident set size, which leaves out every page the kernel has
+# compressed or swapped out. On a Mac under pressure that is most of a process's memory:
+# the first real run saw a 1.9GB renderer reading 150MB and Chrome's main process (356MB)
+# reading 100MB. Activity Monitor's "Memory" column is the physical footprint from
+# proc_pid_rusage(); libproc gives the same number through ctypes for every process you
+# own, about 2ms for 500 pids. Other users' processes keep their RSS.
+_libproc = None
+
+
+class _RusageInfoV2(ctypes.Structure):
+    _fields_ = [("ri_uuid", ctypes.c_uint8 * 16)] + [(n, ctypes.c_uint64) for n in (
+        "ri_user_time", "ri_system_time", "ri_pkg_idle_wkups", "ri_interrupt_wkups", "ri_pageins",
+        "ri_wired_size", "ri_resident_size", "ri_phys_footprint", "ri_proc_start_abstime",
+        "ri_proc_exit_abstime", "ri_child_user_time", "ri_child_system_time", "ri_child_pkg_idle_wkups",
+        "ri_child_interrupt_wkups", "ri_child_pageins", "ri_child_elapsed_abstime",
+        "ri_diskio_bytesread", "ri_diskio_byteswritten")]
+
+
+def phys_footprint_kb(pid: int):
+    """Physical footprint in KB (the number Activity Monitor shows), or None when unreadable."""
+    global _libproc
+    if not IS_MAC:
+        return None
+    if _libproc is None:
+        try:
+            lib = ctypes.CDLL("/usr/lib/libproc.dylib")
+            lib.proc_pid_rusage.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.POINTER(_RusageInfoV2)]
+            lib.proc_pid_rusage.restype = ctypes.c_int
+            _libproc = lib
+        except (OSError, AttributeError):
+            _libproc = False
+    if not _libproc:
+        return None
+    info = _RusageInfoV2()
+    if _libproc.proc_pid_rusage(pid, 2, ctypes.byref(info)) != 0:   # 2 = RUSAGE_INFO_V2
+        return None
+    return int(info.ri_phys_footprint // 1024)
+
+
 def list_processes() -> list:
-    """All processes, via ps. Two calls because comm can contain spaces."""
+    """All processes, via ps (two calls because comm can contain spaces); memory from libproc."""
     comm_out = subprocess.run(ps_command("pid=,comm="), capture_output=True, text=True).stdout
     main_out = subprocess.run(ps_command(PS_MAIN_COLS), capture_output=True, text=True).stdout
-    return parse_ps(comm_out, main_out)
+    procs = parse_ps(comm_out, main_out)
+    for p in procs:
+        fp = phys_footprint_kb(p.pid)
+        if fp:
+            p.rss_kb = fp
+    return procs
 
 
 def parse_ps(comm_out: str, main_out: str) -> list:
@@ -479,7 +526,9 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
         while root.ppid in by_pid and root.pid not in browser_main_class and hops < 6:
             root = by_pid[root.ppid]
             hops += 1
-        is_renderer = any(mark in p.comm for mark in rn)
+        # --type=renderer is the stable signal: Chrome 157 renamed its helpers to
+        # "Google Chrome Helper (Aperitif Renderer)", which the name marker alone misses
+        is_renderer = p.chrome_type == "renderer" or any(mark in p.comm for mark in rn)
         if root.pid in browser_main_class:
             p.cls = browser_main_class[root.pid]
             label = root.app or root.name
@@ -531,7 +580,9 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
             if anc.is_gui and anc.app in ai_apps:
                 owner = anc.app
                 break
-        if owner and not p.is_gui:
+        # a bundle an AI app spawned from inside the home folder (~/.codex/computer-use/
+        # "Codex Computer Use.app") is a service of that app, not an app of its own
+        if owner and (not p.is_gui or not p.comm.startswith(("/Applications/", "/System/"))):
             p.cls = "mcp_server"
             p.key = f"{owner} helpers (MCP servers)"
             continue
@@ -1552,8 +1603,12 @@ def doctor(cfg: dict, script: Path):
         sw = parse_mac_sample(raw, {})
         print(f"{ok(sw.get('swap_total_mb') is not None)} vm.swapusage parsed: {raw['swap'][:60] or '(empty)'}")
         print(f"{ok(sw.get('compressed_mb') is not None)} vm_stat compressor parsed: {sw.get('compressed_mb')}MB")
-        print(f"{ok('CPU_Speed_Limit' in raw['therm'])} pmset -g therm: "
-              f"{'CPU_Speed_Limit=' + str(sw.get('cpu_speed_limit')) if 'CPU_Speed_Limit' in raw['therm'] else 'no CPU_Speed_Limit line (assuming 100)'}")
+        has_limit = "CPU_Speed_Limit" in raw["therm"]
+        print(f"{ok(has_limit or 'No thermal warning' in raw['therm'])} pmset -g therm: "
+              f"{'CPU_Speed_Limit=' + str(sw.get('cpu_speed_limit')) if has_limit else 'no CPU_Speed_Limit line (normal on Apple silicon; assuming 100)'}")
+        fp = phys_footprint_kb(os.getpid())
+        print(f"{ok(fp)} per-process memory: "
+              f"{'physical footprint via libproc (what Activity Monitor shows)' if fp else 'ps RSS only (reads low under pressure)'}")
         loaded = LABEL in sh(["launchctl", "list"])
         print(f"{ok(loaded)} launchd agent {LABEL} {'loaded' if loaded else 'not loaded (run: install)'}")
         if PLIST_PATH.exists():
