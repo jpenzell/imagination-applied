@@ -16,8 +16,8 @@ It also keeps a diary (events.jsonl, samples.tsv) and can hand that diary to
 Claude Code or Codex ("guardian ask") for a diagnosis in plain English plus a
 suggested config change you review before it is applied.
 
-Subcommands:  status  watch  ask  report  chrome  doctor  install  uninstall
-              pause  resume  config  test-notify
+Subcommands:  status  watch  ask  report  chrome  scratch  disk  refresh  archive
+              autopilot  doctor  install  uninstall  pause  resume  config  test-notify
 
 Prior art this borrows from, with thanks:
   TomGranot/mac-memory-guard   kernel pressure level as the only trigger
@@ -132,6 +132,22 @@ DEFAULT_CONFIG = {
         "reopen": True,
         "quit_timeout_seconds": 45,
         "settle_seconds": 75,
+    },
+    # Archive: work folders that no file change and no agent thread has touched for N days
+    # can move to an external drive. Always asked, never automatic, and nothing is removed
+    # until its copy has been read back from the drive and matches. Only the children of
+    # the listed roots are ever offered.
+    "archive": {
+        "roots": ["Documents/Codex"],
+        "session_dirs": [".codex/sessions", ".claude/projects"],
+        "min_age_days": 30,
+        "min_folder_mb": 50,
+        "destination": "",
+        "offer": True,
+        "offer_below_gb": 40,
+        "offer_min_gb": 2,
+        "snooze_days": 3,
+        "scan_hours": 12,
     },
     "autopilot": False,
     "hygiene": {"hour": 4, "safe_tier_when_reclaimable_gb": 5, "safe_tier_when_disk_below_x_ram": 2},
@@ -1650,7 +1666,10 @@ def disk_trend(hours: float):
 
 
 def big_items(folders: list, top: int = 12) -> list:
-    """The biggest top-level items in the given folders: (mb, modified date, path). Read-only."""
+    """The biggest top-level items in the given folders: (mb, date of the newest change anywhere
+    inside, path). Read-only. (A folder's own date only moves when something is added or removed
+    directly in it: the first real Mac's 22 GB folder read 'September' with work from last week.)"""
+    import archive
     import scratch
     out = []
     for folder in folders:
@@ -1660,8 +1679,15 @@ def big_items(folders: list, top: int = 12) -> list:
             continue
         for e in entries:
             try:
-                kb = scratch.du_kb(e) if e.is_dir() and not e.is_symlink() else e.lstat().st_size // 1024
-                out.append((kb // 1024, datetime.fromtimestamp(e.lstat().st_mtime).strftime("%Y-%m-%d"), str(e)))
+                if e.is_dir() and not e.is_symlink():
+                    try:
+                        st = archive.tree_stat(e)
+                        mb, when = st["disk"] // 1048576, st["newest"]
+                    except OSError:               # part of it is unreadable: size from du, folder's own date
+                        mb, when = scratch.du_kb(e) // 1024, e.lstat().st_mtime
+                else:
+                    mb, when = e.lstat().st_size // 1048576, e.lstat().st_mtime
+                out.append((mb, datetime.fromtimestamp(when).strftime("%Y-%m-%d"), str(e)))
             except OSError:
                 continue
     return sorted(out, reverse=True)[:top]
@@ -1727,6 +1753,296 @@ def disk_cmd(cfg: dict, args):
             for mb, name in sorted(outside, reverse=True):
                 print(f"    {mb / 1024:6.1f} GB  {name}")
     print("More: disk --snapshot (measure now)   disk --big (biggest items in your folders)   disk --big --in FOLDER")
+    print("Old work folders can move to an external drive, checked before anything is removed: guardian.py archive")
+
+
+# --------------------------------------------------------------------------
+# Archive: old work folders move to an external drive, when you say so
+# --------------------------------------------------------------------------
+
+ARCHIVE_BUTTONS = ["Not now", "Show me", "Move them"]
+
+
+def archive_manifest() -> Path:
+    return LOG_DIR / "archive.jsonl"
+
+
+def archive_plan(cfg: dict, days=None, to=None, only=None, roots=None) -> dict:
+    """What could move and where to. Read-only: one walk of each root."""
+    import archive
+    acfg = cfg["archive"]
+    days = acfg["min_age_days"] if days is None else days
+    rows = archive.read_manifest(archive_manifest())
+    found = archive.scan(roots or acfg["roots"], days, acfg["min_folder_mb"], session_dirs=acfg["session_dirs"],
+                         restored=archive.restored_at(rows))
+    move = [c for c in found if not c["keep"] and (not only or c["name"] in only)]
+    vol, why = archive.pick_destination(archive.volumes(), to or acfg.get("destination") or "",
+                                        sum(c["logical_mb"] for c in move))
+    return {"days": days, "move": move, "keep": [c for c in found if c["keep"]], "volume": vol, "why": why,
+            "mb": sum(c["mb"] for c in move)}
+
+
+def archive_lines(plan: dict) -> list:
+    """The plan as plain lines: for the command line and for the dialog's 'Show me'."""
+    short = lambda p: p.replace(str(HOME), "~")
+    out = []
+    if plan["move"]:
+        out.append(f"Not used for {plan['days']}+ days (no file changed, no Codex or Claude Code thread worked there):")
+        for c in plan["move"]:
+            out.append(f"  {c['mb'] / 1024:7.2f} GB  unused {c['age_days']:4d} days  {short(c['path'])}")
+        out.append(f"  Total {plan['mb'] / 1024:.1f} GB in {len(plan['move'])} folders.")
+    else:
+        out.append(f"No work folder has been unused for {plan['days']}+ days.")
+    if plan["keep"]:
+        out.append(f"Staying on this Mac ({len(plan['keep'])}):")
+        for c in plan["keep"][:10]:
+            out.append(f"  {c['mb'] / 1024:7.2f} GB  {c['name']}: {c['keep']}")
+        if len(plan["keep"]) > 10:
+            out.append(f"  ... and {len(plan['keep']) - 10} smaller ones")
+    vol = plan["volume"]
+    if vol:
+        import archive
+        where = sorted({str(archive.dest_dir(vol, c["root"])) for c in plan["move"]})
+        out.append(f"Destination: {vol['name']} ({vol['free_mb'] / 1024:.0f} GB free)"
+                   + (": " + ", ".join(where) if where else ""))
+    else:
+        out.append(f"Destination: none ({plan['why']})")
+    return out
+
+
+def archive_text(plan: dict, free_gb) -> str:
+    move, n = plan["move"], len(plan["move"])
+    roots = ", ".join(sorted({Path(c["root"]).name for c in move}))
+    free = f"This Mac has {free_gb:.0f} GB free. " if free_gb is not None else ""
+    return (f"{free}{n} folder{'s' if n != 1 else ''} in {roots} {'have' if n != 1 else 'has'} not been used "
+            f"for {plan['days']}+ days and take{'' if n != 1 else 's'} {plan['mb'] / 1024:.1f} GB (the biggest is "
+            f"{move[0]['name']}, {move[0]['mb'] / 1024:.1f} GB). Move {'them' if n != 1 else 'it'} to "
+            f"{plan['volume']['name']}? Each folder is copied, the copy is checked byte for byte, and only "
+            "then is it removed here. Any folder can be brought back later.")
+
+
+def archive_run(cfg: dict, plan: dict, announce: bool = False, out=print) -> dict:
+    """Move every folder in the plan, one at a time. Only one run at a time (a lock file)."""
+    import archive
+    import fcntl
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    lock = open(LOG_DIR / "archive.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock.close()
+        out("another archive run is in progress")
+        return {"moved": [], "kept": [], "busy": True}
+    vol = plan["volume"]
+    free0 = sample_system().get("disk_free_gb")
+    log_event("archive", phase="started", folders=len(plan["move"]), mb=plan["mb"], volume=vol["name"])
+    hint = f"python3 {Path(__file__).resolve()} archive --restore"
+    moved, kept = [], []
+    try:
+        for c in plan["move"]:
+            out(f"  {c['name']}: copying {c['mb'] / 1024:.1f} GB to {vol['name']} and checking the copy ...")
+            r = archive.archive_one(c, archive.dest_dir(vol, c["root"]), manifest=archive_manifest(),
+                                    restore_hint=hint)
+            log_event("archive", phase="moved" if r["ok"] else "kept", name=r["name"], mb=r["mb"], why=r["why"],
+                      archive=r.get("archive"), seconds=r.get("seconds"))
+            (moved if r["ok"] else kept).append(r)
+            out(f"    moved in {r['seconds']:.0f}s" + (f" ({r['why']})" if r["why"] else "") if r["ok"]
+                else f"    left where it was: {r['why']}")
+            if not r["ok"] and not os.path.ismount(vol["path"]):
+                out(f"  {vol['name']} is no longer connected; stopping")
+                break
+    finally:
+        lock.close()
+    free1 = sample_system().get("disk_free_gb")
+    mb = sum(r["mb"] for r in moved)
+    if moved:
+        text = (f"Moved {len(moved)} folder{'s' if len(moved) != 1 else ''} ({mb / 1024:.1f} GB) to {vol['name']}; "
+                f"each copy was checked before the folder was removed. This Mac now has {free1} GB free.")
+    else:
+        text = "No folder was moved."
+    if kept:
+        text += f" {len(kept)} stayed: " + "; ".join(f"{r['name']} ({r['why']})" for r in kept[:3]) + "."
+    if moved:
+        text += " Bring one back: guardian.py archive --restore NAME."
+    log_event("archive", phase="done", moved=len(moved), mb=mb, kept=[[r["name"], r["why"]] for r in kept],
+              volume=vol["name"], free_before=free0, free_after=free1, text=text)
+    if announce:
+        notify("Guardian", text, cfg)
+    return {"moved": moved, "kept": kept, "text": text}
+
+
+class ArchiveOps:
+    """What the archive offer does to the machine, in one place so tests can substitute it."""
+
+    def volumes(self) -> list:
+        import archive
+        return archive.volumes()
+
+    def plan(self, cfg: dict) -> dict:
+        return archive_plan(cfg)
+
+    def user_idle(self):
+        return MacAppOps().user_idle()
+
+    def ask(self, text: str, buttons: list, default: str) -> str:
+        return ask_dialog(text, buttons, default, timeout=300)
+
+    def show(self, plan: dict):
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        path = LOG_DIR / "archive-plan.txt"
+        path.write_text("\n".join(
+            [f"Guardian, {datetime.now():%Y-%m-%d %H:%M}: what could move to an external drive", ""]
+            + archive_lines(plan) + ["", "Nothing has been copied or removed. Guardian will ask again shortly.",
+                                     f"Or do it yourself: python3 {Path(__file__).resolve()} archive --yes"]) + "\n")
+        subprocess.run(["open", "-t", str(path)], capture_output=True, text=True, timeout=30)
+
+    def start(self, cfg: dict):
+        """The copy runs in its own low-priority process: it can take half an hour, and the
+        worker slot must stay free for everything else."""
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        cmd = [sys.executable, str(Path(__file__).resolve()), "archive", "--yes", "--announce"]
+        if shutil.which("nice"):
+            cmd = ["nice", "-n", "10"] + cmd
+        return subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=open(LOG_DIR / "archive.out.log", "ab"),
+                                stderr=subprocess.STDOUT)
+
+
+def archive_ask(cfg: dict, st: dict, plan: dict, free_gb, ops=None) -> dict:
+    """Ask the owner. The safe answer is the default button, so a stray Return moves nothing."""
+    ops = ops or ArchiveOps()
+    log_event("archive", phase="asked", folders=len(plan["move"]), mb=plan["mb"], volume=plan["volume"]["name"])
+    answer = ops.ask(archive_text(plan, free_gb), ARCHIVE_BUTTONS, "Not now")
+    if answer == "Move them":
+        st["scan"] = None
+        st["proc"] = ops.start(cfg)
+        return log_event("archive", phase="accepted", folders=len(plan["move"]), mb=plan["mb"])
+    if answer == "Show me":
+        ops.show(plan)
+    minutes = {"Show me": 10, "Not now": cfg["archive"]["snooze_days"] * 1440}.get(answer, 120)
+    st["snooze_until"] = time.time() + minutes * 60
+    return log_event("archive", phase={"Show me": "shown", "Not now": "declined"}.get(answer, "unanswered"),
+                     snooze_minutes=minutes)
+
+
+def archive_state_from_events(days: float = 14) -> dict:
+    """Rebuild the snooze after a restart, so a restart never re-asks at once."""
+    st = {"snooze_until": 0.0, "next_check": 0.0, "scan": None, "proc": None}
+    for e in read_events(days * 24):
+        if e.get("kind") != "archive":
+            continue
+        ts = datetime.fromisoformat(e["ts"]).timestamp()
+        if e.get("phase") in ("declined", "unanswered", "shown"):
+            st["snooze_until"] = max(st["snooze_until"], ts + e.get("snooze_minutes", 120) * 60)
+        elif e.get("phase") in ("accepted", "done"):
+            st["snooze_until"] = max(st["snooze_until"], ts + 6 * 3600)
+    return st
+
+
+def archive_tick(cfg: dict, snap: dict, st: dict, background, now: float, ops=None, dry_run: bool = False):
+    """Called once per sample. Offers only when the disk is tight, an external drive is
+    connected, enough would move to matter, and you are at the keyboard to answer.
+    Returns 'scan' or 'ask' when it started a job, else None."""
+    acfg = cfg.get("archive") or {}
+    proc = st.get("proc")
+    if proc is not None:
+        if proc.poll() is None:
+            return None                              # a move is running
+        st["proc"], st["scan"] = None, None
+        st["snooze_until"] = max(st.get("snooze_until", 0.0), now + 6 * 3600)
+    if not acfg.get("offer") or cfg["mode"] == "observe" or snap.get("quiet") or dry_run \
+            or background is None or background.busy():
+        return None
+    free = snap["sample"].get("disk_free_gb")
+    if free is None or free >= acfg["offer_below_gb"] or now < st.get("snooze_until", 0.0) \
+            or now < st.get("next_check", 0.0):
+        return None
+    st["next_check"] = now + 300
+    ops = ops or ArchiveOps()
+    names = {v["name"] for v in ops.volumes()}
+    if not names:
+        return None
+    scan = st.get("scan")
+    if scan is None or now - scan["ts"] > acfg["scan_hours"] * 3600 or \
+            (scan["plan"]["volume"] and scan["plan"]["volume"]["name"] not in names):
+        def scan_job():
+            plan = ops.plan(cfg)
+            st["scan"] = {"ts": time.time(), "plan": plan}
+            st["next_check"] = 0.0
+            log_event("archive", phase="scan", folders=len(plan["move"]), mb=plan["mb"],
+                      volume=plan["volume"]["name"] if plan["volume"] else None, why=plan["why"])
+        return "scan" if background.submit("archive-scan", scan_job) else None
+    plan = scan["plan"]
+    if plan["volume"] is None or plan["mb"] < acfg["offer_min_gb"] * 1024:
+        return None                                  # not worth a dialog; the next scan may differ
+    idle = ops.user_idle()
+    if idle is not None and idle > 120:
+        return None                                  # ask when you are there to answer
+    return "ask" if background.submit("archive-ask", lambda: archive_ask(cfg, st, plan, free, ops)) else None
+
+
+def archive_cmd(cfg: dict, args):
+    import archive
+    manifest = archive_manifest()
+    if args.offer:
+        apply_config_change({"archive": {"offer": args.offer == "on"}}, f"archive offer {args.offer}")
+        print(f"offer {args.offer}: guardian " + ("asks when the disk is tight and a drive is connected"
+                                                 if args.offer == "on" else "will not ask; `guardian.py archive` still works"))
+        return
+    rows = archive.read_manifest(manifest)
+    if args.list:
+        there = archive.on_drive(rows)
+        if not there:
+            print("Nothing has been moved to a drive.")
+            return
+        print("Moved to an external drive (bring one back: guardian.py archive --restore NAME):")
+        for r in there:
+            here = "connected" if Path(r["archive"]).exists() else "drive not connected"
+            print(f"  {r['ts'][:10]}  {r['mb'] / 1024:6.1f} GB  {r['name']:22} {r['archive']}  ({here})")
+        return
+    if args.restore:
+        want = str(Path(args.restore).expanduser())
+        found = [r for r in archive.on_drive(rows) if args.restore == r["name"] or want == r["source"]]
+        if not found:
+            print(f"nothing called {args.restore} is on a drive; see: guardian.py archive --list")
+            return
+        row = found[-1]
+        print(f"bringing back {row['name']} ({row['mb'] / 1024:.1f} GB) from {row['archive']} ...", flush=True)
+        r = archive.restore(row, manifest=manifest)
+        log_event("archive", phase="restored" if r["ok"] else "restore-failed", name=row["name"], mb=row["mb"],
+                  why=r["why"])
+        print(f"  back at {r['source']} (the drive keeps its copy)" if r["ok"] else f"  not restored: {r['why']}")
+        return
+    if not args.announce:
+        print("measuring (up to a minute)...", flush=True)
+    roots = None
+    if args.root:
+        roots = [str(Path(r).expanduser().resolve()) for r in args.root]
+        for r in roots:
+            why = archive.root_problem(Path(r))
+            if why:
+                print(f"{r}: {why}")
+                return
+    plan = archive_plan(cfg, days=args.older_than, to=args.to, only=args.only, roots=roots)
+    for line in archive_lines(plan):
+        print(line)
+    if not args.yes:
+        print("Dry run: nothing was copied or removed. Do it: guardian.py archive --yes")
+        print("Choose: --only NAME ...   --older-than DAYS   --to DRIVE   --root FOLDER (look inside another folder)")
+        return
+    if not plan["move"]:
+        return
+    if plan["volume"] is None:
+        print(f"Nothing moved: {plan['why']}.")
+        if args.announce:
+            notify("Guardian", f"No folder was moved: {plan['why']}.", cfg)
+        return
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+    res = archive_run(cfg, plan, announce=args.announce, out=lambda t: print(t, flush=True))
+    if res.get("text"):
+        print(res["text"])
 
 
 # --------------------------------------------------------------------------
@@ -1822,6 +2138,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     last_digest_day = None
     ai = {"day": None, "runs": 0, "retry_after": 0.0, "fail_notified": None}
     refresh_state = refresh_state_from_events()
+    archive_state = archive_state_from_events()
     disk_hist = deque(maxlen=400)
     ledger = read_ledger(1)
     last_ledger = datetime.fromisoformat(ledger[-1]["ts"]).timestamp() if ledger else 0.0
@@ -1865,6 +2182,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 break
             if not simulate:
                 refresh_tick(cfg, snap, refresh_state, background, time.time(), dry_run=dry_run)
+                archive_tick(cfg, snap, archive_state, background, time.time(), dry_run=dry_run)
                 # ---- disk: ledger, fast-drop alert, caches of an app that just quit
                 dcfg, t_now = cfg["disk"], time.time()
                 free_gb = snap["sample"].get("disk_free_gb")
@@ -2003,6 +2321,13 @@ def render_report(hours: float) -> str:
         for e in refreshes[-10:]:
             lines.append(f"- {e['ts']}: {e.get('app')}: {e.get('phase')}"
                          + (f": {e['result']}" if e.get("result") else ""))
+        lines.append("")
+    moves = [e for e in read_events(hours) if e.get("kind") == "archive"
+             and e.get("phase") in ("done", "restored", "declined")]
+    if moves:
+        lines.append("## Archive (old work folders moved to an external drive)")
+        for e in moves[-10:]:
+            lines.append(f"- {e['ts']}: " + (e.get("text") or f"{e['phase']}" + (f" {e['name']}" if e.get("name") else "")))
         lines.append("")
     lines.append("## Actions")
     for e in s["actions"][-20:]:
@@ -2415,6 +2740,14 @@ def doctor(cfg: dict, script: Path):
         if li:
             items = [x.strip() for x in li.split(",") if x.strip()]
             print(f"   login items ({len(items)}): {', '.join(items)[:200]}")
+    import archive
+    acfg = cfg["archive"]
+    good = [r for r in acfg["roots"] if not archive.root_problem(archive.resolve_root(r))]
+    vols = archive.volumes()
+    print(f"{ok(good and vols)} archive: {len(good)} of {len(acfg['roots'])} roots usable ({', '.join(acfg['roots'])}); drive "
+          + (", ".join(f"{v['name']} ({v['free_mb'] / 1024:.0f} GB free)" for v in vols) or "none connected")
+          + f"; offer {'on' if acfg['offer'] else 'off'}; "
+          f"{len(archive.on_drive(archive.read_manifest(archive_manifest())))} folders on a drive")
     led = read_ledger(1)
     print(f"{ok(led)} disk ledger: {'last snapshot ' + led[-1]['ts'] if led else 'no snapshot yet (the agent takes one after start, then every ' + str(cfg['disk']['ledger_hours']) + 'h)'}")
     ev = read_events(24)
@@ -2469,6 +2802,9 @@ AUTOPILOT_TEXT = """Autopilot is ON. Always running (launchd restarts it if it d
     grew, and clears an app's caches when it quits while the disk is tight. See: guardian.py disk
   - when an AI app listed under `refresh` (ChatGPT by default) is bloated and its agent idle,
     asks whether to refresh it: quit cleanly, clear its caches, reopen. See: guardian.py refresh
+  - when the disk is tight and an external drive is connected, asks whether to move work
+    folders nobody has used for a month to it (copy, check the copy, then remove here). It
+    never does this unasked. See: guardian.py archive
 What it never does: close an app you can see without your say-so, interrupt a running agent
 task, delete your transcripts, sessions, downloads or anything outside rebuildable caches,
 or act while paused.
@@ -2566,6 +2902,17 @@ def main(argv=None):
     p.add_argument("--big", nargs="?", type=int, const=15, default=None, metavar="N",
                    help="list the N biggest items in Downloads, Documents and Desktop")
     p.add_argument("--in", dest="inside", metavar="FOLDER", help="with --big: look inside this folder instead")
+    p = sub.add_parser("archive", help="move work folders unused for a month to an external drive (no flags: dry run)")
+    p.add_argument("--yes", action="store_true", help="copy, check each copy, then remove the folders here")
+    p.add_argument("--older-than", type=int, metavar="DAYS", help="unused for at least this many days (default 30)")
+    p.add_argument("--to", metavar="DRIVE", help="drive name, or a folder on it (default: the drive with most room)")
+    p.add_argument("--only", nargs="+", metavar="NAME", help="just these folders")
+    p.add_argument("--root", nargs="+", metavar="FOLDER",
+                   help="for this run, offer the folders inside FOLDER instead of the configured roots")
+    p.add_argument("--list", action="store_true", help="what is on a drive now")
+    p.add_argument("--restore", metavar="NAME", help="bring one folder back (the drive keeps its copy)")
+    p.add_argument("--offer", choices=["on", "off"], help="whether guardian asks on its own")
+    p.add_argument("--announce", action="store_true", help=argparse.SUPPRESS)
     sub.add_parser("doctor", help="check the install")
     sub.add_parser("install", help="install the launchd agent (starts at login)")
     sub.add_parser("uninstall", help="remove the launchd agent")
@@ -2608,6 +2955,8 @@ def main(argv=None):
         refresh_cmd(cfg, args)
     elif args.cmd == "disk":
         disk_cmd(cfg, args)
+    elif args.cmd == "archive":
+        archive_cmd(cfg, args)
     elif args.cmd == "doctor":
         doctor(cfg, script)
     elif args.cmd == "install":

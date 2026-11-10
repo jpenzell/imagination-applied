@@ -981,6 +981,245 @@ class DiskTests(unittest.TestCase):
         self.assertTrue((d / "course-build" / "video.mp4").exists())
 
 
+class FakeProc:
+    def __init__(self):
+        self.code = None
+
+    def poll(self):
+        return self.code
+
+
+class FakeArchiveOps:
+    """Stands in for the drive, the folders, the dialog and the copy process."""
+
+    def __init__(self, answer="Not now", idle=10.0, gb=5.0, drive="My Passport"):
+        self.answer, self.idle, self.drive = answer, idle, drive
+        vol = {"name": drive, "path": f"/Volumes/{drive}", "base": f"/Volumes/{drive}", "free_mb": 3_000_000}
+        cands = [{"root": "/Users/j/Documents/Codex", "name": "2026-10-03", "path": "/Users/j/Documents/Codex/2026-10-03",
+                  "mb": int(gb * 1024 * 0.6), "logical_mb": 3000, "age_days": 37, "keep": ""},
+                 {"root": "/Users/j/Documents/Codex", "name": "2026-09-17", "path": "/Users/j/Documents/Codex/2026-09-17",
+                  "mb": int(gb * 1024 * 0.4), "logical_mb": 2000, "age_days": 37, "keep": ""}]
+        self.the_plan = {"days": 30, "move": cands, "keep": [], "volume": vol if drive else None,
+                         "why": "" if drive else "no external drive is connected", "mb": sum(c["mb"] for c in cands)}
+        self.calls, self.proc = [], FakeProc()
+
+    def volumes(self):
+        self.calls.append(("volumes",))
+        return [self.the_plan["volume"]] if self.drive else []
+
+    def plan(self, cfg):
+        self.calls.append(("plan",))
+        return self.the_plan
+
+    def user_idle(self):
+        return self.idle
+
+    def ask(self, text, buttons, default):
+        self.calls.append(("ask", text, buttons, default))
+        return self.answer
+
+    def show(self, plan):
+        self.calls.append(("show",))
+
+    def start(self, cfg):
+        self.calls.append(("start",))
+        return self.proc
+
+
+class ArchiveTests(unittest.TestCase):
+    """Old work folders move to an external drive: only when asked, only after the copy checks
+    out. The copying itself is tested in test_archive.py; this is the asking and the telling."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.saved = (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH, g.sample_system)
+        g.CONFIG_DIR = self.tmp / "cfg"
+        g.CONFIG_PATH = g.CONFIG_DIR / "config.json"
+        g.CONFIG_HISTORY = g.CONFIG_DIR / "config-history.jsonl"
+        g.LOG_DIR = self.tmp / "logs"
+        g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
+        g.sample_system = lambda: {"disk_free_gb": 24.9}
+        self.cfg = g.load_config(g.Path("/nonexistent"))
+        self.cfg["notify"] = False
+
+    def tearDown(self):
+        g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH, g.sample_system = self.saved
+
+    def tick(self, ops, st, cfg=None, free=19.0, quiet="", bg=False):
+        bg = g.Background() if bg is False else bg
+        snap = {"sample": sample(level=2, free=20, disk=free), "quiet": quiet, "groups": []}
+        out = g.archive_tick(cfg or self.cfg, snap, st, bg, g.time.time(), ops=ops)
+        if bg is not None and bg.thread:
+            bg.thread.join(5)
+        return out
+
+    def phases(self):
+        return [e["phase"] for e in g.read_events(1) if e["kind"] == "archive"]
+
+    def test_defaults_ask_first_and_are_never_self_tuned(self):
+        a = self.cfg["archive"]
+        self.assertEqual((a["roots"], a["offer"], a["min_age_days"]), (["Documents/Codex"], True, 30))
+        auto, review = g.split_tuning({"archive": {"min_age_days": 1, "roots": ["Documents"], "offer_below_gb": 500}})
+        self.assertEqual(auto, {}, "a diagnosis cannot widen what may leave this Mac")
+        self.assertEqual(set(review["archive"]), {"min_age_days", "roots", "offer_below_gb"})
+
+    def test_measures_first_then_asks_and_a_no_is_remembered(self):
+        ops, st = FakeArchiveOps(answer="Not now"), {}
+        self.assertEqual(self.tick(ops, st), "scan")
+        self.assertEqual([c[0] for c in ops.calls], ["volumes", "plan"])
+        self.assertEqual(self.tick(ops, st), "ask")
+        _, text, buttons, default = ops.calls[-1]
+        self.assertEqual((buttons, default), (["Not now", "Show me", "Move them"], "Not now"),
+                         "a stray Return must move nothing")
+        self.assertIn("This Mac has 19 GB free. 2 folders in Codex have not been used for 30+ days and take 5.0 GB", text)
+        self.assertIn("Move them to My Passport?", text)
+        self.assertAlmostEqual(st["snooze_until"], g.time.time() + 3 * 86400, delta=5)
+        self.assertIsNone(self.tick(ops, st))
+        self.assertEqual(self.phases(), ["scan", "asked", "declined"])
+        self.assertNotIn(("start",), ops.calls)
+        # a restart does not ask again
+        self.assertAlmostEqual(g.archive_state_from_events()["snooze_until"], st["snooze_until"], delta=5)
+
+    def test_does_not_ask_when_it_would_be_pointless_or_rude(self):
+        def never(why, ops=None, **kw):
+            ops, st = ops or FakeArchiveOps(), {}
+            first = self.tick(ops, st, **kw)
+            st["next_check"] = 0.0
+            self.assertIsNone(self.tick(ops, st, **kw) if first == "scan" else first, why)
+            self.assertNotIn("ask", [c[0] for c in ops.calls], why)
+        never("the disk has room", free=60.0)
+        never("no drive is connected", ops=FakeArchiveOps(drive=""))
+        never("you are away from the keyboard", ops=FakeArchiveOps(idle=900.0))
+        never("too little to be worth a dialog", ops=FakeArchiveOps(gb=1.0))
+        never("presenting", quiet="Keynote")
+        never("observe mode", cfg=dict(self.cfg, mode="observe"))
+        never("watch --once", bg=None)
+        off = g.json.loads(g.json.dumps(self.cfg))
+        off["archive"]["offer"] = False
+        never("switched off", cfg=off)
+        busy = g.Background()
+        gate = g.threading.Event()
+        busy.submit("census", gate.wait)
+        try:
+            self.assertIsNone(g.archive_tick(self.cfg, {"sample": sample(disk=19.0), "quiet": ""}, {}, busy,
+                                             g.time.time(), ops=FakeArchiveOps()), "the worker is busy")
+        finally:
+            gate.set()
+
+    def test_a_yes_starts_one_run_and_nothing_is_asked_while_it_runs(self):
+        ops, st = FakeArchiveOps(answer="Move them"), {}
+        self.tick(ops, st)
+        self.assertEqual(self.tick(ops, st), "ask")
+        self.assertEqual([c[0] for c in ops.calls].count("start"), 1)
+        self.assertIs(st["proc"], ops.proc)
+        calls = len(ops.calls)
+        st["next_check"] = 0.0
+        self.assertIsNone(self.tick(ops, st), "the copy is running")
+        self.assertEqual(len(ops.calls), calls, "not even a look at the drive")
+        ops.proc.code = 0
+        self.assertIsNone(self.tick(ops, st))
+        self.assertIsNone(st["proc"])
+        self.assertAlmostEqual(st["snooze_until"], g.time.time() + 6 * 3600, delta=5)
+        self.assertEqual(self.phases(), ["scan", "asked", "accepted"])
+
+    def test_show_me_opens_the_list_and_asks_again_soon(self):
+        ops, st = FakeArchiveOps(answer="Show me"), {}
+        self.tick(ops, st)
+        self.tick(ops, st)
+        self.assertIn(("show",), ops.calls)
+        self.assertNotIn(("start",), ops.calls)
+        self.assertAlmostEqual(st["snooze_until"], g.time.time() + 600, delta=5)
+        silent, st2 = FakeArchiveOps(answer=""), {}
+        self.tick(silent, st2)
+        self.tick(silent, st2)
+        self.assertAlmostEqual(st2["snooze_until"], g.time.time() + 7200, delta=5, msg="nobody answered")
+
+    def test_a_drive_swap_means_measuring_again(self):
+        ops, st = FakeArchiveOps(), {}
+        self.tick(ops, st)
+        ops.drive = "Other Drive"
+        ops.the_plan["volume"] = dict(ops.the_plan["volume"], name="Other Drive")
+        st["scan"]["plan"] = dict(st["scan"]["plan"], volume={"name": "My Passport"})
+        self.assertEqual(self.tick(ops, st), "scan", "the plan named a drive that is gone")
+
+    def test_the_plan_reads_plainly(self):
+        plan = FakeArchiveOps().the_plan
+        plan["keep"] = [{"name": "2026-09-23", "mb": 23200, "keep": "changed 14 days ago"}]
+        lines = g.archive_lines(plan)
+        self.assertIn("Not used for 30+ days", lines[0])
+        self.assertIn("Total 5.0 GB in 2 folders.", lines[3])
+        self.assertIn("2026-09-23: changed 14 days ago", lines[5])
+        self.assertIn("Destination: My Passport (2930 GB free)", lines[-1])
+        one = dict(plan, move=plan["move"][:1], mb=plan["move"][0]["mb"])
+        self.assertIn("1 folder in Codex has not been used for 30+ days and takes 3.0 GB", g.archive_text(one, 19.2))
+        self.assertIn("Move it to My Passport?", g.archive_text(one, None))
+        nowhere = dict(plan, volume=None, why="no external drive is connected")
+        self.assertEqual(g.archive_lines(nowhere)[-1], "Destination: none (no external drive is connected)")
+
+    def test_a_run_moves_reports_and_can_be_undone(self):
+        import archive
+        home, drive = self.tmp / "home", self.tmp / "drive"
+        src = home / "Documents" / "Codex" / "2026-09-17"
+        (src / "work").mkdir(parents=True)
+        (src / "work" / "data.bin").write_bytes(b"d" * 500_000)
+        blocked = home / "Documents" / "Codex" / "2026-09-18"
+        blocked.mkdir()
+        (blocked / "x").write_bytes(b"x")
+        drive.mkdir()
+        vol = {"name": "Drive", "path": str(drive), "base": str(drive), "free_mb": 9_000_000}
+        cand = lambda p, **kw: dict({"root": str(p.parent), "name": p.name, "path": str(p), "mb": 1,
+                                     "logical_mb": 1, "age_days": 40, "keep": ""}, **kw)
+        plan = {"days": 30, "volume": vol, "why": "", "mb": 2, "keep": [],
+                "move": [cand(src), cand(blocked, newest=1.0)]}       # the second changed after it was measured
+        saved_home = archive.HOME
+        archive.HOME = home
+        self.addCleanup(setattr, archive, "HOME", saved_home)
+        said = []
+        res = g.archive_run(self.cfg, plan, out=said.append)
+        self.assertEqual(([r["name"] for r in res["moved"]], [r["name"] for r in res["kept"]]),
+                         (["2026-09-17"], ["2026-09-18"]))
+        self.assertFalse(src.exists())
+        self.assertTrue(blocked.exists())
+        tar = drive / "Guardian Archive" / g.HOSTNAME / "Documents" / "Codex" / "2026-09-17.tar"
+        self.assertTrue(tar.exists())
+        self.assertIn("Moved 1 folder", res["text"])
+        self.assertIn("This Mac now has 24.9 GB free", res["text"])
+        self.assertIn("1 stayed: 2026-09-18 (it changed after it was measured)", res["text"])
+        self.assertEqual(self.phases(), ["started", "moved", "kept", "done"])
+        self.assertIn("## Archive", g.render_report(1))
+        self.assertIn("Moved 1 folder", g.render_report(1))
+        # only one run at a time
+        import fcntl
+        with open(g.LOG_DIR / "archive.lock", "w") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            self.assertTrue(g.archive_run(self.cfg, plan, out=said.append).get("busy"))
+        # and back again, from the command line
+        import contextlib
+        import io
+        args = g.argparse.Namespace(offer=None, list=False, restore="2026-09-17", announce=False, yes=False,
+                                    older_than=None, to=None, only=None, root=None)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            g.archive_cmd(self.cfg, args)
+            g.archive_cmd(self.cfg, g.argparse.Namespace(**dict(vars(args), restore=None, list=True)))
+        self.assertIn("back at", buf.getvalue())
+        self.assertIn("Nothing has been moved to a drive.", buf.getvalue())
+        self.assertEqual((src / "work" / "data.bin").read_bytes(), b"d" * 500_000)
+        self.assertTrue(tar.exists(), "the drive keeps its copy")
+
+    def test_switching_the_offer_off_is_remembered(self):
+        import contextlib
+        import io
+        args = g.argparse.Namespace(offer="off", list=False, restore=None, announce=False, yes=False,
+                                    older_than=None, to=None, only=None, root=None)
+        with contextlib.redirect_stdout(io.StringIO()):
+            g.archive_cmd(self.cfg, args)
+        self.assertFalse(g.load_config(g.CONFIG_PATH)["archive"]["offer"])
+
+
 class AutopilotTests(unittest.TestCase):
     """Bounded self-tuning, config history/undo, and the hygiene schedule."""
 

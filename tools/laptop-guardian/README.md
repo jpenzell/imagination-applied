@@ -27,8 +27,9 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 73 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 82 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 16 tests |
+| `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 16 tests, plus a round trip through a real USB drive |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
@@ -39,7 +40,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py   # 89 tests, should say OK twice
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 114 tests, should say OK three times
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
 python3 guardian.py install       # launchd agent: starts at login, restarts if it dies
@@ -112,7 +113,62 @@ python3 guardian.py disk --big --in ~/Documents/Codex
   and AI apps and browsers are always running. In act mode, when one of them quits and less
   than 40 GB is free, its caches are cleared right then.
 - **Yours to decide.** Documents, Downloads, agent session histories and VM images are
-  measured and listed, never touched.
+  measured and listed, never touched. `disk --big` dates each folder by the newest change
+  anywhere inside it, not by the folder's own date. Old work folders can move to an
+  external drive: see the next section.
+
+## Archive: old work folders move to an external drive
+
+Caches are the small part. On the first real Mac the biggest thing on the disk was 41 GB of
+dated Codex work folders in `~/Documents/Codex`. That is your work, so guardian never
+deletes it. What it can do, when you say so, is move the folders nobody is using to an
+external drive and bring any of them back on request.
+
+```bash
+python3 guardian.py archive                    # dry run: what could move, what stays and why, where to
+python3 guardian.py archive --yes              # copy, check each copy, then remove the folders here
+python3 guardian.py archive --only 2026-09-17  # just these     --older-than 14    --to "My Passport"
+python3 guardian.py archive --root ~/Documents/Codex/2026-09-23/project/work   # look inside one folder
+python3 guardian.py archive --list             # what is on a drive now
+python3 guardian.py archive --restore 2026-09-17
+python3 guardian.py archive --offer off        # stop guardian asking on its own
+```
+
+- **"Unused" is measured, not guessed.** A folder qualifies when no file or folder anywhere
+  inside it has changed for 30 days *and* no Codex or Claude Code thread has worked in it in
+  that time (guardian reads the working folder from the top of each recent session log; it
+  never writes there). Both rules came from the first real Mac. Going by each folder's own
+  date, 37 GB looked a month old; a 22 GB folder dated September had build logs from two
+  weeks before, and the oldest folder of all, unchanged for two months, was the working
+  folder of a thread that had been active that morning. The honest number was 5 GB.
+- **Nothing is removed on trust.** Each folder becomes one `.tar` file on the drive, written
+  under a temporary name. Guardian then reads that file back from the drive, bypassing the
+  file cache, and compares it with the folder entry by entry and byte by byte. Only if
+  everything matches, and the folder did not change during the copy, is the file given its
+  final name, the move recorded, and the folder removed. Any doubt (a mismatch, a full or
+  unplugged drive, a file that changed, a cloud placeholder that is not really on this
+  disk) leaves the folder exactly where it was and no half copy behind.
+- **You can always find it again.** The drive gets `Guardian Archive/<this Mac>/Documents/
+  Codex/<name>.tar` with a small `.json` card beside it (date, size, checksum). The folder
+  the work came from gets one text file, `ARCHIVED-BY-GUARDIAN.txt`, listing what went where
+  and the command that brings each one back. `archive --restore` unpacks to the original
+  place, checks the result against the drive's copy, and refuses to overwrite anything or
+  to fill the disk. The drive keeps its copy; guardian never deletes from the drive.
+- **It asks; it never decides.** When less than 40 GB is free, an external drive is
+  connected, at least 2 GB would move and you are at the keyboard, guardian shows one dialog
+  with three buttons. "Not now" (the default button, so a stray Return moves nothing) means
+  no question for three days. "Show me" opens the full list as a text file and asks again
+  in ten minutes. "Move them" starts the copy as its own low-priority process; a
+  notification tells you what moved and how much is free. A diagnosis cannot change any of
+  the `archive` settings on its own.
+- **Which drives.** Mounted under `/Volumes`, local, writable, APFS / Mac OS Extended /
+  exFAT, and not another volume of the startup disk. Network shares and FAT32 are left out.
+- **Limits.** Finder tags and other extended attributes are not kept; sockets and pipes are
+  not copied. Measured on a USB hard drive: about 26 MB/s end to end (write, read back,
+  compare), so 5 GB takes a few minutes and 20 GB about a quarter of an hour. Memory use
+  stays near 20 MB whatever the folder size. Only the children of the configured roots are
+  offered (`archive.roots`, default `Documents/Codex`); `~/Library`, `~/Downloads` and every
+  dot-folder (transcripts, sessions) are refused as roots.
 
 ## Refresh when idle: getting memory back from an AI app that has grown
 
@@ -270,6 +326,9 @@ guardian.py report --hours 24      episodes, usual suspects, actions
 guardian.py ask                    Claude Code / Codex diagnoses the diary (needs `claude` or `codex` on PATH)
 guardian.py config --apply-suggestion   apply the config change `ask` proposed
 guardian.py scratch                disk census by tier; --reclaim safe|safe-old|all [--yes]
+guardian.py disk                   free space, where it went, what comes back on its own; --snapshot, --big
+guardian.py refresh [APP]          quit, clean and reopen a bloated AI app while idle; --now, --mode ask|auto|never
+guardian.py archive                old work folders to an external drive (dry run); --yes, --list, --restore NAME
 guardian.py chrome                 tab census: how many tabs, how many duplicates
 guardian.py chrome --close-duplicates   close duplicate URLs (all stay in History)
 guardian.py doctor                 check install, permissions, swap ceiling, login items
@@ -289,6 +348,9 @@ guardian.py config [--set key=value ...] [--undo]
 | `~/Library/Logs/guardian/samples.tsv` | one line per 30 s: level, free %, swap, compressor, load, disk, top 5 |
 | `~/Library/Logs/guardian/digest-YYYY-MM-DD.md` | daily report, written at 8 am (`digest_hour`) |
 | `~/Library/Logs/guardian/diagnosis-*.md` | what the AI said |
+| `~/Library/Logs/guardian/disk-ledger.jsonl` | one disk measurement per line |
+| `~/Library/Logs/guardian/archive.jsonl` | every folder moved to a drive or brought back, with where it is |
+| `<drive>/Guardian Archive/<Mac>/...` | the moved folders, one `.tar` each |
 | `~/Library/LaunchAgents/local.guardian.plist` | the agent |
 
 A gap in `samples.tsv` means guardian itself was not running.
@@ -367,7 +429,9 @@ Chrome tab census.
   framework. Guardian treats those as command-line processes, not GUI apps, so Python MCP
   servers fold under Claude and guardian itself can be reniced like any other script.
 - Under launchd, the first disk census may trigger macOS "python3 would like to access your
-  Downloads folder" prompts. Allow them once; denying only makes those rows read 0.
+  Downloads folder" prompts. Allow them once; denying only makes those rows read 0. The
+  archive offer adds one for "files on a removable volume"; denying it means the drive is
+  never seen and nothing is offered.
 
 ## Uninstall
 
