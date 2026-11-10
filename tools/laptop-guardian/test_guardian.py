@@ -4,6 +4,7 @@
 These feed synthetic macOS-style process tables through classify() and Engine
 so the decisions can be checked without a Mac, pressure, or a real kill.
 """
+import json
 import os
 import unittest
 
@@ -309,6 +310,92 @@ class ApplyTests(unittest.TestCase):
         lines = g.EVENTS_PATH.read_text().splitlines()
         self.assertEqual(len(lines), 1)
         self.assertIn('"kind": "decision"', lines[0])
+
+
+
+class AutopilotTests(unittest.TestCase):
+    """Bounded self-tuning, config history/undo, and the hygiene schedule."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = g.Path(tempfile.mkdtemp())
+        self.saved = (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH)
+        g.CONFIG_DIR = self.tmp / "cfg"
+        g.CONFIG_PATH = g.CONFIG_DIR / "config.json"
+        g.CONFIG_HISTORY = g.CONFIG_DIR / "config-history.jsonl"
+        g.LOG_DIR = self.tmp / "logs"
+        g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
+
+    def tearDown(self):
+        g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH = self.saved
+
+    def test_split_tuning_only_auto_applies_bounded_numeric_thresholds(self):
+        suggestion = {
+            "notify_cooldown_seconds": 1800,                 # tunable, in range
+            "cpu": {"sustain_seconds": 900, "renice_to": 19},  # first tunable, second not
+            "renderers": {"memory_mb": 50000, "kill_under_pressure": True},  # out of range; kill switch
+            "mode": "act",                                   # never automatic
+            "agent_sessions": {"stale_after_hours": 48},
+        }
+        auto, review = g.split_tuning(suggestion)
+        self.assertEqual(auto, {"notify_cooldown_seconds": 1800, "cpu": {"sustain_seconds": 900},
+                                "agent_sessions": {"stale_after_hours": 48}})
+        self.assertEqual(review, {"cpu": {"renice_to": 19},
+                                  "renderers": {"memory_mb": 50000, "kill_under_pressure": True},
+                                  "mode": "act"})
+
+    def test_apply_and_undo_keep_history(self):
+        g.apply_config_change({"mode": "act", "autopilot": True}, "autopilot on")
+        g.apply_config_change({"cpu": {"sustain_seconds": 900}}, "auto-tuning")
+        cfg = g.load_config(g.CONFIG_PATH)
+        self.assertEqual(cfg["mode"], "act")
+        self.assertEqual(cfg["cpu"]["sustain_seconds"], 900)
+        self.assertEqual(cfg["cpu"]["runaway_pct"], 90, "untouched keys keep defaults")
+        last = g.undo_config_change()
+        self.assertEqual(last["why"], "auto-tuning")
+        cfg = g.load_config(g.CONFIG_PATH)
+        self.assertEqual(cfg["cpu"]["sustain_seconds"], 600)
+        self.assertEqual(cfg["mode"], "act", "undo only reverts the last change")
+        self.assertIsNotNone(g.undo_config_change())
+        self.assertEqual(g.load_config(g.CONFIG_PATH)["mode"], "nudge")
+        self.assertIsNone(g.undo_config_change(), "nothing left to undo")
+        kinds = [json.loads(l)["why"] for l in g.EVENTS_PATH.read_text().splitlines()]
+        self.assertEqual(kinds, ["autopilot on", "auto-tuning", "undo", "undo"])
+
+    def test_hygiene_schedule(self):
+        cfg = g.load_config(g.Path("/nonexistent"))
+        now = g.datetime(2026, 11, 10, 4, 5)
+        up = now.timestamp() - 30
+        self.assertFalse(g.hygiene_due(now, None, cfg, up), "not in the first ten minutes after start")
+        self.assertTrue(g.hygiene_due(now, None, cfg, up - 700), "first run ~10 min after start, any hour")
+        yesterday = (now - g.timedelta(hours=24)).timestamp()
+        self.assertTrue(g.hygiene_due(now, yesterday, cfg, up - 9999), "daily at the hygiene hour")
+        self.assertFalse(g.hygiene_due(g.datetime(2026, 11, 10, 15, 0), yesterday, cfg, up - 9999), "not at other hours")
+        self.assertFalse(g.hygiene_due(now, now.timestamp() - 3600, cfg, up - 9999), "not twice in a day")
+
+    def test_run_hygiene_runs_safe_tier_only_when_worth_it(self):
+        import scratch
+        cfg = g.load_config(g.Path("/nonexistent"))
+        rows = [{"name": "Chrome caches", "tier": "safe", "mb": 7000, "app": "Google Chrome", "paths": [], "method": "clear"},
+                {"name": "Logs", "tier": "safe-old", "mb": 100, "app": None, "paths": [], "method": "older:30"}]
+        calls = []
+        saved = (scratch.census, scratch.reclaim)
+        scratch.census = lambda home=None: rows
+        scratch.reclaim = lambda tier, home=None, dry_run=True, running=frozenset(), rows=None: (
+            calls.append((tier, dry_run)) or {"freed_mb": 10, "skipped": []})
+        try:
+            sample = {"mem_total_mb": 16384, "disk_free_gb": 200}
+            h = g.run_hygiene(cfg, sample, running=set(), dry_run=True)
+            self.assertEqual([c[0] for c in calls], ["safe-old", "safe"], "7GB reclaimable: safe tier runs")
+            self.assertTrue(h["safe_tier_run"])
+            calls.clear()
+            h = g.run_hygiene(cfg, sample, running={"Google Chrome"}, dry_run=True)
+            self.assertEqual([c[0] for c in calls], ["safe-old"], "Chrome running: its caches do not count, so only old logs")
+            calls.clear()
+            g.run_hygiene(cfg, {"mem_total_mb": 16384, "disk_free_gb": 20}, running={"Google Chrome"}, dry_run=True)
+            self.assertEqual([c[0] for c in calls], ["safe-old", "safe"], "disk below 2x RAM: safe tier runs anyway")
+        finally:
+            scratch.census, scratch.reclaim = saved
 
 
 if __name__ == "__main__":

@@ -51,6 +51,40 @@ macOS ships `python3` with the Xcode Command Line Tools (`xcode-select --install
 Do this on each Mac. Logs and config are per machine and carry the hostname, so the
 two diaries never get confused.
 
+## Autopilot: always running, optimizing on its own
+
+```bash
+python3 guardian.py autopilot on
+```
+
+That is the one switch for "keep my Mac running smoothly". It installs the login agent if
+needed, turns on act mode, and adds two things nudge/act alone do not do:
+
+- **Daily hygiene.** Once a day (4 am by default, and once about ten minutes after a fresh
+  start) it clears old logs and Trash, and clears rebuildable caches when they add up to
+  more than 5 GB or the disk has less free space than twice your RAM. Caches of an app
+  that is running are left alone until it quits.
+- **Bounded self-tuning.** After a bad day (three pressure episodes) it asks Claude Code or
+  Codex for a diagnosis. Numeric thresholds the diagnosis suggests (cooldowns, idle times,
+  memory limits) are applied on the spot, each within a fixed range. Anything else it
+  suggests, such as a kill switch or a mode change, waits in `suggested-config.json` for
+  you. Every change is logged and `guardian.py config --undo` reverts the last one.
+
+The running agent reloads its config within a minute of any change, so `autopilot on`,
+`autopilot off`, `config --set` and self-tuning all take effect without a restart.
+
+```
+$ python3 guardian.py autopilot status
+autopilot: ON   mode=act   agent loaded: True   paused: False
+  last hygiene: 2026-11-11T04:00:31 freed 2.3GB
+  last self-tuning: never
+  Last 24h: 1 pressure episodes, under pressure 4% of the time, 3 actions. Usual suspects: Google Chrome, agent:codex.
+```
+
+What autopilot never does: close an app you can see, delete transcripts, sessions,
+downloads or anything outside rebuildable caches, or act while paused or while you are
+presenting. `autopilot off` drops back to nudge mode (still watching, only notifying).
+
 ## The three modes
 
 | mode | what it does | default |
@@ -173,8 +207,9 @@ guardian.py chrome                 tab census: how many tabs, how many duplicate
 guardian.py chrome --close-duplicates   close duplicate URLs (all stay in History)
 guardian.py doctor                 check install, permissions, swap ceiling, login items
 guardian.py install | uninstall    launchd agent
+guardian.py autopilot on|off|status   always running and optimizing: act mode + daily hygiene + bounded self-tuning
 guardian.py pause | resume
-guardian.py config [--set key=value ...]
+guardian.py config [--set key=value ...] [--undo]
 ```
 
 ## Where things live

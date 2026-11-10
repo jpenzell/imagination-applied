@@ -38,7 +38,10 @@ answer to "is my Mac OK?":
 - amber: under memory pressure or disk getting low, guardian is handling it
 - red: critical, click to see what to close
 
-**Basic mode (default, the dad mode).** Clicking the icon shows:
+**Basic mode (default, the dad mode).** The only setting is one switch, "Keep my Mac
+running smoothly", which is the prototype's `autopilot on`: always running, acts on the
+safe-by-construction list, tidies caches daily, tunes its own thresholds within fixed
+ranges from its diagnoses, and reports what it did. Clicking the icon shows:
 
 ```
 Your Mac is OK.                              (or: "Your Mac is struggling")

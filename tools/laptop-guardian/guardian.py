@@ -111,6 +111,8 @@ DEFAULT_CONFIG = {
     "safe_kill_classes": ["automation_browser", "model_worker", "dev_server", "mcp_orphan"],
     "ai_apps": ["Claude", "ChatGPT", "Codex", "Cowork", "Claude Code"],
     "scratch": {"auto_reclaim_in_act_mode": True, "cooldown_hours": 6},
+    "autopilot": False,
+    "hygiene": {"hour": 4, "safe_tier_when_reclaimable_gb": 5, "safe_tier_when_disk_below_x_ram": 2},
     "protect": [
         "Finder", "Dock", "WindowServer", "loginwindow", "Terminal", "iTerm2",
         "tmux", "Dropbox", "Claude", "Codex", "ChatGPT", "Cowork", "Google Chrome",
@@ -124,8 +126,28 @@ DEFAULT_CONFIG = {
         "auto_after_episodes": 3,
         "max_runs_per_day": 1,
         "timeout_seconds": 240,
+        "auto_apply_tuning": False,
     },
 }
+
+# Keys the AI diagnosis may change on its own in autopilot, with the range it may use.
+# Anything else it suggests (kill switches, lists, mode) waits for a human.
+TUNABLE = {
+    "interval_seconds": (15, 120),
+    "notify_cooldown_seconds": (120, 7200),
+    "pressure_warn_level": (2, 4),
+    "disk_floor_gb": (10, 100),
+    "cpu.runaway_pct": (70, 100),
+    "cpu.sustain_seconds": (120, 3600),
+    "renderers.memory_mb": (1000, 8000),
+    "renderers.sustain_seconds": (60, 1800),
+    "automation_browser.orphan_idle_seconds": (120, 3600),
+    "automation_browser.memory_mb": (1000, 8000),
+    "agent_sessions.stale_after_hours": (6, 168),
+    "agent_sessions.idle_seconds": (300, 7200),
+    "hygiene.safe_tier_when_reclaimable_gb": (1, 50),
+}
+CONFIG_HISTORY = CONFIG_DIR / "config-history.jsonl"
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -148,6 +170,95 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
     if cfg["mode"] not in ("observe", "nudge", "act"):
         cfg["mode"] = "nudge"
     return cfg
+
+
+def flatten(d: dict, prefix: str = "") -> dict:
+    out = {}
+    for k, v in (d or {}).items():
+        key = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            out.update(flatten(v, key))
+        else:
+            out[key] = v
+    return out
+
+
+def unflatten(flat: dict) -> dict:
+    out = {}
+    for k, v in flat.items():
+        node = out
+        parts = k.split(".")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = v
+    return out
+
+
+def split_tuning(suggestion: dict):
+    """(auto-applicable, needs-review). Only TUNABLE keys inside their range are auto-applicable."""
+    auto, review = {}, {}
+    for k, v in flatten(suggestion).items():
+        rng = TUNABLE.get(k)
+        if rng and isinstance(v, (int, float)) and not isinstance(v, bool) and rng[0] <= v <= rng[1]:
+            auto[k] = v
+        else:
+            review[k] = v
+    return unflatten(auto), unflatten(review)
+
+
+def apply_config_change(changes: dict, why: str) -> dict:
+    """Merge changes into the config file, keeping a history so it can be undone."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    before = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+    after = deep_merge(before, changes)
+    CONFIG_PATH.write_text(json.dumps(after, indent=2) + "\n")
+    with CONFIG_HISTORY.open("a") as f:
+        f.write(json.dumps({"ts": datetime.now().isoformat(timespec="seconds"), "why": why,
+                            "changes": changes, "before": before}) + "\n")
+    log_event("config", why=why, changes=changes)
+    return after
+
+
+def undo_config_change():
+    """Restore the config as it was before the last change. Returns the undone entry or None."""
+    if not CONFIG_HISTORY.exists():
+        return None
+    lines = CONFIG_HISTORY.read_text().splitlines()
+    if not lines:
+        return None
+    last = json.loads(lines[-1])
+    CONFIG_PATH.write_text(json.dumps(last["before"], indent=2) + "\n")
+    CONFIG_HISTORY.write_text("\n".join(lines[:-1]) + ("\n" if lines[:-1] else ""))
+    log_event("config", why="undo", undone=last["changes"])
+    return last
+
+
+def hygiene_due(now: datetime, last_ts: float, cfg: dict, up_since: float) -> bool:
+    """Daily at the hygiene hour; or once, ten minutes after a fresh start if it never ran."""
+    if last_ts is None:
+        return (now.timestamp() - up_since) >= 600
+    if now.timestamp() - last_ts < 20 * 3600:
+        return False
+    return now.hour == cfg["hygiene"]["hour"]
+
+
+def run_hygiene(cfg: dict, sample: dict, running: set, dry_run: bool = False) -> dict:
+    """Proactive tidy-up: old logs/trash always; safe caches when they are big or disk is tight."""
+    import scratch
+    rows = scratch.census()
+    hy = cfg["hygiene"]
+    reclaimable = scratch.reclaimable_mb(rows, ("safe",), running)
+    ram_mb = sample.get("mem_total_mb") or 0
+    disk_mb = (sample.get("disk_free_gb") or 0) * 1024
+    do_safe = reclaimable >= hy["safe_tier_when_reclaimable_gb"] * 1024 or \
+        (ram_mb and disk_mb < hy["safe_tier_when_disk_below_x_ram"] * ram_mb)
+    out = {"dry_run": dry_run, "freed_mb": 0, "tiers": [], "safe_reclaimable_mb": reclaimable,
+           "safe_tier_run": bool(do_safe)}
+    for tier in (["safe-old"] + (["safe"] if do_safe else [])):
+        r = scratch.reclaim(tier, dry_run=dry_run, running=running, rows=rows)
+        out["freed_mb"] += r["freed_mb"]
+        out["tiers"].append({"tier": tier, "freed_mb": r["freed_mb"], "skipped": r["skipped"]})
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -839,7 +950,8 @@ def fmt_gb(mb) -> str:
 
 def print_status(cfg: dict, snap: dict, n: int = 12):
     s = snap["sample"]
-    print(f"guardian {VERSION} on {HOSTNAME}  mode={cfg['mode']}  {'PAUSED' if PAUSE_PATH.exists() else ''}")
+    print(f"guardian {VERSION} on {HOSTNAME}  mode={cfg['mode']}"
+          f"{'  AUTOPILOT' if cfg.get('autopilot') else ''}{'  PAUSED' if PAUSE_PATH.exists() else ''}")
     print(f"  memory pressure : {pressure_word(s['pressure_level'])}   free {s.get('free_pct')}%   "
           f"swap {fmt_gb(s.get('swap_used_mb'))}/{fmt_gb(s.get('swap_total_mb'))}   "
           f"compressed {fmt_gb(s.get('compressed_mb'))}   RAM {fmt_gb(s.get('mem_total_mb'))}")
@@ -903,8 +1015,22 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     last_digest_day = None
     ai_runs_today = 0
     ai_day = None
+    up_since = time.time()
+    cfg_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
+    last_hygiene = None
+    for e in reversed(read_events(48)):
+        if e["kind"] == "hygiene":
+            last_hygiene = datetime.fromisoformat(e["ts"]).timestamp()
+            break
     while True:
         try:
+            # live config reload (autopilot tuning, `config --set`, `autopilot on/off`)
+            mt = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
+            if mt != cfg_mtime:
+                cfg_mtime = mt
+                cfg = load_config()
+                engine.cfg = cfg
+                log_event("reload", mode=cfg["mode"], autopilot=cfg.get("autopilot", False))
             if PAUSE_PATH.exists():
                 time.sleep(cfg["interval_seconds"])
                 if once:
@@ -933,8 +1059,16 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 path = ask(cfg, hours=24, quiet=True)
                 if path:
                     notify("Guardian", f"{engine.episodes_today} pressure episodes today. Diagnosis written to {path.name}", cfg)
-            # Daily digest
+            # Proactive hygiene (autopilot / act mode only): old logs and trash daily, safe
+            # caches when they are big or the disk is tight. Nothing in the review tier, ever.
             now = datetime.now()
+            if cfg["mode"] == "act" and not snap["quiet"] and hygiene_due(now, last_hygiene, cfg, up_since):
+                last_hygiene = now.timestamp()
+                h = run_hygiene(cfg, snap["sample"], running_apps(snap["procs"]), dry_run=dry_run)
+                log_event("hygiene", **h)
+                if h["freed_mb"] >= 256:
+                    notify("Guardian", f"Tidied up: freed {h['freed_mb'] / 1024:.1f}GB of caches and old logs.", cfg)
+            # Daily digest
             if now.hour == cfg["digest_hour"] and last_digest_day != now.date():
                 last_digest_day = now.date()
                 path = write_digest(cfg, 24)
@@ -1116,8 +1250,18 @@ def ask(cfg: dict, hours: float = 24, quiet: bool = False):
     if m:
         try:
             suggestion = json.loads(m.group(1))
-            (CONFIG_DIR).mkdir(parents=True, exist_ok=True)
-            (CONFIG_DIR / "suggested-config.json").write_text(json.dumps(suggestion, indent=2) + "\n")
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            if cfg["ai"].get("auto_apply_tuning"):
+                auto, review = split_tuning(suggestion)
+                if auto:
+                    apply_config_change(auto, f"auto-tuning from {name} diagnosis {path.name}")
+                    notify("Guardian", f"Tuned myself from today's diagnosis: {', '.join(flatten(auto))}. "
+                                       f"Undo: guardian.py config --undo", cfg)
+                suggestion_for_review = review
+            else:
+                suggestion_for_review = suggestion
+            if suggestion_for_review:
+                (CONFIG_DIR / "suggested-config.json").write_text(json.dumps(suggestion_for_review, indent=2) + "\n")
         except json.JSONDecodeError:
             suggestion = None
     log_event("ask", result="ok", via=name, path=str(path), suggestion=suggestion)
@@ -1275,7 +1419,8 @@ def doctor(cfg: dict, script: Path):
         print(f"{ok(loaded)} launchd agent {LABEL} {'loaded' if loaded else 'not loaded (run: install)'}")
         if PLIST_PATH.exists():
             print(f"{ok(str(script.resolve()) in PLIST_PATH.read_text())} plist points at this script")
-    print(f"{ok(CONFIG_PATH.exists())} config {CONFIG_PATH} ({'present' if CONFIG_PATH.exists() else 'defaults in use'}) mode={cfg['mode']}")
+    print(f"{ok(CONFIG_PATH.exists())} config {CONFIG_PATH} ({'present' if CONFIG_PATH.exists() else 'defaults in use'}) "
+          f"mode={cfg['mode']} autopilot={'on' if cfg.get('autopilot') else 'off'}")
     print(f"{ok(not PAUSE_PATH.exists())} {'PAUSED (run: resume)' if PAUSE_PATH.exists() else 'not paused'}")
     name, exe = find_ai_command(cfg)
     print(f"{ok(exe)} AI CLI for `ask`: {name + ' at ' + exe if exe else 'none found (claude or codex)'}")
@@ -1327,7 +1472,46 @@ def scratch_cmd(cfg: dict, args):
           + ("  Add --yes to do it." if not args.yes else ""))
 
 
+AUTOPILOT_TEXT = """Autopilot is ON. Always running (launchd restarts it if it dies). What it does on its own:
+  - closes automation browsers and MCP servers whose owner has gone away, after 10 idle minutes
+  - slows down (renices) any non-app process pinning a CPU core for 10 minutes
+  - at critical memory pressure, closes oversized local model workers and dev servers
+  - clears rebuildable caches when the disk gets low, and once a day tidies old logs and trash
+  - after a bad day (3+ pressure episodes) asks Claude/Codex for a diagnosis and applies the
+    threshold tuning it suggests, within fixed ranges; everything else waits for you
+  - stays quiet while you present or are in a Zoom meeting
+What it never does: close an app you can see, delete your transcripts, sessions, downloads
+or anything outside rebuildable caches, or act while paused.
+Watch it:  guardian.py report      Undo a tuning:  guardian.py config --undo      Off:  guardian.py autopilot off
+"""
+
+
+def autopilot_cmd(cfg: dict, args, script: Path):
+    if args.state == "on":
+        apply_config_change({"mode": "act", "autopilot": True, "ai": {"auto_apply_tuning": True}}, "autopilot on")
+        if IS_MAC and LABEL not in sh(["launchctl", "list"]):
+            install(load_config(), script)
+        print(AUTOPILOT_TEXT)
+    elif args.state == "off":
+        apply_config_change({"mode": "nudge", "autopilot": False, "ai": {"auto_apply_tuning": False}}, "autopilot off")
+        print("Autopilot OFF: still watching and notifying (nudge mode), no actions. `guardian.py uninstall` stops it entirely.")
+    else:
+        ev = read_events(48)
+        hyg = next((e for e in reversed(ev) if e["kind"] == "hygiene"), None)
+        tune = next((e for e in reversed(ev) if e["kind"] == "config" and "auto-tuning" in str(e.get("why", ""))), None)
+        loaded = (LABEL in sh(["launchctl", "list"])) if IS_MAC else None
+        print(f"autopilot: {'ON' if cfg.get('autopilot') else 'off'}   mode={cfg['mode']}   "
+              f"agent loaded: {loaded}   paused: {PAUSE_PATH.exists()}")
+        print(f"  last hygiene: {hyg['ts'] + ' freed ' + str(round(hyg['freed_mb'] / 1024, 1)) + 'GB' if hyg else 'never'}")
+        print(f"  last self-tuning: {tune['ts'] + ' ' + json.dumps(tune['changes']) if tune else 'never'}")
+        print("  " + digest_oneliner(24))
+
+
 def config_cmd(cfg: dict, args):
+    if args.undo:
+        last = undo_config_change()
+        print(f"undid {json.dumps(last['changes'])} ({last['why']}, {last['ts']})" if last else "nothing to undo")
+        return
     if args.apply_suggestion:
         sp = CONFIG_DIR / "suggested-config.json"
         if not sp.exists():
@@ -1335,15 +1519,13 @@ def config_cmd(cfg: dict, args):
             return
         sug = json.loads(sp.read_text())
         current = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
-        merged = deep_merge(current, sug)
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(merged, indent=2) + "\n")
+        apply_config_change(sug, "applied suggestion by hand")
         sp.rename(sp.with_suffix(f".applied-{datetime.now():%Y%m%d-%H%M}.json"))
-        log_event("config", applied=sug)
-        print(f"applied {json.dumps(sug)} to {CONFIG_PATH}. Restart: launchctl kickstart -k {launchctl_domain()}/{LABEL}")
+        print(f"applied {json.dumps(sug)} to {CONFIG_PATH} (the running agent picks it up within a minute)")
+        _ = current
         return
     if args.set:
-        current = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+        current = {}
         for kv in args.set:
             k, _, v = kv.partition("=")
             try:
@@ -1355,10 +1537,8 @@ def config_cmd(cfg: dict, args):
             for part in keys[:-1]:
                 node = node.setdefault(part, {})
             node[keys[-1]] = v
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(current, indent=2) + "\n")
-        log_event("config", set=args.set)
-        print(f"updated {CONFIG_PATH}")
+        apply_config_change(current, f"config --set {' '.join(args.set)}")
+        print(f"updated {CONFIG_PATH} (the running agent picks it up within a minute)")
         return
     print(json.dumps(cfg, indent=2))
 
@@ -1392,9 +1572,12 @@ def main(argv=None):
     sub.add_parser("pause", help="hold all notifications and actions (e.g. before a talk)")
     sub.add_parser("resume")
     sub.add_parser("test-notify", help="send one notification to check permissions")
-    p = sub.add_parser("config", help="show config; --set key=value; --apply-suggestion")
+    p = sub.add_parser("config", help="show config; --set key=value; --apply-suggestion; --undo")
     p.add_argument("--set", nargs="*", metavar="KEY=VALUE")
     p.add_argument("--apply-suggestion", action="store_true")
+    p.add_argument("--undo", action="store_true", help="revert the last config change (tuning or --set)")
+    p = sub.add_parser("autopilot", help="on | off | status: always running and optimizing on its own")
+    p.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     args = ap.parse_args(argv)
     cfg = load_config(Path(args.config))
     script = Path(__file__)
@@ -1442,6 +1625,8 @@ def main(argv=None):
         print("sent (if nothing appeared: System Settings > Notifications > Script Editor / osascript)")
     elif args.cmd == "config":
         config_cmd(cfg, args)
+    elif args.cmd == "autopilot":
+        autopilot_cmd(cfg, args, script)
 
 
 if __name__ == "__main__":
