@@ -1,0 +1,12 @@
+{
+  "mode": "nudge",
+  "interval_seconds": 30,
+  "notify_cooldown_seconds": 600,
+  "disk_floor_gb": 20,
+  "watch": ["Scratch", "Scratch Desktop"],
+  "quiet_when_running": ["Keynote", "CptHost", "Microsoft PowerPoint"],
+  "agent_sessions": {"stale_after_hours": 24, "kill_when_stale": false},
+  "renderers": {"memory_mb": 2500, "kill_under_pressure": false},
+  "ai": {"command": "auto", "auto_after_episodes": 3, "max_runs_per_day": 1},
+  "digest_hour": 8
+}
