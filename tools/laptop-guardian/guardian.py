@@ -1211,8 +1211,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
             s["disk_free_gb"] * 1024 < s["mem_total_mb"]:
         log_event("health", note=f"disk free {s['disk_free_gb']}GB is below RAM size; swap ceiling is low")
     last_digest_day = None
-    ai_runs_today = 0
-    ai_day = None
+    ai = {"day": None, "runs": 0, "retry_after": 0.0, "fail_notified": None}
     up_since = time.time()
     cfg_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
     last_hygiene = None
@@ -1249,15 +1248,20 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                     print(json.dumps(a, default=str))
                 break
             today = datetime.now().date()
-            if ai_day != today:
-                ai_day, ai_runs_today = today, 0
-            # AI diagnosis after a bad day, at most N times a day
+            if ai["day"] != today:
+                ai.update(day=today, runs=0)
+            # AI diagnosis after a bad day, at most N real diagnoses a day. It runs on the
+            # worker (the CLI can take minutes); a failure does not use up the day's run.
             if engine.episodes_today >= cfg["ai"]["auto_after_episodes"] and \
-                    ai_runs_today < cfg["ai"]["max_runs_per_day"] and engine.episode is None:
-                ai_runs_today += 1
-                path = ask(cfg, hours=24, quiet=True)
-                if path:
-                    notify("Guardian", f"{engine.episodes_today} pressure episodes today. Diagnosis written to {path.name}", cfg)
+                    ai["runs"] < cfg["ai"]["max_runs_per_day"] and engine.episode is None and \
+                    time.time() >= ai["retry_after"] and not background.busy():
+                def ask_job(cfg=cfg, episodes=engine.episodes_today, today=today):
+                    outcome = {}
+                    ask(cfg, hours=24, quiet=True, outcome=outcome)
+                    msg = record_ask_outcome(ai, outcome, time.time(), today)
+                    if msg:
+                        notify("Guardian", f"{episodes} pressure episodes today. {msg}", cfg)
+                background.submit("ask", ask_job)
             # Proactive hygiene (autopilot / act mode only): old logs and trash daily, safe
             # caches when they are big or the disk is tight. Nothing in the review tier, ever.
             now = datetime.now()
@@ -1425,7 +1429,65 @@ def find_ai_command(cfg: dict):
     return None, None
 
 
-def ask(cfg: dict, hours: float = 24, quiet: bool = False):
+AUTH_HINTS = ("not logged in", "/login", "please log in", "login required", "invalid api key",
+              "authentication_error", "unauthorized", "401")
+
+
+def ask_failure(returncode, answer: str) -> str:
+    """Why the CLI's output is not a diagnosis, or '' when it is one.
+
+    The first real auto-run got "Not logged in · Please run /login" (exit 1) from the claude
+    CLI; that line was saved as the diagnosis and logged as ok."""
+    text = (answer or "").strip()
+    if not text:
+        return "printed nothing"
+    if len(text) < 400 and any(h in text.lower() for h in AUTH_HINTS):
+        return "not logged in"
+    if returncode not in (0, None):
+        return f"exit {returncode}: {text.splitlines()[0][:120]}"
+    return ""
+
+
+def record_ask_outcome(ai: dict, outcome: dict, now: float, today) -> str:
+    """Update the watch loop's diagnosis accounting; returns a notification text or ''.
+
+    A diagnosis counts toward the daily cap. A failure does not, but it is not retried for
+    six hours (so a logged-out CLI is not called every 30 s) and is announced once a day."""
+    if outcome.get("result") == "ok":
+        ai["runs"] += 1
+        return f"Diagnosis written to {outcome.get('path_name', 'the log folder')}"
+    ai["retry_after"] = now + 6 * 3600
+    if ai.get("fail_notified") == today:
+        return ""
+    ai["fail_notified"] = today
+    via, reason = outcome.get("via") or "claude/codex", outcome.get("reason") or "no CLI found"
+    if reason == "not logged in":
+        return f"Could not get a diagnosis: the {via} command-line tool is not logged in. Run `{via}` in Terminal and sign in."
+    return f"Could not get a diagnosis ({via}: {reason})."
+
+
+def ai_env(base: dict = None) -> dict:
+    """Environment for the claude/codex CLI. CLAUDECODE is dropped so `ask` works from inside a
+    Claude Code session. USER and LOGNAME are guaranteed: without USER the claude CLI cannot
+    find its keychain login on macOS and answers "Not logged in" even when it is logged in."""
+    env = dict(os.environ if base is None else base)
+    env.pop("CLAUDECODE", None)
+    try:
+        import pwd
+        me = pwd.getpwuid(os.getuid()).pw_name
+    except Exception:  # pragma: no cover
+        me = env.get("USER") or ""
+    if me:
+        env.setdefault("USER", me)
+        env.setdefault("LOGNAME", me)
+    env.setdefault("HOME", str(HOME))
+    return env
+
+
+def ask(cfg: dict, hours: float = 24, quiet: bool = False, outcome: dict = None):
+    """Hand the diary to Claude Code / Codex. Returns the diagnosis path, or None when there is
+    no diagnosis (no CLI, not logged in, error, timeout); `outcome` is filled either way."""
+    outcome = {} if outcome is None else outcome
     snap = snapshot(cfg)
     live = {"sample": {k: v for k, v in snap["sample"].items() if k != "ts"},
             "top": snap["groups"][:15], "by_class": snap["classes"]}
@@ -1441,19 +1503,30 @@ def ask(cfg: dict, hours: float = 24, quiet: bool = False):
         if not quiet:
             print(msg)
         log_event("ask", result="no-cli", packet=str(packet))
+        outcome.update(result="no-cli", via=None, reason="no claude or codex CLI found")
         return None
     if name == "claude":
         cmd = [exe, "-p", prompt, "--output-format", "text"]
     else:
         cmd = [exe, "exec", "--skip-git-repo-check", prompt]
     try:
-        env = dict(os.environ)
-        env.pop("CLAUDECODE", None)          # allow running from inside a Claude Code session
         out = subprocess.run(cmd, capture_output=True, text=True,
-                             timeout=cfg["ai"]["timeout_seconds"], env=env, cwd=str(HOME))
+                             timeout=cfg["ai"]["timeout_seconds"], env=ai_env(), cwd=str(HOME))
         answer = out.stdout.strip() or out.stderr.strip()
+        why = ask_failure(out.returncode, answer)
     except subprocess.TimeoutExpired:
-        answer = f"({name} timed out after {cfg['ai']['timeout_seconds']}s)"
+        answer, why = "", f"timed out after {cfg['ai']['timeout_seconds']}s"
+    except OSError as e:
+        answer, why = "", f"could not run: {e}"
+    if why:
+        log_event("ask", result="failed", via=name, reason=why, packet=str(packet))
+        outcome.update(result="failed", via=name, reason=why)
+        if not quiet:
+            print(f"No diagnosis: {name} {why}.")
+            if why == "not logged in":
+                print(f"Run `{name}` in Terminal and sign in, then run this again.")
+            print(f"The packet it would have read is at {packet}; you can paste it into any assistant.")
+        return None
     path = LOG_DIR / f"diagnosis-{datetime.now():%Y-%m-%d-%H%M}.md"
     path.write_text(f"# Guardian diagnosis via {name} ({datetime.now():%Y-%m-%d %H:%M})\n\n{answer}\n")
     suggestion = None
@@ -1476,6 +1549,7 @@ def ask(cfg: dict, hours: float = 24, quiet: bool = False):
         except json.JSONDecodeError:
             suggestion = None
     log_event("ask", result="ok", via=name, path=str(path), suggestion=suggestion)
+    outcome.update(result="ok", via=name, path_name=path.name)
     if not quiet:
         print(answer)
         print(f"\n[saved to {path}]")
@@ -1681,6 +1755,11 @@ def doctor(cfg: dict, script: Path):
             items = [x.strip() for x in li.split(",") if x.strip()]
             print(f"   login items ({len(items)}): {', '.join(items)[:200]}")
     ev = read_events(24)
+    last_ask = next((e for e in reversed(ev) if e["kind"] == "ask"), None)
+    if last_ask:
+        good = last_ask.get("result") == "ok"
+        print(f"{ok(good)} last diagnosis attempt {last_ask['ts']}: {last_ask.get('result')}"
+              f"{'' if good else ' (' + str(last_ask.get('reason') or 'see packet') + ')'}")
     print(f"   events last 24h: {len(ev)}   last start: "
           f"{next((e['ts'] for e in reversed(ev) if e['kind'] == 'start'), 'none')}")
 

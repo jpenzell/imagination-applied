@@ -617,6 +617,77 @@ class AutopilotTests(unittest.TestCase):
     def tearDown(self):
         g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH = self.saved
 
+    # ---- found on the first real Mac: the auto-diagnosis ran against a logged-out claude CLI
+
+    def _fake_cli(self, body: str) -> str:
+        cli = self.tmp / "claude"
+        cli.write_text("#!/bin/sh\n" + body + "\n")
+        cli.chmod(0o755)
+        return str(cli)
+
+    def _ask_with(self, body: str):
+        cfg = g.load_config(g.Path("/nonexistent"))
+        cfg["notify"] = False
+        cfg["ai"]["timeout_seconds"] = 20
+        exe = self._fake_cli(body)
+        saved = g.find_ai_command, g.snapshot
+        g.find_ai_command = lambda cfg: ("claude", exe)
+        g.snapshot = lambda cfg: {"sample": {"ts": 0}, "groups": [], "classes": {}}
+        try:
+            outcome = {}
+            return g.ask(cfg, hours=1, quiet=True, outcome=outcome), outcome
+        finally:
+            g.find_ai_command, g.snapshot = saved
+
+    def test_ask_failure_recognises_what_is_not_a_diagnosis(self):
+        self.assertEqual(g.ask_failure(1, "Not logged in \u00b7 Please run /login"), "not logged in")
+        self.assertEqual(g.ask_failure(0, "Invalid API key \u00b7 Please run /login"), "not logged in")
+        self.assertEqual(g.ask_failure(0, ""), "printed nothing")
+        self.assertTrue(g.ask_failure(2, "error: unknown option --output-format").startswith("exit 2: error"))
+        real = "## What is actually slowing this Mac down\n- ChatGPT holds 9GB...\n" + "x" * 500
+        self.assertEqual(g.ask_failure(0, real), "")
+        self.assertEqual(g.ask_failure(0, real + "\nIf you see 401 errors, run /login."), "",
+                         "a long real answer that mentions login is still a diagnosis")
+
+    def test_logged_out_cli_is_a_failed_ask_not_a_diagnosis(self):
+        path, outcome = self._ask_with('echo "Not logged in \u00b7 Please run /login"; exit 1')
+        self.assertIsNone(path)
+        self.assertEqual((outcome["result"], outcome["reason"]), ("failed", "not logged in"))
+        self.assertEqual(list(g.LOG_DIR.glob("diagnosis-*.md")), [], "no diagnosis file for a login error")
+        ev = [e for e in g.read_events(1) if e["kind"] == "ask"]
+        self.assertEqual([(e["result"], e["reason"]) for e in ev], [("failed", "not logged in")])
+
+    def test_real_answer_is_saved_and_its_suggestion_kept_for_review(self):
+        body = ("cat <<'EOF'\n## What is actually slowing this Mac down\n- ChatGPT\n\n"
+                "```json guardian-suggestion\n{\"notify_cooldown_seconds\": 1800}\n```\nEOF")
+        path, outcome = self._ask_with(body)
+        self.assertEqual(outcome["result"], "ok")
+        self.assertIn("ChatGPT", path.read_text())
+        self.assertEqual(g.json.loads((g.CONFIG_DIR / "suggested-config.json").read_text()),
+                         {"notify_cooldown_seconds": 1800})
+
+    def test_cli_environment_always_names_the_user(self):
+        """Seen on a real Mac: with USER unset the logged-in claude CLI says 'Not logged in'."""
+        env = g.ai_env({"PATH": "/usr/bin", "CLAUDECODE": "1"})
+        self.assertNotIn("CLAUDECODE", env)
+        self.assertTrue(env["USER"])
+        self.assertEqual(env["USER"], env["LOGNAME"])
+        self.assertTrue(env["HOME"])
+        self.assertEqual(g.ai_env({"USER": "someone"})["USER"], "someone", "an existing value is kept")
+
+    def test_failed_ask_does_not_spend_the_daily_run_and_backs_off(self):
+        ai = {"day": "d", "runs": 0, "retry_after": 0.0, "fail_notified": None}
+        fail = {"result": "failed", "via": "claude", "reason": "not logged in"}
+        msg = g.record_ask_outcome(ai, fail, 1000.0, "d")
+        self.assertIn("not logged in", msg)
+        self.assertIn("`claude`", msg)
+        self.assertEqual(ai["runs"], 0, "a failure is not a diagnosis")
+        self.assertEqual(ai["retry_after"], 1000.0 + 6 * 3600, "and is not retried every 30 s")
+        self.assertEqual(g.record_ask_outcome(ai, fail, 30000.0, "d"), "", "one notification a day")
+        self.assertIn("Could not get a diagnosis", g.record_ask_outcome(ai, fail, 90000.0, "d+1"))
+        msg = g.record_ask_outcome(ai, {"result": "ok", "path_name": "diagnosis-x.md"}, 95000.0, "d+1")
+        self.assertEqual((ai["runs"], msg), (1, "Diagnosis written to diagnosis-x.md"))
+
     def test_split_tuning_only_auto_applies_bounded_numeric_thresholds(self):
         suggestion = {
             "notify_cooldown_seconds": 1800,                 # tunable, in range
