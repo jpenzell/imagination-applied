@@ -26,3 +26,7 @@ publications/**/data/**/*.zip
 # System
 .DS_Store
 Thumbs.db
+
+# Python bytecode (tools/laptop-guardian)
+__pycache__/
+*.pyc
