@@ -319,6 +319,13 @@ def parse_etime(s: str) -> int:
 APP_RE = re.compile(r"/([^/]+)\.app/")
 
 
+def agent_head_match(mark: str, heads: list) -> bool:
+    """'codex' matches the command 'codex' and the native binary the npm wrapper spawns
+    ('codex-aarch64-apple-darwin'), but not 'codex.js' paths or folders called Codex."""
+    m = mark.lower()
+    return any(h == m or h.startswith(m + "-") for h in heads)
+
+
 def word_in(marker: str, text: str) -> bool:
     """marker appears in text as a whole word/path segment (so 'vite' != 'invite')."""
     m = re.escape(marker.lower())
@@ -331,14 +338,77 @@ def bundle_of(path: str):
     return m.group(1) if m else None
 
 
+# .app bundles that are not applications: framework-internal shims. Apple's and Homebrew's
+# python3 really execute ".../Python.framework/.../Resources/Python.app/Contents/MacOS/Python",
+# so without this every Python process (guardian itself, Python MCP servers) would read as
+# a GUI app called "Python" and be exempt from renice.
+NOT_GUI_BUNDLES = {"Python", "Python3", "Python Launcher"}
+
+
+def is_gui_path(comm: str) -> bool:
+    """True when comm lives inside a real application bundle (something with a Dock icon)."""
+    m = APP_RE.search(comm)
+    if not m:
+        return False
+    if m.group(1) in NOT_GUI_BUNDLES:
+        return False
+    prefix = comm[:m.start()]
+    if ".framework/" in prefix or "/Frameworks/" in prefix:
+        return False
+    # an app bundle nested inside another app's bundle (Xcode's Python.app, Chrome's helpers)
+    # is judged by the outermost one, which is what APP_RE found; but a framework shim
+    # anywhere in the path is never a GUI process
+    if re.search(r"\.framework/.*/Python\.app/", comm):
+        return False
+    return True
+
+
+def app_of(comm: str):
+    """The application a process belongs to (outermost bundle), or None for non-GUI executables."""
+    return bundle_of(comm) if is_gui_path(comm) else None
+
+
+BROWSER_BUNDLES = {
+    "Google Chrome", "Google Chrome Canary", "Google Chrome Beta", "Google Chrome Dev",
+    "Google Chrome for Testing", "Chromium", "Chrome for Testing", "Brave Browser",
+    "Microsoft Edge", "Arc", "Vivaldi", "Opera", "Comet", "Dia",
+}
+BROWSER_BINARIES = {"chrome", "chromium", "chromium-browser", "google-chrome", "google chrome",
+                    "headless_shell", "chrome-headless-shell"}
+
+
+def is_browser_process(comm: str) -> bool:
+    """A Chromium-family executable (main or helper). crashpad handlers are not browsers."""
+    base = os.path.basename(comm)
+    if "crashpad" in base.lower():
+        return False
+    b = bundle_of(comm)
+    if b and (b in BROWSER_BUNDLES or b.startswith("Google Chrome")):
+        return True
+    return base.lower() in BROWSER_BINARIES
+
+
+PS_MAIN_COLS = "pid=,ppid=,pgid=,uid=,pcpu=,rss=,etime=,time=,args="
+
+
+def ps_command(cols: str) -> list:
+    # -ww: never truncate to the terminal width (macOS ps does when it thinks it has one)
+    return ["ps", "-ww", "-ax" if IS_MAC else "-e", "-o", cols]
+
+
 def list_processes() -> list:
     """All processes, via ps. Two calls because comm can contain spaces."""
-    uid = os.getuid()
-    flags = "-axo" if IS_MAC else "-eo"
-    comm_out = subprocess.run(["ps", flags, "pid=,comm="], capture_output=True, text=True).stdout
-    main_out = subprocess.run(
-        ["ps", flags, "pid=,ppid=,pgid=,uid=,pcpu=,rss=,etime=,time=,args="],
-        capture_output=True, text=True).stdout
+    comm_out = subprocess.run(ps_command("pid=,comm="), capture_output=True, text=True).stdout
+    main_out = subprocess.run(ps_command(PS_MAIN_COLS), capture_output=True, text=True).stdout
+    return parse_ps(comm_out, main_out)
+
+
+def parse_ps(comm_out: str, main_out: str) -> list:
+    """Turn the two ps listings into Proc objects. Pure, so it can be tested on recorded macOS output.
+
+    On macOS `comm` is the executable's full path (which may contain spaces, e.g.
+    ".../Google Chrome Helper (Renderer)"), `time` is mm:ss.hh and `etime` is [[dd-]hh:]mm:ss.
+    """
     comms = {}
     for line in comm_out.splitlines():
         line = line.strip()
@@ -366,7 +436,6 @@ def list_processes() -> list:
         comm = comms.get(pid) or args.split(" ")[0]
         p = Proc(pid, ppid, pgid, puid, cpu, rss, etime, cputime, comm, args)
         procs.append(p)
-    _ = uid
     return procs
 
 
@@ -383,18 +452,21 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
     # First pass: browsers. Decide per browser *main* process, then inherit.
     browser_main_class = {}
     for p in procs:
-        p.app = bundle_of(p.comm) or bundle_of(p.args)
-        p.is_gui = ".app/Contents/" in p.comm
+        p.is_gui = is_gui_path(p.comm)
+        p.app = app_of(p.comm) or (None if bundle_of(p.comm) else bundle_of(p.args))
         m = re.search(r"--type=([a-z\-]+)", p.args)
         p.chrome_type = m.group(1) if m else None
-        is_browserish = any(b in p.comm for b in (
-            "Google Chrome", "Chromium", "Chrome for Testing", "Brave Browser",
-            "Microsoft Edge", "Arc", "chrome", "Chrome.app"))
-        if is_browserish and p.chrome_type is None:
+        if is_browser_process(p.comm) and p.chrome_type is None:
             automated = any(mark in p.args or mark in p.comm for mark in ab)
             debug = "--remote-debugging" in p.args
             browser_main_class[p.pid] = ("automation_browser" if automated
                                          else "debug_browser" if debug else "browser")
+    # a browser process without --type whose parent is itself a browser main (Chrome's
+    # relaunch-on-update child, odd helpers) belongs to that main, it is not a new browser
+    mains = set(browser_main_class)
+    for pid in mains:
+        if by_pid[pid].ppid in mains:
+            del browser_main_class[pid]
 
     for p in procs:
         if p.uid != my_uid:
@@ -407,6 +479,7 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
         while root.ppid in by_pid and root.pid not in browser_main_class and hops < 6:
             root = by_pid[root.ppid]
             hops += 1
+        is_renderer = any(mark in p.comm for mark in rn)
         if root.pid in browser_main_class:
             p.cls = browser_main_class[root.pid]
             label = root.app or root.name
@@ -416,23 +489,26 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
                 p.key = f"{label} [remote-debugging]"
             else:
                 p.key = label
-            if any(mark in p.comm for mark in rn):
+            if is_renderer:
                 p.cls = p.cls + "/renderer"
             continue
-        if any(mark in p.comm for mark in rn):
+        if is_renderer and not p.is_gui:
+            # a renderer helper whose app we cannot place (should not happen on macOS)
             p.cls = "browser/renderer"
             p.key = p.app or p.name
             continue
-        if any(word_in(mark, low_args) for mark in mw):
+        # Electron renderers ("Claude Helper (Renderer)", "Dropbox Helper (Renderer)") fall
+        # through to their app below and keep a /renderer suffix for the fat-renderer rule.
+        if not p.is_gui and any(word_in(mark, low_args) for mark in mw):
             p.cls = "model_worker"
             p.key = p.name
             continue
-        if any(word_in(mark, low_args) for mark in dv):
+        if not p.is_gui and any(word_in(mark, low_args) for mark in dv):
             p.cls = "dev_server"
             p.key = p.name
             continue
         heads = [os.path.basename(tok).lower() for tok in [p.comm] + p.args.split()[:2]]
-        agent = next((mark for mark in ag if mark.lower() in heads), None)
+        agent = next((mark for mark in ag if agent_head_match(mark, heads)), None)
         if not p.is_gui and agent:
             p.cls = "agent_session"
             p.key = "agent:" + agent.lower()
@@ -443,7 +519,7 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
             continue
         ai_apps = cfg.get("ai_apps", [])
         if p.is_gui and p.app in ai_apps:
-            p.cls = "ai_app"
+            p.cls = "ai_app" + ("/renderer" if is_renderer else "")
             p.key = p.app
             continue
         # helper spawned by an AI desktop app (MCP servers, Claude Code run from Claude.app)
@@ -459,12 +535,13 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
             p.cls = "mcp_server"
             p.key = f"{owner} helpers (MCP servers)"
             continue
-        if not p.is_gui and p.ppid == 1 and "mcp" in low_args and p.name in ("node", "npx", "uvx", "python3", "python", "bun", "deno"):
+        if not p.is_gui and p.ppid == 1 and "mcp" in low_args and \
+                p.name in ("node", "npx", "uvx", "uv", "python3", "python", "Python", "bun", "deno"):
             p.cls = "mcp_orphan"
             p.key = f"orphaned MCP server: {p.args.split()[-1][-40:]}"
             continue
         if p.is_gui:
-            p.cls = "gui_app"
+            p.cls = "gui_app" + ("/renderer" if is_renderer else "")
             p.key = p.app or p.name
             if any(w in (p.key or "").lower() for w in watch):
                 p.cls = "watched"
@@ -508,34 +585,60 @@ def sysctl(name: str) -> str:
     return sh(["sysctl", "-n", name])
 
 
+def read_mac_raw() -> dict:
+    """The raw text of every macOS reading. Kept separate so parse_mac_sample() is testable."""
+    return {
+        "pressure": sysctl("kern.memorystatus_vm_pressure_level"),
+        "level": sysctl("kern.memorystatus_level"),
+        "swap": sysctl("vm.swapusage"),
+        "memsize": sysctl("hw.memsize"),
+        "loadavg": sysctl("vm.loadavg"),
+        "vm_stat": sh(["vm_stat"]),
+        "therm": sh(["pmset", "-g", "therm"]),
+    }
+
+
+def parse_mac_sample(raw: dict, s: dict) -> dict:
+    """Fill a sample from raw macOS command output.
+
+    kern.memorystatus_vm_pressure_level: 1 normal, 2 warn, 4 critical.
+    kern.memorystatus_level: percent of memory the kernel considers available.
+    vm.swapusage: 'total = 3072.00M  used = 1517.25M  free = 1554.75M  (encrypted)'
+    vm_stat: 'Mach Virtual Memory Statistics: (page size of 16384 bytes)' then
+             'Pages occupied by compressor:   123456.'
+    pmset -g therm: 'CPU_Speed_Limit \t= 100' (plus notes; absent on some models -> 100)
+    """
+    lvl = (raw.get("pressure") or "").strip()
+    s["pressure_level"] = int(lvl) if lvl.isdigit() else 1
+    s["pressure_read"] = lvl.isdigit()
+    fl = (raw.get("level") or "").strip()
+    s["free_pct"] = int(fl) if fl.isdigit() else None
+    m = re.search(r"total\s*=\s*([\d.]+)([KMG])\s+used\s*=\s*([\d.]+)([KMG])", raw.get("swap") or "")
+    if m:
+        unit = {"K": 1 / 1024, "M": 1.0, "G": 1024.0}
+        s["swap_total_mb"] = round(float(m.group(1)) * unit[m.group(2)], 1)
+        s["swap_used_mb"] = round(float(m.group(3)) * unit[m.group(4)], 1)
+    ms = (raw.get("memsize") or "").strip()
+    s["mem_total_mb"] = int(ms) // (1024 * 1024) if ms.isdigit() else None
+    m = re.search(r"([\d.]+)\s+([\d.]+)\s+([\d.]+)", raw.get("loadavg") or "")
+    s["load1"] = float(m.group(1)) if m else None
+    vs = raw.get("vm_stat") or ""
+    m = re.search(r"Pages occupied by compressor:\s+(\d+)", vs)
+    ps = re.search(r"page size of (\d+) bytes", vs)
+    if m and ps:
+        s["compressed_mb"] = int(m.group(1)) * int(ps.group(1)) // (1024 * 1024)
+    m = re.search(r"CPU_Speed_Limit\s*=\s*(\d+)", raw.get("therm") or "")
+    s["cpu_speed_limit"] = int(m.group(1)) if m else 100
+    return s
+
+
 def sample_system() -> dict:
     s = {"ts": time.time(), "host": HOSTNAME, "pressure_level": 1, "free_pct": None,
          "swap_used_mb": None, "swap_total_mb": None, "compressed_mb": None,
          "mem_total_mb": None, "load1": None, "cpu_speed_limit": 100, "disk_free_gb": None,
          "source": "darwin" if IS_MAC else "linux"}
     if IS_MAC:
-        lvl = sysctl("kern.memorystatus_vm_pressure_level")
-        s["pressure_level"] = int(lvl) if lvl.isdigit() else 1
-        fl = sysctl("kern.memorystatus_level")
-        s["free_pct"] = int(fl) if fl.isdigit() else None
-        sw = sysctl("vm.swapusage")
-        m = re.search(r"total = ([\d.]+)M\s+used = ([\d.]+)M", sw)
-        if m:
-            s["swap_total_mb"] = float(m.group(1))
-            s["swap_used_mb"] = float(m.group(2))
-        ms = sysctl("hw.memsize")
-        s["mem_total_mb"] = int(ms) // (1024 * 1024) if ms.isdigit() else None
-        la = sysctl("vm.loadavg")
-        m = re.search(r"([\d.]+)\s+([\d.]+)\s+([\d.]+)", la)
-        s["load1"] = float(m.group(1)) if m else None
-        vs = sh(["vm_stat"])
-        m = re.search(r"Pages occupied by compressor:\s+(\d+)", vs)
-        ps = re.search(r"page size of (\d+) bytes", vs)
-        if m and ps:
-            s["compressed_mb"] = int(m.group(1)) * int(ps.group(1)) // (1024 * 1024)
-        th = sh(["pmset", "-g", "therm"])
-        m = re.search(r"CPU_Speed_Limit\s*=\s*(\d+)", th)
-        s["cpu_speed_limit"] = int(m.group(1)) if m else 100
+        parse_mac_sample(read_mac_raw(), s)
     else:
         mi = {}
         try:
@@ -786,7 +889,8 @@ class Engine:
 def notify(title: str, body: str, cfg: dict):
     if not cfg.get("notify", True):
         return
-    body = body.replace('"', "'")[:230]
+    body = body.replace("\\", "/").replace('"', "'")[:230]
+    title = title.replace("\\", "/").replace('"', "'")
     if IS_MAC:
         sh(["osascript", "-e", f'display notification "{body}" with title "{title}"'])
     elif shutil.which("notify-send"):
@@ -906,8 +1010,10 @@ def apply_decisions(decisions: list, cfg: dict, quiet: str = "", dry_run: bool =
         elif d.action == "kill":
             protected = d.proc.name in cfg["protect"] or (d.proc.app in cfg["protect"]
                                                            and d.cls != "automation_browser")
-            if protected:
-                rec["result"] = "protected"
+            # whatever a rule decided: an app you can see is never closed, only an automation browser
+            gui_shield = d.proc.is_gui and d.cls != "automation_browser"
+            if protected or gui_shield:
+                rec["result"] = "protected" if protected else "protected (GUI app)"
             elif mode != "act" or dry_run or (quiet and d.cls != "automation_browser"):
                 rec["result"] = ("would kill (dry-run)" if dry_run else
                                  f"held (quiet: {quiet})" if mode == "act" else
@@ -1211,6 +1317,14 @@ def find_ai_command(cfg: dict):
         exe = shutil.which(c)
         if exe:
             return c, exe
+    # launchd's PATH is short; look where the installers actually put the binaries
+    for c in candidates:
+        places = [HOME / ".local/bin" / c, HOME / ".claude/local" / c, HOME / ".npm-global/bin" / c,
+                  Path("/opt/homebrew/bin") / c, Path("/usr/local/bin") / c, HOME / ".volta/bin" / c]
+        places += sorted(HOME.glob(f".nvm/versions/node/*/bin/{c}"), reverse=True)
+        for pth in places:
+            if pth.is_file() and os.access(pth, os.X_OK):
+                return c, str(pth)
     return None, None
 
 
@@ -1341,7 +1455,23 @@ def chrome_tabs(close_duplicates: bool = False, json_out: bool = False):
 # launchd install / uninstall / doctor
 # --------------------------------------------------------------------------
 
-def plist_text(script: Path, cfg: dict) -> str:
+def pick_python() -> str:
+    """The interpreter launchd should run. Apple's /usr/bin/python3 is the stable path, but
+    without the Command Line Tools it is only a stub that pops a dialog; so probe it, and fall
+    back to whatever python is running this install (Homebrew, uv, pyenv)."""
+    if IS_MAC:
+        try:
+            r = subprocess.run(["/usr/bin/python3", "-c", "import sys; print(sys.version_info >= (3, 9))"],
+                               capture_output=True, text=True, timeout=30)
+            if r.returncode == 0 and r.stdout.strip() == "True":
+                return "/usr/bin/python3"
+        except Exception:
+            pass
+    return sys.executable or "/usr/bin/python3"
+
+
+def plist_text(script: Path, cfg: dict, python: str = None) -> str:
+    python = python or pick_python()
     path_env = ":".join([str(HOME / ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin",
                          "/usr/bin", "/bin", "/usr/sbin", "/sbin", str(HOME / ".npm-global/bin")])
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -1351,7 +1481,7 @@ def plist_text(script: Path, cfg: dict) -> str:
   <key>Label</key><string>{LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
+    <string>{python}</string>
     <string>{script}</string>
     <string>watch</string>
   </array>
@@ -1386,7 +1516,9 @@ def install(cfg: dict, script: Path):
         CONFIG_PATH.write_text(json.dumps({"mode": cfg["mode"]}, indent=2) + "\n")
         print(f"wrote {CONFIG_PATH} (mode={cfg['mode']}); every other key falls back to defaults")
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PLIST_PATH.write_text(plist_text(script.resolve(), cfg))
+    python = pick_python()
+    PLIST_PATH.write_text(plist_text(script.resolve(), cfg, python))
+    print(f"agent will run {python} {script.resolve()} watch")
     sh(["launchctl", "bootout", launchctl_domain(), str(PLIST_PATH)])
     out = subprocess.run(["launchctl", "bootstrap", launchctl_domain(), str(PLIST_PATH)],
                          capture_output=True, text=True)
@@ -1413,12 +1545,22 @@ def doctor(cfg: dict, script: Path):
     print(f"guardian {VERSION} doctor on {HOSTNAME} ({'macOS' if IS_MAC else sys.platform})")
     print(f"{ok(sys.version_info >= (3, 9))} python {sys.version.split()[0]} at {sys.executable}")
     if IS_MAC:
-        lvl = sysctl("kern.memorystatus_vm_pressure_level")
-        print(f"{ok(lvl.isdigit())} kernel memory-pressure sysctl readable (level {lvl or '?'})")
+        raw = read_mac_raw()
+        lvl = raw["pressure"]
+        print(f"{ok(lvl.isdigit())} kernel memory-pressure sysctl readable (level {lvl or '?'}, "
+              f"memorystatus_level {raw['level'] or '?'}%)")
+        sw = parse_mac_sample(raw, {})
+        print(f"{ok(sw.get('swap_total_mb') is not None)} vm.swapusage parsed: {raw['swap'][:60] or '(empty)'}")
+        print(f"{ok(sw.get('compressed_mb') is not None)} vm_stat compressor parsed: {sw.get('compressed_mb')}MB")
+        print(f"{ok('CPU_Speed_Limit' in raw['therm'])} pmset -g therm: "
+              f"{'CPU_Speed_Limit=' + str(sw.get('cpu_speed_limit')) if 'CPU_Speed_Limit' in raw['therm'] else 'no CPU_Speed_Limit line (assuming 100)'}")
         loaded = LABEL in sh(["launchctl", "list"])
         print(f"{ok(loaded)} launchd agent {LABEL} {'loaded' if loaded else 'not loaded (run: install)'}")
         if PLIST_PATH.exists():
-            print(f"{ok(str(script.resolve()) in PLIST_PATH.read_text())} plist points at this script")
+            txt = PLIST_PATH.read_text()
+            print(f"{ok(str(script.resolve()) in txt)} plist points at this script")
+            m = re.search(r"<string>([^<]*python[^<]*)</string>", txt)
+            print(f"{ok(m and Path(m.group(1)).exists())} plist python: {m.group(1) if m else '?'}")
     print(f"{ok(CONFIG_PATH.exists())} config {CONFIG_PATH} ({'present' if CONFIG_PATH.exists() else 'defaults in use'}) "
           f"mode={cfg['mode']} autopilot={'on' if cfg.get('autopilot') else 'off'}")
     print(f"{ok(not PAUSE_PATH.exists())} {'PAUSED (run: resume)' if PAUSE_PATH.exists() else 'not paused'}")

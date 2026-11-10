@@ -29,6 +29,11 @@ class ScratchTests(unittest.TestCase):
         # safe-old tier: one old, one fresh
         mk(self.home / "Library/Logs/old.log", 1024, age_days=45)
         mk(self.home / "Library/Logs/fresh.log", 1024, age_days=1)
+        # an app log folder with fresh mtime but old files inside: files go, folder stays
+        mk(self.home / "Library/Logs/Claude/mcp-server-old.log", 1024, age_days=60)
+        mk(self.home / "Library/Logs/Claude/mcp.log", 1024, age_days=0)
+        # Cowork session data inside the Claude app folder: report tier, never touched
+        mk(self.home / "Library/Application Support/Claude/local-agent-mode-sessions/s1/vm.img", 4096)
         mk(self.home / ".Trash/old-thing", 2048, age_days=40)
         # review / report tiers
         mk(self.home / ".claude/projects/p1/session.jsonl", 4096)
@@ -96,6 +101,29 @@ class ScratchTests(unittest.TestCase):
         self.assertFalse((self.home / "Library/Logs/old.log").exists())
         self.assertTrue((self.home / "Library/Logs/fresh.log").exists())
         self.assertFalse((self.home / ".Trash/old-thing").exists())
+        self.assertFalse((self.home / "Library/Logs/Claude/mcp-server-old.log").exists(), "old file inside a fresh folder")
+        self.assertTrue((self.home / "Library/Logs/Claude/mcp.log").exists())
+        self.assertTrue((self.home / "Library/Logs/Claude").is_dir(), "log folders are left for the app")
+
+    def test_cowork_and_ai_app_data_are_report_tier_and_untouched(self):
+        rows = self.rows()
+        self.assertEqual(self.by(rows, "Cowork sessions / VM")["tier"], "report")
+        self.assertEqual(self.by(rows, "Cowork sessions / VM")["mb"], 4)
+        for name in ("Claude desktop data", "ChatGPT desktop data", "Codex app data", "Claude Code other data"):
+            self.assertEqual(self.by(rows, name)["tier"], "report")
+        for name in ("Claude Code transcripts", "Codex sessions"):
+            self.assertEqual(self.by(rows, name)["tier"], "review")
+        scratch.reclaim("safe", self.home, dry_run=False)
+        scratch.reclaim("safe-old", self.home, dry_run=False)
+        self.assertTrue((self.home / "Library/Application Support/Claude/local-agent-mode-sessions/s1/vm.img").exists())
+
+    def test_tmutil_listing_parses(self):
+        out = ("Snapshots for disk /:\n"
+               "com.apple.TimeMachine.2026-11-09-120000.local\n"
+               "com.apple.TimeMachine.2026-11-10-080000.local\n")
+        self.assertEqual(len(scratch.parse_local_snapshots(out)), 2)
+        self.assertEqual(scratch.parse_local_snapshots("Snapshots for disk /:\n"), [])
+        self.assertEqual(scratch.parse_local_snapshots(""), [])
 
     def test_review_tiers_cannot_be_reclaimed(self):
         with self.assertRaises(ValueError):

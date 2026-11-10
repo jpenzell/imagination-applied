@@ -26,8 +26,8 @@ It does three things the usual "memory cleaner" apps don't:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 27 policy tests |
-| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 9 tests |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 42 tests (policy + macOS parsers on recorded output) |
+| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 11 tests |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
@@ -38,7 +38,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py   # 36 tests, should say OK twice
+python3 test_guardian.py && python3 test_scratch.py   # 53 tests, should say OK twice
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
 python3 guardian.py install       # launchd agent: starts at login, restarts if it dies
@@ -47,6 +47,13 @@ python3 guardian.py test-notify   # grant notification permission the first time
 
 macOS ships `python3` with the Xcode Command Line Tools (`xcode-select --install` if
 `python3` is missing). Nothing else is needed.
+
+Or run it all in one go, read-only, with the output saved for review:
+
+```bash
+bash mac-first-run.sh            # tests, doctor, status, dry-run watch, simulate, scratch, chrome
+bash mac-first-run.sh --install  # same, then autopilot on + notification + agent checks
+```
 
 Do this on each Mac. Logs and config are per machine and carry the hostname, so the
 two diaries never get confused.
@@ -293,7 +300,13 @@ Chrome tab census.
 - `chrome` needs Automation permission for Google Chrome the first time (macOS prompts).
 - Policy tests run anywhere; the macOS sampling code paths (`sysctl`, `vm_stat`, `pmset`,
   launchd) were written against documented output formats and verified on Linux fallbacks
-  only. Run `doctor` and `status` first on each Mac and read what they print.
+  only. `bash mac-first-run.sh` runs the whole read-only first pass on a Mac and saves the
+  output; add `--install` to also switch autopilot on. Read what it prints.
+- On macOS, Apple's and Homebrew's `python3` really execute a `Python.app` inside a
+  framework. Guardian treats those as command-line processes, not GUI apps, so Python MCP
+  servers fold under Claude and guardian itself can be reniced like any other script.
+- Under launchd, the first disk census may trigger macOS "python3 would like to access your
+  Downloads folder" prompts. Allow them once; denying only makes those rows read 0.
 
 ## Uninstall
 

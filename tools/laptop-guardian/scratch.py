@@ -9,7 +9,9 @@ into tiers, and reclaims the tiers that are safe by construction.
 Tiers
   safe      rebuildable caches. Deleting them costs a slower first launch, nothing else.
             Reclaimed automatically in act mode when disk drops below the floor.
-  safe-old  logs, snapshots, trash: delete only entries older than N days.
+  safe-old  logs, snapshots, trash: delete only entries older than N days
+            ("older:N" judges top-level entries, "older-files:N" judges every file
+            and leaves the folders in place, which is what app log folders need).
   review    your data or expensive-to-rebuild binaries (session transcripts, iOS
             backups, pinned browsers). Measured and explained, never auto-deleted.
   report    measured for the picture; nothing to reclaim here.
@@ -34,14 +36,29 @@ LOCATIONS = [
       "Library/Application Support/Google/Chrome/*/Cache",
       "Library/Application Support/Google/Chrome/*/Code Cache",
       "Library/Application Support/Google/Chrome/*/GPUCache",
+      "Library/Application Support/Google/Chrome/*/DawnCache",
+      "Library/Application Support/Google/Chrome/*/DawnWebGPUCache",
+      "Library/Application Support/Google/Chrome/*/DawnGraphiteCache",
       "Library/Application Support/Google/Chrome/*/Service Worker/CacheStorage",
-      "Library/Application Support/Google/Chrome/*/Service Worker/ScriptCache"],
+      "Library/Application Support/Google/Chrome/*/Service Worker/ScriptCache",
+      "Library/Application Support/Google/Chrome/GrShaderCache",
+      "Library/Application Support/Google/Chrome/ShaderCache",
+      "Library/Application Support/Google/Chrome/GraphiteDawnCache",
+      "Library/Application Support/Google/Chrome/component_crx_cache"],
      "safe", "page, script and GPU caches; Chrome rebuilds them as you browse", "clear", "Google Chrome"),
     ("Claude desktop caches",
      ["Library/Application Support/Claude/Cache", "Library/Application Support/Claude/Code Cache",
       "Library/Application Support/Claude/GPUCache", "Library/Application Support/Claude/DawnCache",
+      "Library/Application Support/Claude/DawnWebGPUCache",
+      "Library/Application Support/Claude/DawnGraphiteCache",
+      "Library/Application Support/Claude/Service Worker/CacheStorage",
       "Library/Caches/Claude", "Library/Caches/com.anthropic.claudefordesktop"],
      "safe", "Electron caches of the Claude desktop app", "clear", "Claude"),
+    ("Cowork sessions / VM",
+     ["Library/Application Support/Claude/local-agent-mode-sessions",
+      "Library/Application Support/Claude/cowork*", "Library/Application Support/Claude/vm*",
+      "Library/Application Support/Claude/sessions"],
+     "report", "Cowork session and VM data inside the Claude app folder; never reclaimed", None, None),
     ("Claude desktop data",
      ["Library/Application Support/Claude"],
      "report", "settings, local MCP state, Cowork session data; the caches above are the reclaimable part", None, None),
@@ -49,22 +66,37 @@ LOCATIONS = [
      [".claude/projects"],
      "review", "every Claude Code conversation as JSONL; this is your history, prune old ones only with a backup", None, None),
     ("Claude Code scratch",
-     [".claude/shell-snapshots", ".claude/debug", ".claude/statsig", ".claude/file-history", ".claude/todos"],
+     [".claude/shell-snapshots", ".claude/debug", ".claude/statsig", ".claude/file-history",
+      ".claude/todos", ".claude/session-env"],
      "safe-old", "shell snapshots, debug logs, todo lists older than 14 days", "older:14", None),
+    ("Claude Code other data",
+     [".claude/plans", ".claude/backups", ".claude/downloads", ".claude/ide", ".claude/plugins"],
+     "report", "plans, settings backups, native-install downloads, plugin caches", None, None),
     ("Codex sessions",
-     [".codex/sessions", ".codex/archived_sessions"],
+     [".codex/sessions", ".codex/archived_sessions", ".codex/history.jsonl", ".codex/memories"],
      "review", "Codex session logs (10GB+ is normal); back up before pruning", None, None),
     ("Codex logs",
      [".codex/log", ".codex/logs"],
-     "safe-old", "Codex CLI logs older than 14 days", "older:14", None),
+     "safe-old", "Codex CLI logs older than 14 days", "older-files:14", None),
+    ("Codex app caches",
+     ["Library/Caches/com.openai.codex"],
+     "safe", "Codex desktop app caches", "clear", "Codex"),
+    ("Codex app data",
+     ["Library/Application Support/com.openai.codex", ".codex/sqlite"],
+     "report", "Codex desktop app state", None, None),
     ("ChatGPT desktop caches",
-     ["Library/Caches/com.openai.chat", "Library/Caches/com.openai.atlas"],
+     ["Library/Caches/com.openai.chat", "Library/Caches/com.openai.atlas",
+      "Library/Containers/com.openai.chat/Data/Library/Caches",
+      "Library/Containers/com.openai.atlas/Data/Library/Caches"],
      "safe", "ChatGPT desktop app caches", "clear", "ChatGPT"),
     ("ChatGPT desktop data",
-     ["Library/Application Support/com.openai.chat", "Library/Application Support/com.openai.atlas"],
+     ["Library/Application Support/com.openai.chat", "Library/Application Support/com.openai.atlas",
+      "Library/Containers/com.openai.chat/Data/Library/Application Support",
+      "Library/Containers/com.openai.atlas/Data/Library/Application Support"],
      "report", "ChatGPT app state", None, None),
     ("Dropbox cache",
-     ["Library/CloudStorage/Dropbox/.dropbox.cache", "Dropbox/.dropbox.cache"],
+     ["Library/CloudStorage/Dropbox/.dropbox.cache", "Dropbox/.dropbox.cache",
+      "Library/Caches/com.getdropbox.dropbox", "Library/Caches/com.dropbox.DropboxMacUpdate"],
      "safe", "Dropbox's staging area for syncs; it refills as needed", "clear", "Dropbox"),
     ("npm cache", [".npm/_cacache"], "safe", "downloaded packages; npm re-downloads on demand", "clear", None),
     ("pip cache", ["Library/Caches/pip", ".cache/pip"], "safe", "downloaded wheels", "clear", None),
@@ -72,13 +104,13 @@ LOCATIONS = [
     ("uv / pnpm / yarn caches",
      [".cache/uv", "Library/Caches/uv", "Library/pnpm/store", "Library/Caches/Yarn"],
      "safe", "package manager stores", "clear", None),
-    ("Playwright browsers",
-     ["Library/Caches/ms-playwright"],
+    ("Playwright / Puppeteer browsers",
+     ["Library/Caches/ms-playwright", ".cache/puppeteer"],
      "review", "pinned browser binaries for agent automation; ~500MB each to re-download", None, None),
     ("Other app caches",
      ["Library/Caches"],
      "report", "everything under ~/Library/Caches not named above", None, None),
-    ("Logs", ["Library/Logs"], "safe-old", "app logs older than 30 days", "older:30", None),
+    ("Logs", ["Library/Logs"], "safe-old", "log files older than 30 days (folders stay)", "older-files:30", None),
     ("Trash", [".Trash"], "safe-old", "items in the Trash older than 30 days", "older:30", None),
     ("Downloads", ["Downloads"], "report", "yours to sort; often the biggest folder", None, None),
     ("iOS device backups",
@@ -150,9 +182,14 @@ def local_snapshots() -> list:
         return []
     try:
         out = subprocess.run(["tmutil", "listlocalsnapshots", "/"], capture_output=True, text=True, timeout=30).stdout
-        return [line.strip() for line in out.splitlines() if "com.apple.TimeMachine" in line]
     except Exception:
         return []
+    return parse_local_snapshots(out)
+
+
+def parse_local_snapshots(text: str) -> list:
+    """'Snapshots for disk /:' header then one 'com.apple.TimeMachine.2026-11-09-120000.local' per line."""
+    return [line.strip() for line in text.splitlines() if "com.apple.TimeMachine" in line]
 
 
 def reclaimable_mb(rows: list, tiers=("safe", "safe-old"), running: set = frozenset()) -> int:
@@ -180,6 +217,21 @@ def _delete_entry(p: Path, dry_run: bool) -> int:
     return kb
 
 
+def _reclaim_old_files(p: Path, days: int, dry_run: bool):
+    """Delete files older than N days anywhere under p; never follow symlinks, keep every folder
+    (apps assume their log folder exists). Returns (KB freed, files)."""
+    freed_kb = n = 0
+    for root, dirs, files in os.walk(p, followlinks=False):
+        dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
+        for f in files:
+            fp = Path(root) / f
+            if fp.is_symlink() or not _older_than(fp, days):
+                continue
+            freed_kb += _delete_entry(fp, dry_run)
+            n += 1
+    return freed_kb, n
+
+
 def reclaim(tier: str, home: Path = None, dry_run: bool = True, running: set = frozenset(),
             rows: list = None) -> dict:
     """Reclaim one tier ('safe' or 'safe-old'). Never touches review/report tiers."""
@@ -205,7 +257,13 @@ def reclaim(tier: str, home: Path = None, dry_run: bool = True, running: set = f
                 continue
             if not p.is_dir() or p.is_symlink():
                 continue
-            days = int(r["method"].split(":")[1]) if r["method"].startswith("older:") else None
+            method = r["method"] or "clear"
+            if method.startswith("older-files:"):
+                kb, cnt = _reclaim_old_files(p, int(method.split(":")[1]), dry_run)
+                freed_kb += kb
+                n += cnt
+                continue
+            days = int(method.split(":")[1]) if method.startswith("older:") else None
             try:
                 entries = list(p.iterdir())
             except OSError:

@@ -107,6 +107,160 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(g.quiet_mode([P(61, "/bin/zsh")], self.cfg), "")
 
 
+    # ---- macOS specifics found by desk-checking the first real-Mac run paths
+
+    def test_framework_python_is_not_a_gui_app(self):
+        clt = ("/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/"
+               "Resources/Python.app/Contents/MacOS/Python")
+        brew = ("/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/"
+                "Resources/Python.app/Contents/MacOS/Python")
+        xcode = ("/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/"
+                 "Resources/Python.app/Contents/MacOS/Python")
+        claude_app = "/Applications/Claude.app/Contents/MacOS/Claude"
+        procs = [P(1, clt, "python3 guardian.py watch", ppid=1),
+                 P(2, brew, "python3 /x/server.py", ppid=1),
+                 P(3, xcode, "python3 -m http.server", ppid=1),
+                 P(31, claude_app),
+                 P(32, clt, "python3 /Users/j/mcp/server.py", ppid=31)]
+        g.classify(procs, self.cfg, UID)
+        for pr in procs[:3]:
+            self.assertFalse(pr.is_gui, pr.comm)
+            self.assertIsNone(pr.app)
+            self.assertEqual(pr.cls, "other")
+        self.assertEqual(procs[4].cls, "mcp_server", "a Python MCP server under Claude.app folds into Claude helpers")
+        self.assertEqual(procs[4].key, "Claude helpers (MCP servers)")
+
+    def test_electron_renderers_fold_into_their_own_app_not_browser(self):
+        claude_app = "/Applications/Claude.app/Contents/MacOS/Claude"
+        claude_rend = ("/Applications/Claude.app/Contents/Frameworks/Claude Helper (Renderer).app/"
+                       "Contents/MacOS/Claude Helper (Renderer)")
+        dbx_rend = ("/Applications/Dropbox.app/Contents/Frameworks/Dropbox Helper (Renderer).app/"
+                    "Contents/MacOS/Dropbox Helper (Renderer)")
+        procs = [P(31, claude_app, rss_mb=400),
+                 P(32, claude_rend, claude_rend + " --type=renderer", ppid=31, rss_mb=900),
+                 P(40, "/Applications/Dropbox.app/Contents/MacOS/Dropbox"),
+                 P(41, dbx_rend, dbx_rend + " --type=renderer", ppid=40, rss_mb=200)]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual(procs[1].cls, "ai_app/renderer")
+        self.assertEqual(procs[1].key, "Claude")
+        self.assertEqual(procs[3].cls, "gui_app/renderer")
+        self.assertEqual(procs[3].key, "Dropbox")
+        groups = {gr["key"]: gr for gr in g.aggregate(procs, self.cfg)}
+        self.assertEqual(groups["Claude"]["class"], "ai_app")
+        self.assertEqual(groups["Claude"]["rss_mb"], 1300)
+        self.assertNotIn("browser", {gr["class"] for gr in groups.values()})
+
+    def test_crashpad_handler_belongs_to_its_browser(self):
+        crashpad = ("/Users/j/Library/Caches/ms-playwright/chromium-1200/chrome-mac/Chromium.app/Contents/"
+                    "Frameworks/Chromium Framework.framework/Versions/142/Helpers/chrome_crashpad_handler")
+        procs = [P(20, PW_CHROME, PW_CHROME + " --headless"),
+                 P(21, crashpad, crashpad + " --monitor-self-annotation=ptype=crashpad-handler --database=/x", ppid=20),
+                 P(22, PW_CHROME, PW_CHROME + " --type=gpu-process", ppid=20)]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual({p.key for p in procs}, {procs[0].key})
+        self.assertEqual({p.cls.split("/")[0] for p in procs}, {"automation_browser"})
+
+    def test_archive_utility_is_not_a_browser(self):
+        au = "/System/Library/CoreServices/Applications/Archive Utility.app/Contents/MacOS/Archive Utility"
+        procs = [P(50, au), P(51, "/Applications/Archive Thing.app/Contents/MacOS/Archive Thing")]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual(procs[0].cls, "system", "lives under /System, and is not a browser")
+        self.assertEqual(procs[1].cls, "gui_app", "'Arc' inside another name is not the Arc browser")
+
+    def test_npm_wrapper_and_native_codex_binary_are_one_session(self):
+        procs = [P(60, "/opt/homebrew/bin/node", "node /Users/j/.npm-global/bin/codex", ppid=500),
+                 P(61, "/Users/j/.npm-global/lib/node_modules/@openai/codex/bin/codex-aarch64-apple-darwin",
+                   "codex-aarch64-apple-darwin", ppid=60, rss_mb=800),
+                 P(62, "/Users/j/.local/share/claude/versions/2.0.37", "claude --resume x", ppid=500)]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual([p.key for p in procs], ["agent:codex", "agent:codex", "agent:claude"])
+
+    def test_gui_app_is_never_a_dev_server_or_model_worker(self):
+        code = "/Applications/Visual Studio Code.app/Contents/MacOS/Electron"
+        procs = [P(70, code, code + " --vite --webpack ollama runner")]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual(procs[0].cls, "gui_app")
+
+
+class MacParsingTests(unittest.TestCase):
+    """The macOS readers, fed recorded output formats (documented formats; the first real run
+    on a Mac should compare these against what the machine actually prints)."""
+
+    def test_parse_ps_macos_format(self):
+        comm_out = (
+            "    1 /sbin/launchd\n"
+            "  512 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n"
+            "  530 " + HELPER + "\n"
+            " 9001 /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/"
+            "Resources/Python.app/Contents/MacOS/Python\n")
+        main_out = (
+            "    1     0     1    0   0.0   9876 12-03:04:05 15:31.27 /sbin/launchd\n"
+            f"  512     1   512  {UID}   3.2 412340    02:03:04 1-00:12:33.90 "
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --restore-last-session\n"
+            f"  530   512   512  {UID}   0.4 912000       59:59 0:01.23 " + HELPER +
+            " --type=renderer --lang=en-US --user-data-dir=/Users/j/Library/Application Support/Google/Chrome\n"
+            f" 9001     1  9001  {UID}   0.0  40000       00:30 0:00.05 python3 /Users/j/guardian.py watch\n")
+        procs = {p.pid: p for p in g.parse_ps(comm_out, main_out)}
+        self.assertEqual(set(procs), {1, 512, 530, 9001})
+        self.assertEqual(procs[530].comm, HELPER, "comm with spaces and parentheses survives")
+        self.assertEqual(procs[530].rss_kb, 912000)
+        self.assertEqual(procs[530].etime_s, 59 * 60 + 59)
+        self.assertEqual(procs[530].cputime_s, 1)
+        self.assertEqual(procs[512].cputime_s, 86400 + 12 * 60 + 33)
+        self.assertEqual(procs[1].etime_s, 12 * 86400 + 3 * 3600 + 4 * 60 + 5)
+        self.assertEqual(procs[1].uid, 0)
+        self.assertTrue(procs[530].args.endswith("Support/Google/Chrome"))
+        self.assertEqual(procs[9001].name, "Python")
+
+    def test_parse_mac_sample_formats(self):
+        raw = {
+            "pressure": "2\n", "level": "37\n",
+            "swap": "total = 3072.00M  used = 1517.25M  free = 1554.75M  (encrypted)",
+            "memsize": "34359738368",
+            "loadavg": "{ 2.52 2.61 2.73 }",
+            "vm_stat": ("Mach Virtual Memory Statistics: (page size of 16384 bytes)\n"
+                        "Pages free:                               12345.\n"
+                        "Pages active:                            654321.\n"
+                        "Pages occupied by compressor:            100000.\n"
+                        "Decompressions:                        98765432.\n"),
+            "therm": ("Note: No thermal warning level has been recorded\n"
+                      "Note: No performance warning level has been recorded\n"
+                      "CPU_Scheduler_Limit \t= 100\n"
+                      "CPU_Available_CPUs \t= 10\n"
+                      "CPU_Speed_Limit \t= 72\n"),
+        }
+        s = g.parse_mac_sample(raw, {})
+        self.assertEqual(s["pressure_level"], 2)
+        self.assertTrue(s["pressure_read"])
+        self.assertEqual(s["free_pct"], 37)
+        self.assertEqual(s["swap_total_mb"], 3072.0)
+        self.assertEqual(s["swap_used_mb"], 1517.2)
+        self.assertEqual(s["mem_total_mb"], 32768)
+        self.assertEqual(s["load1"], 2.52)
+        self.assertEqual(s["compressed_mb"], 100000 * 16384 // (1024 * 1024))
+        self.assertEqual(s["cpu_speed_limit"], 72)
+        # a Mac that prints nothing useful must degrade to safe defaults, not crash
+        s2 = g.parse_mac_sample({k: "" for k in raw}, {})
+        self.assertEqual(s2["pressure_level"], 1)
+        self.assertFalse(s2["pressure_read"])
+        self.assertIsNone(s2["free_pct"])
+        self.assertEqual(s2["cpu_speed_limit"], 100)
+        # swap reported in GB (seen on large configs)
+        s3 = g.parse_mac_sample({"swap": "total = 8.00G  used = 2.50G  free = 5.50G  (encrypted)"}, {})
+        self.assertEqual((s3["swap_total_mb"], s3["swap_used_mb"]), (8192.0, 2560.0))
+
+    def test_plist_uses_the_chosen_python_and_watch(self):
+        txt = g.plist_text(g.Path("/Users/j/guardian-src/tools/laptop-guardian/guardian.py"),
+                           g.load_config(g.Path("/nonexistent")), python="/opt/homebrew/bin/python3")
+        self.assertIn("<string>/opt/homebrew/bin/python3</string>", txt)
+        self.assertIn("<string>watch</string>", txt)
+        self.assertIn(f"<string>{g.LABEL}</string>", txt)
+        self.assertIn("<key>KeepAlive</key><true/>", txt)
+
+    def test_ps_command_never_truncates(self):
+        self.assertIn("-ww", g.ps_command("pid=,comm="))
+
+
 class EngineTests(unittest.TestCase):
     def setUp(self):
         self.cfg = g.load_config(g.Path("/nonexistent"))
@@ -303,6 +457,14 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(r[0]["result"], "held (quiet: Keynote)")
         self.assertEqual(r[1]["result"], "terminated")
         self.assertEqual(self.killed, [20])
+
+    def test_gui_process_is_shielded_even_when_a_rule_misfires(self):
+        self.cfg["mode"] = "act"
+        app = P(90, "/Applications/Visual Studio Code.app/Contents/MacOS/Electron")
+        g.classify([app], self.cfg, UID)
+        r = g.apply_decisions([g.Decision("kill", app, "test", "dev_server", "crit")], self.cfg)
+        self.assertEqual(r[0]["result"], "protected (GUI app)")
+        self.assertEqual(self.killed, [])
 
     def test_events_are_logged(self):
         self.cfg["mode"] = "observe"
