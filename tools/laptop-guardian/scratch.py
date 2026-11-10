@@ -1,0 +1,247 @@
+"""
+scratch -- the disk side of guardian.
+
+macOS uses free disk as swap. When the folders that AI apps, Chrome and dev tools
+scribble into fill the disk, there is nowhere for memory to spill and the Mac
+freezes instead of slowing down. This module measures those folders, sorts them
+into tiers, and reclaims the tiers that are safe by construction.
+
+Tiers
+  safe      rebuildable caches. Deleting them costs a slower first launch, nothing else.
+            Reclaimed automatically in act mode when disk drops below the floor.
+  safe-old  logs, snapshots, trash: delete only entries older than N days.
+  review    your data or expensive-to-rebuild binaries (session transcripts, iOS
+            backups, pinned browsers). Measured and explained, never auto-deleted.
+  report    measured for the picture; nothing to reclaim here.
+
+Everything stays under $HOME, symlinks are never followed, dry-run is the default.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+IS_MAC = sys.platform == "darwin"
+
+# name, globs (relative to home), tier, what it is, method, app that must not be running
+LOCATIONS = [
+    ("Chrome caches",
+     ["Library/Caches/Google/Chrome", "Library/Caches/Google/Chrome Canary",
+      "Library/Application Support/Google/Chrome/*/Cache",
+      "Library/Application Support/Google/Chrome/*/Code Cache",
+      "Library/Application Support/Google/Chrome/*/GPUCache",
+      "Library/Application Support/Google/Chrome/*/Service Worker/CacheStorage",
+      "Library/Application Support/Google/Chrome/*/Service Worker/ScriptCache"],
+     "safe", "page, script and GPU caches; Chrome rebuilds them as you browse", "clear", "Google Chrome"),
+    ("Claude desktop caches",
+     ["Library/Application Support/Claude/Cache", "Library/Application Support/Claude/Code Cache",
+      "Library/Application Support/Claude/GPUCache", "Library/Application Support/Claude/DawnCache",
+      "Library/Caches/Claude", "Library/Caches/com.anthropic.claudefordesktop"],
+     "safe", "Electron caches of the Claude desktop app", "clear", "Claude"),
+    ("Claude desktop data",
+     ["Library/Application Support/Claude"],
+     "report", "settings, local MCP state, Cowork session data; the caches above are the reclaimable part", None, None),
+    ("Claude Code transcripts",
+     [".claude/projects"],
+     "review", "every Claude Code conversation as JSONL; this is your history, prune old ones only with a backup", None, None),
+    ("Claude Code scratch",
+     [".claude/shell-snapshots", ".claude/debug", ".claude/statsig", ".claude/file-history", ".claude/todos"],
+     "safe-old", "shell snapshots, debug logs, todo lists older than 14 days", "older:14", None),
+    ("Codex sessions",
+     [".codex/sessions", ".codex/archived_sessions"],
+     "review", "Codex session logs (10GB+ is normal); back up before pruning", None, None),
+    ("Codex logs",
+     [".codex/log", ".codex/logs"],
+     "safe-old", "Codex CLI logs older than 14 days", "older:14", None),
+    ("ChatGPT desktop caches",
+     ["Library/Caches/com.openai.chat", "Library/Caches/com.openai.atlas"],
+     "safe", "ChatGPT desktop app caches", "clear", "ChatGPT"),
+    ("ChatGPT desktop data",
+     ["Library/Application Support/com.openai.chat", "Library/Application Support/com.openai.atlas"],
+     "report", "ChatGPT app state", None, None),
+    ("Dropbox cache",
+     ["Library/CloudStorage/Dropbox/.dropbox.cache", "Dropbox/.dropbox.cache"],
+     "safe", "Dropbox's staging area for syncs; it refills as needed", "clear", "Dropbox"),
+    ("npm cache", [".npm/_cacache"], "safe", "downloaded packages; npm re-downloads on demand", "clear", None),
+    ("pip cache", ["Library/Caches/pip", ".cache/pip"], "safe", "downloaded wheels", "clear", None),
+    ("Homebrew cache", ["Library/Caches/Homebrew"], "safe", "downloaded bottles; `brew cleanup` territory", "clear", None),
+    ("uv / pnpm / yarn caches",
+     [".cache/uv", "Library/Caches/uv", "Library/pnpm/store", "Library/Caches/Yarn"],
+     "safe", "package manager stores", "clear", None),
+    ("Playwright browsers",
+     ["Library/Caches/ms-playwright"],
+     "review", "pinned browser binaries for agent automation; ~500MB each to re-download", None, None),
+    ("Other app caches",
+     ["Library/Caches"],
+     "report", "everything under ~/Library/Caches not named above", None, None),
+    ("Logs", ["Library/Logs"], "safe-old", "app logs older than 30 days", "older:30", None),
+    ("Trash", [".Trash"], "safe-old", "items in the Trash older than 30 days", "older:30", None),
+    ("Downloads", ["Downloads"], "report", "yours to sort; often the biggest folder", None, None),
+    ("iOS device backups",
+     ["Library/Application Support/MobileSync/Backup"],
+     "review", "iPhone/iPad backups; delete from Finder > device > Manage Backups", None, None),
+    ("Xcode DerivedData",
+     ["Library/Developer/Xcode/DerivedData", "Library/Developer/Xcode/iOS DeviceSupport",
+      "Library/Developer/CoreSimulator/Caches"],
+     "review", "build products and simulator caches; rebuild on next build", None, None),
+    ("Docker / OrbStack images",
+     ["Library/Containers/com.docker.docker/Data/vms", ".orbstack/data", "OrbStack"],
+     "review", "VM disk images; prune from the app", None, None),
+]
+
+TIER_ORDER = {"safe": 0, "safe-old": 1, "review": 2, "report": 3}
+
+
+def du_kb(path: Path) -> int:
+    """Size in KB without following symlinks. Uses du when present (fast), else walks."""
+    if shutil.which("du"):
+        try:
+            out = subprocess.run(["du", "-sk", str(path)], capture_output=True, text=True, timeout=600).stdout
+            return int(out.split()[0]) if out.strip() else 0
+        except Exception:
+            pass
+    total = 0
+    for root, dirs, files in os.walk(path, followlinks=False):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(root, f)).st_size
+            except OSError:
+                pass
+    return total // 1024
+
+
+def expand(home: Path, pattern: str) -> list:
+    if any(ch in pattern for ch in "*?["):
+        return [p for p in home.glob(pattern) if p.exists() and not p.is_symlink()]
+    p = home / pattern
+    return [p] if p.exists() and not p.is_symlink() else []
+
+
+def census(home: Path = None) -> list:
+    """Measure every known location. Returns rows sorted biggest first."""
+    home = home or Path.home()
+    rows = []
+    named_cache_paths = set()
+    for name, globs, tier, what, method, app in LOCATIONS:
+        paths = []
+        for g in globs:
+            paths += expand(home, g)
+        if name != "Other app caches":
+            for p in paths:
+                if str(p).startswith(str(home / "Library/Caches")):
+                    named_cache_paths.add(p)
+        kb = sum(du_kb(p) for p in paths)
+        if name == "Other app caches":
+            kb -= sum(du_kb(p) for p in named_cache_paths)
+            kb = max(0, kb)
+        rows.append({"name": name, "tier": tier, "what": what, "method": method, "app": app,
+                     "paths": [str(p) for p in paths], "mb": kb // 1024})
+    rows.sort(key=lambda r: (-r["mb"], TIER_ORDER[r["tier"]]))
+    return rows
+
+
+def local_snapshots() -> list:
+    """Time Machine local snapshots hold 'purgeable' space that still blocks swap growth."""
+    if not IS_MAC or not shutil.which("tmutil"):
+        return []
+    try:
+        out = subprocess.run(["tmutil", "listlocalsnapshots", "/"], capture_output=True, text=True, timeout=30).stdout
+        return [line.strip() for line in out.splitlines() if "com.apple.TimeMachine" in line]
+    except Exception:
+        return []
+
+
+def reclaimable_mb(rows: list, tiers=("safe", "safe-old"), running: set = frozenset()) -> int:
+    return sum(r["mb"] for r in rows if r["tier"] in tiers and not (r["app"] and r["app"] in running))
+
+
+def _older_than(path: Path, days: int) -> bool:
+    try:
+        return path.lstat().st_mtime < time.time() - days * 86400
+    except OSError:
+        return False
+
+
+def _delete_entry(p: Path, dry_run: bool) -> int:
+    """Delete one directory entry (file, symlink, or tree). Returns KB freed (estimated)."""
+    kb = du_kb(p) if p.is_dir() and not p.is_symlink() else max(1, p.lstat().st_size // 1024)
+    if not dry_run:
+        try:
+            if p.is_dir() and not p.is_symlink():
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                p.unlink()
+        except OSError:
+            return 0
+    return kb
+
+
+def reclaim(tier: str, home: Path = None, dry_run: bool = True, running: set = frozenset(),
+            rows: list = None) -> dict:
+    """Reclaim one tier ('safe' or 'safe-old'). Never touches review/report tiers."""
+    home = (home or Path.home()).resolve()
+    if tier not in ("safe", "safe-old"):
+        raise ValueError("only the safe and safe-old tiers can be reclaimed by guardian")
+    rows = rows or census(home)
+    result = {"tier": tier, "dry_run": dry_run, "freed_mb": 0, "items": [], "skipped": []}
+    for r in rows:
+        if r["tier"] != tier or not r["paths"]:
+            continue
+        if r["app"] and r["app"] in running:
+            result["skipped"].append({"name": r["name"], "why": f"{r['app']} is running"})
+            continue
+        freed_kb = 0
+        n = 0
+        for ps in r["paths"]:
+            p = Path(ps)
+            try:
+                p.resolve().relative_to(home)
+            except ValueError:
+                result["skipped"].append({"name": r["name"], "why": f"{p} is outside home"})
+                continue
+            if not p.is_dir() or p.is_symlink():
+                continue
+            days = int(r["method"].split(":")[1]) if r["method"].startswith("older:") else None
+            try:
+                entries = list(p.iterdir())
+            except OSError:
+                continue
+            for e in entries:
+                if days is not None and not _older_than(e, days):
+                    continue
+                freed_kb += _delete_entry(e, dry_run)
+                n += 1
+        result["items"].append({"name": r["name"], "entries": n, "mb": freed_kb // 1024})
+        result["freed_mb"] += freed_kb // 1024
+    return result
+
+
+def render(rows: list, snapshots: list = None, disk_free_gb=None, running: set = frozenset()) -> str:
+    lines = []
+    if disk_free_gb is not None:
+        lines.append(f"Disk free: {disk_free_gb} GB  (this is also the ceiling for swap)")
+    if snapshots:
+        lines.append(f"Time Machine local snapshots: {len(snapshots)} (purgeable, but they still crowd swap; "
+                     f"thin with: sudo tmutil thinlocalsnapshots / 50000000000 4)")
+    safe = reclaimable_mb(rows, ("safe",), running)
+    old = reclaimable_mb(rows, ("safe-old",), running)
+    lines.append(f"Reclaimable now: {safe / 1024:.1f} GB safe caches + up to {old / 1024:.1f} GB old logs/trash"
+                 f"  ->  guardian.py scratch --reclaim safe --yes")
+    lines.append("")
+    lines.append(f"{'GB':>7}  {'tier':9} {'location':26} what")
+    for r in rows:
+        if r["mb"] == 0 and not r["paths"]:
+            continue
+        note = ""
+        if r["app"] and r["app"] in running:
+            note = f"  [{r['app']} is running; skipped until it quits]"
+        lines.append(f"{r['mb'] / 1024:7.2f}  {r['tier']:9} {r['name']:26} {r['what']}{note}")
+    missing = [r["name"] for r in rows if not r["paths"]]
+    if missing:
+        lines.append("")
+        lines.append("not present on this machine: " + ", ".join(missing))
+    return "\n".join(lines)

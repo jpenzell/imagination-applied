@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Guardian for Chrome",
+  "version": "0.1.0",
+  "description": "Puts tabs you are done with to sleep, and parks tabs you have not touched in days into a bookmark folder. Nothing is lost.",
+  "permissions": ["tabs", "storage", "alarms", "bookmarks"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Guardian" },
+  "options_page": "options.html",
+  "minimum_chrome_version": "121"
+}

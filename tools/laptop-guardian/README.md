@@ -22,12 +22,24 @@ It does three things the usual "memory cleaner" apps don't:
    applied. After a bad day (three pressure episodes) it does this on its own and leaves a
    diagnosis file for you.
 
+**Status:** working prototype. Three parts, all tested, none yet run on a Mac:
+
+| part | what | tests |
+|---|---|---|
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 27 policy tests |
+| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 9 tests |
+| `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 1 end-to-end run in real Chromium |
+
+The native menu bar app with a basic (dad) mode and an advanced mode is specified in
+[PLAN.md](PLAN.md), with the work order for building it on a Mac.
+
 ## Install (two minutes)
 
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py          # 25 policy tests, should say OK
+python3 test_guardian.py && python3 test_scratch.py   # 36 tests, should say OK twice
+python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
 python3 guardian.py install       # launchd agent: starts at login, restarts if it dies
 python3 guardian.py test-notify   # grant notification permission the first time
@@ -84,6 +96,69 @@ python3 guardian.py pause     # until resume; survives restarts
 python3 guardian.py resume
 ```
 
+## The disk side ("scratch")
+
+macOS swaps into free disk. When the folders that apps scribble into fill the disk, there
+is nowhere for memory to spill and the Mac freezes instead of slowing down. So guardian
+measures those folders and sorts them into tiers:
+
+```
+$ python3 guardian.py scratch
+Disk free: 41.2 GB  (this is also the ceiling for swap)
+Time Machine local snapshots: 6 (purgeable, but they still crowd swap; thin with: sudo tmutil thinlocalsnapshots / 50000000000 4)
+Reclaimable now: 7.8 GB safe caches + up to 2.1 GB old logs/trash  ->  guardian.py scratch --reclaim safe --yes
+
+     GB  tier      location                   what
+  14.20  review    Codex sessions             Codex session logs (10GB+ is normal); back up before pruning
+   6.10  safe      Chrome caches              page, script and GPU caches; Chrome rebuilds them  [Google Chrome is running; skipped until it quits]
+   3.90  report    Downloads                  yours to sort; often the biggest folder
+   2.40  review    Claude Code transcripts    every Claude Code conversation as JSONL; this is your history ...
+   1.10  safe      Claude desktop caches      Electron caches of the Claude desktop app
+   ...
+```
+
+| tier | what | who deletes |
+|---|---|---|
+| `safe` | rebuildable caches: Chrome, Claude desktop (Electron), ChatGPT desktop, Dropbox cache, npm/pip/brew/uv | `scratch --reclaim safe --yes`; automatically in act mode when disk drops below `disk_floor_gb` |
+| `safe-old` | logs, Trash, Claude Code shell snapshots and debug logs older than 14 to 30 days | same |
+| `review` | your data or expensive binaries: Codex sessions, Claude Code transcripts, iOS backups, Playwright browsers, Xcode DerivedData, Docker images | you, with a backup; guardian only measures and explains |
+| `report` | Downloads, app data folders | nobody |
+
+Caches of an app that is running are skipped until it quits. Nothing outside your home
+folder is ever touched, symlinks are never followed, and the default is a dry run.
+
+## Chrome: tabs you are done with
+
+Guardian cannot see inside Chrome, and Chrome's own Memory Saver only acts when memory is
+already tight. The extension in `chrome-extension/` does the two things that matter:
+
+- **Sleep** tabs idle longer than an hour (`chrome.tabs.discard`): the tab stays in the
+  strip, its memory is freed, it reloads when you click it.
+- **Park** tabs untouched for three days: bookmarked under "Guardian Parked / date", then
+  closed. Nothing is lost.
+
+It never touches the active tab, pinned tabs, tabs playing sound, or sites on the
+never-touch list (claude.ai, chatgpt.com, Meet, Zoom, Gmail, Calendar by default, because a
+conversation may be mid-run). Basic mode is one choice (gentle / normal / aggressive);
+advanced mode exposes the minutes and the list. The badge shows the tab count.
+
+Load it: chrome://extensions, turn on Developer mode, "Load unpacked", pick the
+`chrome-extension` folder. Test it: `node chrome-extension/test_extension.mjs` (launches a
+throwaway Chrome profile, needs nothing but Node 22 and Chrome).
+
+## Claude and ChatGPT on this Mac
+
+`status` has a line for them:
+
+```
+  AI on this Mac  : Claude 2.3GB/4p, Claude helpers (MCP servers) 0.9GB/12p, ChatGPT 0.6GB/2p, agent:claude 1.1GB/3p, agent:codex 0.8GB/2p
+```
+
+The Claude and ChatGPT desktop apps are the `ai_app` class and are never killed. The
+`node` processes the Claude app spawns (one per MCP server) fold into "Claude helpers". An
+MCP server whose parent app has quit is an orphan and is closed after 10 idle minutes in
+act mode. Claude Code and Codex CLI sessions are counted per tool; stale ones are reported.
+
 ## Commands
 
 ```
@@ -93,6 +168,7 @@ guardian.py watch --once --dry-run --simulate level=4,free=3   exercise the poli
 guardian.py report --hours 24      episodes, usual suspects, actions
 guardian.py ask                    Claude Code / Codex diagnoses the diary (needs `claude` or `codex` on PATH)
 guardian.py config --apply-suggestion   apply the config change `ask` proposed
+guardian.py scratch                disk census by tier; --reclaim safe|safe-old|all [--yes]
 guardian.py chrome                 tab census: how many tabs, how many duplicates
 guardian.py chrome --close-duplicates   close duplicate URLs (all stay in History)
 guardian.py doctor                 check install, permissions, swap ceiling, login items

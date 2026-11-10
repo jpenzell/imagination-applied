@@ -63,10 +63,27 @@ class ClassifyTests(unittest.TestCase):
         g.classify(procs, self.cfg, UID)
         self.assertEqual(procs[0].cls, "agent_session")
         self.assertEqual(procs[0].key, "agent:claude")
-        self.assertEqual(procs[1].cls, "gui_app")
+        self.assertEqual(procs[1].cls, "ai_app", "the Claude desktop app is tracked as an AI app, not a CLI session")
         self.assertEqual(procs[2].cls, "other", "a script in a folder named Codex is not a Codex session")
         self.assertEqual(procs[3].cls, "agent_session")
         self.assertEqual(procs[3].key, "agent:codex")
+
+    def test_mcp_servers_fold_under_their_ai_app_and_orphans_are_flagged(self):
+        claude_app = "/Applications/Claude.app/Contents/MacOS/Claude"
+        procs = [P(31, claude_app),
+                 P(32, "/opt/homebrew/bin/node", "node /Users/j/mcp/josh-content/index.js", ppid=31, rss_mb=120),
+                 P(33, "/opt/homebrew/bin/node", "node /x/node_modules/.bin/mcp-server-dropbox", ppid=32, rss_mb=80),
+                 P(34, "/opt/homebrew/bin/node", "node /Users/j/.npm/_npx/abc/mcp-server-github", ppid=1, rss_mb=90),
+                 P(35, "/opt/homebrew/bin/node", "node /Users/j/site/server.js", ppid=1)]
+        g.classify(procs, self.cfg, UID)
+        self.assertEqual(procs[0].cls, "ai_app")
+        self.assertEqual(procs[1].cls, "mcp_server")
+        self.assertEqual(procs[2].cls, "mcp_server", "grandchildren of the app fold in too")
+        self.assertEqual(procs[1].key, "Claude helpers (MCP servers)")
+        self.assertEqual(procs[3].cls, "mcp_orphan", "parent gone + 'mcp' in the command = orphaned server")
+        self.assertEqual(procs[4].cls, "other", "a plain node server with a dead parent is not an MCP orphan")
+        groups = {gr["key"]: gr for gr in g.aggregate(procs, self.cfg)}
+        self.assertEqual(groups["Claude helpers (MCP servers)"]["rss_mb"], 200)
 
     def test_word_boundaries_for_dev_servers(self):
         procs = [P(40, "/opt/homebrew/bin/node", "node /app/node_modules/.bin/vite dev"),
@@ -134,6 +151,16 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(kills[0].proc.pid, 20)
         self.assertIn("abandoned", kills[0].reason)
         self.assertEqual(kills[0].cls, "automation_browser")
+
+    def test_orphaned_mcp_server_is_killed_after_idle(self):
+        e = g.Engine(self.cfg)
+        mk = lambda i, now: [P(34, "/opt/homebrew/bin/node", "node /x/mcp-server-github", ppid=1,
+                               age=3600 + 30 * i, cputime=2)]
+        d = self.run_steps(e, mk, [sample(ts=1e6 + 30 * i) for i in range(25)])
+        kills = [x for x in d if x.action == "kill"]
+        self.assertEqual(len(kills), 1)
+        self.assertEqual(kills[0].cls, "mcp_orphan")
+        self.assertIn("MCP server abandoned", kills[0].reason)
 
     def test_automation_chrome_with_live_parent_is_left_alone(self):
         e = g.Engine(self.cfg)
@@ -213,7 +240,9 @@ class EngineTests(unittest.TestCase):
         s = sample(disk=9, ts=1e6)
         s["cpu_speed_limit"] = 60
         d = e.step(s, [], now=1e6)
-        self.assertEqual({x.cls for x in d}, {"disk", "thermal"})
+        self.assertEqual({(x.cls, x.action) for x in d}, {("disk", "reclaim"), ("thermal", "notify")})
+        d2 = e.step(sample(disk=9, ts=1e6 + 3600), [], now=1e6 + 3600)
+        self.assertEqual([x for x in d2 if x.cls == "disk"], [], "disk reclaim has a long cooldown")
 
 
 class ApplyTests(unittest.TestCase):

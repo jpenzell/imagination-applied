@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px -apple-system, system-ui, sans-serif; width: 280px; margin: 0; padding: 14px; color: #222; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  .big { font-size: 28px; font-weight: 600; margin: 4px 0; }
+  .muted { color: #666; }
+  .row { display: flex; justify-content: space-between; margin: 6px 0; }
+  button { width: 100%; padding: 8px; margin-top: 8px; border: 1px solid #ccc; border-radius: 6px; background: #f7f7f7; cursor: pointer; font-size: 13px; }
+  button.primary { background: #2c7a4b; color: white; border-color: #2c7a4b; }
+  a { color: #2c7a4b; }
+  label { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>Guardian</h1>
+  <div class="big"><span id="awake">–</span> <span class="muted" style="font-size:13px">tabs awake of <span id="total">–</span></span></div>
+  <div class="row"><span>Put to sleep today</span><b id="slept">0</b></div>
+  <div class="row"><span>Parked today</span><b id="parked">0</b></div>
+  <div class="muted" id="last"></div>
+  <button class="primary" id="sweep">Tidy up now</button>
+  <button id="parked-open">Open parked tabs folder</button>
+  <label><input type="checkbox" id="enabled"> Keep tidying automatically</label>
+  <div class="muted" style="margin-top:8px"><a href="#" id="options">Settings</a></div>
+  <script src="popup.js"></script>
+</body>
+</html>

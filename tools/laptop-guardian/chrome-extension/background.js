@@ -1,0 +1,116 @@
+// Guardian for Chrome -- background service worker.
+//
+// Every few minutes: look at every tab, and
+//   * SLEEP  tabs idle longer than `sleepAfterMin`  (chrome.tabs.discard: the tab stays in
+//            the strip, memory is freed, it reloads when you click it)
+//   * PARK   tabs idle longer than `parkAfterHours` (bookmark it under
+//            "Guardian Parked / <date>", then close it)
+// Never: the active tab in each window, pinned tabs, tabs playing sound, tabs on the
+// never-touch list (claude.ai and chatgpt.com by default: a conversation may be mid-run).
+//
+// Idle = time since Chrome last activated the tab (tab.lastAccessed, Chrome 121+).
+
+const DEFAULTS = {
+  enabled: true,
+  level: "normal",            // basic mode: gentle | normal | aggressive
+  sleepAfterMin: 60,          // advanced overrides
+  parkAfterHours: 72,
+  neverTouch: ["claude.ai", "chatgpt.com", "chat.openai.com", "meet.google.com", "zoom.us", "mail.google.com", "calendar.google.com"],
+  parkFolderName: "Guardian Parked",
+  advanced: false,
+};
+
+const LEVELS = {
+  gentle:     { sleepAfterMin: 180, parkAfterHours: 168 },
+  normal:     { sleepAfterMin: 60,  parkAfterHours: 72 },
+  aggressive: { sleepAfterMin: 20,  parkAfterHours: 24 },
+};
+
+async function getSettings() {
+  const stored = await chrome.storage.sync.get(DEFAULTS);
+  const s = { ...DEFAULTS, ...stored };
+  if (!s.advanced) Object.assign(s, LEVELS[s.level] || LEVELS.normal);
+  return s;
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
+}
+
+function untouchable(tab, settings) {
+  if (!tab.url || !/^https?:/.test(tab.url)) return "internal";
+  if (tab.active) return "active";
+  if (tab.pinned) return "pinned";
+  if (tab.audible) return "audible";
+  const h = hostOf(tab.url);
+  if (settings.neverTouch.some(d => h === d || h.endsWith("." + d))) return "never-touch";
+  return null;
+}
+
+async function parkFolder(settings) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [root] = await chrome.bookmarks.search({ title: settings.parkFolderName });
+  const rootId = root ? root.id : (await chrome.bookmarks.create({ title: settings.parkFolderName })).id;
+  const kids = await chrome.bookmarks.getChildren(rootId);
+  const day = kids.find(k => k.title === today && !k.url);
+  return day ? day.id : (await chrome.bookmarks.create({ parentId: rootId, title: today })).id;
+}
+
+// Exposed for tests and the popup: runSweep({now, sleepAfterMin, parkAfterHours}) -> stats
+async function runSweep(overrides = {}) {
+  const settings = { ...(await getSettings()), ...overrides };
+  const stats = { looked: 0, slept: 0, parked: 0, skipped: {} };
+  if (!settings.enabled) return stats;
+  const now = overrides.now || Date.now();
+  const tabs = await chrome.tabs.query({});
+  let folderId = null;
+  for (const tab of tabs) {
+    stats.looked++;
+    const why = untouchable(tab, settings);
+    if (why) { stats.skipped[why] = (stats.skipped[why] || 0) + 1; continue; }
+    const idleMin = (now - (tab.lastAccessed || now)) / 60000;
+    if (idleMin >= settings.parkAfterHours * 60) {
+      try {
+        folderId = folderId || await parkFolder(settings);
+        await chrome.bookmarks.create({ parentId: folderId, title: tab.title || tab.url, url: tab.url });
+        await chrome.tabs.remove(tab.id);
+        stats.parked++;
+      } catch (e) { stats.skipped.error = (stats.skipped.error || 0) + 1; }
+    } else if (idleMin >= settings.sleepAfterMin && !tab.discarded) {
+      try { await chrome.tabs.discard(tab.id); stats.slept++; }
+      catch (e) { stats.skipped.error = (stats.skipped.error || 0) + 1; }
+    }
+  }
+  const day = new Date().toISOString().slice(0, 10);
+  const { daily = {} } = await chrome.storage.local.get("daily");
+  const d = daily[day] || { slept: 0, parked: 0 };
+  d.slept += stats.slept; d.parked += stats.parked;
+  daily[day] = d;
+  for (const k of Object.keys(daily)) if (k < new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)) delete daily[k];
+  await chrome.storage.local.set({ daily, lastSweep: { at: Date.now(), ...stats } });
+  await updateBadge();
+  return stats;
+}
+
+async function updateBadge() {
+  const tabs = await chrome.tabs.query({});
+  const awake = tabs.filter(t => !t.discarded).length;
+  await chrome.action.setBadgeText({ text: String(tabs.length) });
+  await chrome.action.setBadgeBackgroundColor({ color: awake > 60 ? "#c0392b" : awake > 30 ? "#e67e22" : "#2c7a4b" });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create("sweep", { periodInMinutes: 5 });
+  updateBadge();
+});
+chrome.runtime.onStartup.addListener(() => chrome.alarms.create("sweep", { periodInMinutes: 5 }));
+chrome.alarms.onAlarm.addListener(a => { if (a.name === "sweep") runSweep(); });
+chrome.tabs.onCreated.addListener(updateBadge);
+chrome.tabs.onRemoved.addListener(updateBadge);
+chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+  if (msg && msg.type === "sweep") { runSweep(msg.overrides || {}).then(reply); return true; }
+  if (msg && msg.type === "badge") { updateBadge().then(() => reply(true)); return true; }
+});
+
+self.runSweep = runSweep;
+self.getSettings = getSettings;

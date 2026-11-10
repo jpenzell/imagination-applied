@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Guardian settings</title>
+<style>
+  body { font: 14px -apple-system, system-ui, sans-serif; max-width: 560px; margin: 32px auto; color: #222; padding: 0 16px; }
+  h1 { font-size: 20px; } h2 { font-size: 15px; margin-top: 28px; }
+  fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  label { display: block; margin: 8px 0; }
+  input[type=number] { width: 80px; } textarea { width: 100%; height: 80px; font: 13px monospace; }
+  .muted { color: #666; font-size: 13px; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid #2c7a4b; background: #2c7a4b; color: white; cursor: pointer; }
+  #saved { color: #2c7a4b; margin-left: 10px; }
+</style>
+</head>
+<body>
+  <h1>Guardian for Chrome</h1>
+  <p class="muted">Tabs you have not looked at for a while go to sleep (they stay in the tab strip and reload when clicked). Tabs you have not touched in days get parked into a bookmark folder called "Guardian Parked", then closed. Nothing is ever lost.</p>
+
+  <fieldset>
+    <legend>Basic</legend>
+    <label><input type="radio" name="level" value="gentle"> Gentle: sleep after 3 hours, park after a week</label>
+    <label><input type="radio" name="level" value="normal"> Normal: sleep after 1 hour, park after 3 days</label>
+    <label><input type="radio" name="level" value="aggressive"> Aggressive: sleep after 20 minutes, park after 1 day</label>
+  </fieldset>
+
+  <label><input type="checkbox" id="advanced"> Show advanced settings</label>
+  <fieldset id="adv" style="display:none">
+    <legend>Advanced</legend>
+    <label>Sleep after <input type="number" id="sleepAfterMin" min="5"> minutes idle</label>
+    <label>Park after <input type="number" id="parkAfterHours" min="1"> hours idle</label>
+    <label>Never touch these sites (one per line; a conversation may be mid-run)<br>
+      <textarea id="neverTouch"></textarea></label>
+  </fieldset>
+
+  <button id="save">Save</button><span id="saved"></span>
+  <script src="options.js"></script>
+</body>
+</html>

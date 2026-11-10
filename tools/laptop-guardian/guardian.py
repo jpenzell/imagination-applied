@@ -108,7 +108,9 @@ DEFAULT_CONFIG = {
         "markers": ["ollama runner", "llama-server", "lms-llama", "mlx_lm"],
         "memory_mb": 12000,
     },
-    "safe_kill_classes": ["automation_browser", "model_worker", "dev_server"],
+    "safe_kill_classes": ["automation_browser", "model_worker", "dev_server", "mcp_orphan"],
+    "ai_apps": ["Claude", "ChatGPT", "Codex", "Cowork", "Claude Code"],
+    "scratch": {"auto_reclaim_in_act_mode": True, "cooldown_hours": 6},
     "protect": [
         "Finder", "Dock", "WindowServer", "loginwindow", "Terminal", "iTerm2",
         "tmux", "Dropbox", "Claude", "Codex", "ChatGPT", "Cowork", "Google Chrome",
@@ -328,6 +330,28 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
             p.cls = "system"
             p.key = p.name
             continue
+        ai_apps = cfg.get("ai_apps", [])
+        if p.is_gui and p.app in ai_apps:
+            p.cls = "ai_app"
+            p.key = p.app
+            continue
+        # helper spawned by an AI desktop app (MCP servers, Claude Code run from Claude.app)
+        anc, hops = p, 0
+        owner = None
+        while anc.ppid in by_pid and hops < 6:
+            anc = by_pid[anc.ppid]
+            hops += 1
+            if anc.is_gui and anc.app in ai_apps:
+                owner = anc.app
+                break
+        if owner and not p.is_gui:
+            p.cls = "mcp_server"
+            p.key = f"{owner} helpers (MCP servers)"
+            continue
+        if not p.is_gui and p.ppid == 1 and "mcp" in low_args and p.name in ("node", "npx", "uvx", "python3", "python", "bun", "deno"):
+            p.cls = "mcp_orphan"
+            p.key = f"orphaned MCP server: {p.args.split()[-1][-40:]}"
+            continue
         if p.is_gui:
             p.cls = "gui_app"
             p.key = p.app or p.name
@@ -544,7 +568,7 @@ class Engine:
             base = p.cls.split("/")[0]
 
             # idle / hot timers
-            idle_thr = ab["idle_cpu_pct"] if base == "automation_browser" else ag["idle_cpu_pct"]
+            idle_thr = ab["idle_cpu_pct"] if base in ("automation_browser", "mcp_orphan") else ag["idle_cpu_pct"]
             if inst < idle_thr:
                 t["idle_since"] = t["idle_since"] or now
             else:
@@ -554,15 +578,16 @@ class Engine:
             else:
                 t["hot_since"] = None
 
-            # 1. orphaned / idle automation browser (main process only)
-            if base == "automation_browser" and p.chrome_type is None:
+            # 1. orphaned / idle automation browser (main process only) or orphaned MCP server
+            if base in ("automation_browser", "mcp_orphan") and p.chrome_type is None:
                 orphan = p.ppid == 1
                 idle_for = (now - t["idle_since"]) if t["idle_since"] else 0
                 limit = ab["pressure_idle_seconds"] if under_pressure else ab["orphan_idle_seconds"]
                 if orphan and idle_for >= limit and self._cooldown_ok(f"kill:{p.pid}", now, 1800):
+                    what = "automation browser" if base == "automation_browser" else "MCP server"
                     decisions.append(Decision("kill", p,
-                                              f"automation browser abandoned (parent gone, idle {int(idle_for)}s)",
-                                              "automation_browser", "warn"))
+                                              f"{what} abandoned (parent gone, idle {int(idle_for)}s)",
+                                              base, "warn"))
                     continue
                 grp = next((g for g in groups if g["key"] == p.key), None)
                 if under_pressure and grp and grp["rss_mb"] >= ab["memory_mb"] \
@@ -623,8 +648,9 @@ class Engine:
 
         # ---- disk as swap ceiling
         dfree = sample.get("disk_free_gb")
-        if dfree is not None and dfree < cfg["disk_floor_gb"] and self._cooldown_ok("disk", now, 6 * 3600):
-            decisions.append(Decision("notify", None,
+        if dfree is not None and dfree < cfg["disk_floor_gb"] and \
+                self._cooldown_ok("disk", now, cfg["scratch"]["cooldown_hours"] * 3600):
+            decisions.append(Decision("reclaim", None,
                                       f"Only {dfree}GB free on disk. Swap cannot grow past that; memory freezes get likelier.",
                                       "disk", "warn"))
         if sample.get("cpu_speed_limit", 100) < 100 and self._cooldown_ok("therm", now, 3600):
@@ -715,8 +741,12 @@ def terminate(p: Proc, grace: int = 15) -> str:
     return "terminated"
 
 
+def running_apps(procs: list) -> set:
+    return {p.app for p in procs if p.app and p.cls != "foreign"}
+
+
 def apply_decisions(decisions: list, cfg: dict, quiet: str = "", dry_run: bool = False,
-                    simulated: bool = False) -> list:
+                    simulated: bool = False, running: set = frozenset()) -> list:
     mode = cfg["mode"]
     applied = []
     for d in decisions:
@@ -732,6 +762,21 @@ def apply_decisions(decisions: list, cfg: dict, quiet: str = "", dry_run: bool =
             else:
                 notify("Guardian", d.reason, cfg)
                 rec["result"] = "notified"
+        elif d.action == "reclaim":
+            import scratch
+            rows = scratch.census()
+            could = scratch.reclaimable_mb(rows, ("safe", "safe-old"), running)
+            if mode == "act" and cfg["scratch"]["auto_reclaim_in_act_mode"] and not dry_run and not simulated:
+                freed = 0
+                for tier in ("safe", "safe-old"):
+                    freed += scratch.reclaim(tier, dry_run=False, running=running, rows=rows)["freed_mb"]
+                rec["result"] = f"reclaimed {freed / 1024:.1f}GB of caches/old logs"
+                if not quiet:
+                    notify("Guardian", f"{d.reason} Freed {freed / 1024:.1f}GB of rebuildable caches.", cfg)
+            else:
+                rec["result"] = f"would reclaim {could / 1024:.1f}GB (safe tiers)"
+                if mode != "observe" and not quiet and not dry_run:
+                    notify("Guardian", f"{d.reason} `guardian scratch --reclaim all --yes` would free {could / 1024:.1f}GB.", cfg)
         elif d.action == "renice":
             if mode != "act" or dry_run or quiet:
                 rec["result"] = ("would renice (dry-run)" if dry_run else
@@ -808,6 +853,9 @@ def print_status(cfg: dict, snap: dict, n: int = 12):
     print(f"  top {n} by memory (helpers folded into their app):")
     for g in snap["groups"][:n]:
         print(f"    {fmt_gb(g['rss_mb']):>8}  {g['cpu']:5.1f}% cpu  {g['n']:3d}p  [{g['class']}]  {g['key']}")
+    ai = [g for g in snap["groups"] if g["class"] in ("ai_app", "mcp_server", "agent_session", "mcp_orphan")]
+    if ai:
+        print("  AI on this Mac  : " + ", ".join(f"{g['key']} {fmt_gb(g['rss_mb'])}/{g['n']}p" for g in ai))
     watched = [g for g in snap["groups"] if g["class"] == "watched"]
     for g in watched:
         print(f"  watched         : {g['key']} {fmt_gb(g['rss_mb'])} {g['cpu']}% cpu")
@@ -870,7 +918,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
             if not simulate:
                 log_sample(snap["sample"], snap["groups"])
             applied = apply_decisions(decisions, cfg, quiet=snap["quiet"], dry_run=dry_run,
-                                      simulated=bool(simulate))
+                                      simulated=bool(simulate), running=running_apps(snap["procs"]))
             if once:
                 for a in applied:
                     print(json.dumps(a, default=str))
@@ -1253,6 +1301,32 @@ def doctor(cfg: dict, script: Path):
 # CLI
 # --------------------------------------------------------------------------
 
+def scratch_cmd(cfg: dict, args):
+    import scratch
+    running = running_apps(classify(list_processes(), cfg, os.getuid()))
+    rows = scratch.census()
+    snaps = scratch.local_snapshots()
+    if args.json and not args.reclaim:
+        print(json.dumps({"rows": rows, "snapshots": snaps, "running": sorted(running)}, indent=1))
+        return
+    if not args.reclaim:
+        print(scratch.render(rows, snaps, sample_system().get("disk_free_gb"), running))
+        return
+    tiers = ["safe", "safe-old"] if args.reclaim == "all" else [args.reclaim]
+    total = 0
+    for tier in tiers:
+        r = scratch.reclaim(tier, dry_run=not args.yes, running=running, rows=rows)
+        total += r["freed_mb"]
+        for it in r["items"]:
+            print(f"  {'would free' if not args.yes else 'freed':10} {it['mb'] / 1024:6.2f}GB  {it['name']} ({it['entries']} entries)")
+        for sk in r["skipped"]:
+            print(f"  {'skipped':10}        -  {sk['name']}: {sk['why']}")
+        log_event("scratch", tier=tier, dry_run=not args.yes, freed_mb=r["freed_mb"],
+                  items=r["items"], skipped=r["skipped"])
+    print(f"{'Would free' if not args.yes else 'Freed'} {total / 1024:.1f}GB total."
+          + ("  Add --yes to do it." if not args.yes else ""))
+
+
 def config_cmd(cfg: dict, args):
     if args.apply_suggestion:
         sp = CONFIG_DIR / "suggested-config.json"
@@ -1308,6 +1382,10 @@ def main(argv=None):
     p = sub.add_parser("chrome", help="tab census; --close-duplicates closes duplicate URLs")
     p.add_argument("--close-duplicates", action="store_true")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("scratch", help="disk census of app data folders; --reclaim safe|safe-old|all [--yes]")
+    p.add_argument("--reclaim", choices=["safe", "safe-old", "all"])
+    p.add_argument("--yes", action="store_true", help="actually delete (default is a dry run)")
+    p.add_argument("--json", action="store_true")
     sub.add_parser("doctor", help="check the install")
     sub.add_parser("install", help="install the launchd agent (starts at login)")
     sub.add_parser("uninstall", help="remove the launchd agent")
@@ -1341,6 +1419,8 @@ def main(argv=None):
             print(f"[written to {write_digest(cfg, args.hours)}]")
     elif args.cmd == "chrome":
         chrome_tabs(close_duplicates=args.close_duplicates, json_out=args.json)
+    elif args.cmd == "scratch":
+        scratch_cmd(cfg, args)
     elif args.cmd == "doctor":
         doctor(cfg, script)
     elif args.cmd == "install":
