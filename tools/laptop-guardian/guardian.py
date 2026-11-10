@@ -1772,7 +1772,7 @@ def access_check(cfg: dict) -> dict:
     places = [HOME / n for n in ("Documents", "Downloads", "Desktop")]
     places += [archive.resolve_root(r) for r in (cfg.get("archive") or {}).get("roots", [])]
     places += [Path(v["path"]) for v in archive.volumes()]
-    ok, blocked = [], []
+    ok, blocked, errors = [], [], {}
     for p in places:
         name = str(p).replace(str(HOME), "~")
         try:
@@ -1783,8 +1783,17 @@ def access_check(cfg: dict) -> dict:
         if any(name.startswith(b + "/") for b in blocked):
             continue                                # its parent is already named
         (ok if scratch.readable(p) else blocked).append(name)
+        if name in blocked:
+            try:
+                os.scandir(p).close()
+            except OSError as e:
+                errors[name] = f"{type(e).__name__}: errno {e.errno} {e.strerror}"
     program = sh(["ps", "-o", "comm=", "-p", str(os.getpid())]).strip() or sys.executable
-    return {"ts": time.time(), "ok": ok, "blocked": blocked, "program": program}
+    # Places only Full Disk Access opens: tells "no permission at all" from "folders only".
+    probes = [HOME / "Library" / n for n in ("Safari", "Mail", "Messages")]
+    full = next((scratch.readable(q) for q in probes if q.is_dir()), None)
+    return {"ts": time.time(), "ok": ok, "blocked": blocked, "program": program, "errors": errors,
+            "full_disk_access": full}
 
 
 def access_report(cfg: dict, announce: bool = True) -> dict:
@@ -1793,7 +1802,8 @@ def access_report(cfg: dict, announce: bool = True) -> dict:
     a = access_check(cfg)
     told = any(e.get("kind") == "access" and e.get("notified") for e in read_events(7 * 24))
     tell = bool(a["blocked"]) and announce and not told
-    log_event("access", ok=a["ok"], blocked=a["blocked"], program=a["program"], notified=tell)
+    log_event("access", ok=a["ok"], blocked=a["blocked"], program=a["program"], notified=tell,
+              errors=a.get("errors") or {}, full_disk_access=a.get("full_disk_access"))
     if tell:
         notify("Guardian", f"macOS is not letting Guardian's background helper read {', '.join(a['blocked'])}. "
                            "It cannot measure them or offer to move old work folders. "
@@ -1804,13 +1814,13 @@ def access_report(cfg: dict, announce: bool = True) -> dict:
 def access_help(program: str) -> list:
     app = program.split(".app/")[0] + ".app" if ".app/" in program else program
     return ["macOS privacy protection decides this per program; the same command in Terminal is a different program.",
-            "Allow it: System Settings > Privacy & Security > Files and Folders > python3 (may be listed as",
-            "Python): switch on Documents Folder, Downloads Folder, Desktop Folder, Removable Volumes.",
-            "If it is not listed there: Privacy & Security > Full Disk Access > + and add",
+            "macOS does not ask about a background helper and does not list it under Files and Folders,",
+            "so the way in is: System Settings > Privacy & Security > Full Disk Access. Drag this program",
+            "into the list (or use + and paste its path), then check its switch is on:",
             f"  {app}",
-            "(that lets every script run by this Python read your files, so prefer the first way).",
-            "Guardian notices within ten minutes and `guardian.py doctor` shows its new answer. If it",
-            "still says CANNOT after that, restart the helper with: guardian.py install"]
+            "To see it in Finder next to that page:  open -R '" + app + "'",
+            "This lets any background job run by this Python read your files; switch it off there any time.",
+            "Then run `guardian.py install` (restarts the helper as that exact program) and `guardian.py doctor`."]
 
 
 # --------------------------------------------------------------------------
@@ -2673,19 +2683,40 @@ def chrome_tabs(close_duplicates: bool = False, json_out: bool = False):
 # launchd install / uninstall / doctor
 # --------------------------------------------------------------------------
 
+def real_program(python: str) -> str:
+    """The program that is actually running once `python` has started. Apple's
+    /usr/bin/python3 is a launcher stub that re-executes a Python.app deep inside the Command
+    Line Tools. macOS ties a background job's folder permissions to the program the job was
+    STARTED as, so a job started through the stub is refused even after Python itself has
+    been allowed. Measured on the first real Mac with one and the same grant: started as the
+    stub, 'Operation not permitted' on Documents; started as the real program, allowed."""
+    probe = ("import os,subprocess;print(subprocess.run(['ps','-o','comm=','-p',str(os.getpid())],"
+             "capture_output=True,text=True).stdout.strip())")
+    try:
+        r = subprocess.run([python, "-c", probe], capture_output=True, text=True, timeout=30)
+        real = r.stdout.strip()
+        if r.returncode == 0 and real.startswith("/") and os.access(real, os.X_OK):
+            return real
+    except Exception:
+        pass
+    return python
+
+
 def pick_python() -> str:
-    """The interpreter launchd should run. Apple's /usr/bin/python3 is the stable path, but
-    without the Command Line Tools it is only a stub that pops a dialog; so probe it, and fall
-    back to whatever python is running this install (Homebrew, uv, pyenv)."""
+    """The interpreter launchd should run: Apple's python3 when it works (without the Command
+    Line Tools it is only a stub that pops a dialog), else whatever python is running this
+    install (Homebrew, uv, pyenv); in both cases resolved to the real program behind it."""
+    choice = sys.executable or "/usr/bin/python3"
     if IS_MAC:
         try:
             r = subprocess.run(["/usr/bin/python3", "-c", "import sys; print(sys.version_info >= (3, 9))"],
                                capture_output=True, text=True, timeout=30)
             if r.returncode == 0 and r.stdout.strip() == "True":
-                return "/usr/bin/python3"
+                choice = "/usr/bin/python3"
         except Exception:
             pass
-    return sys.executable or "/usr/bin/python3"
+        return real_program(choice)
+    return choice
 
 
 def plist_text(script: Path, cfg: dict, python: str = None) -> str:
@@ -2781,8 +2812,11 @@ def doctor(cfg: dict, script: Path):
         if PLIST_PATH.exists():
             txt = PLIST_PATH.read_text()
             print(f"{ok(str(script.resolve()) in txt)} plist points at this script")
-            m = re.search(r"<string>([^<]*python[^<]*)</string>", txt)
+            m = re.search(r"<string>([^<]*[Pp]ython[^<]*)</string>", txt)
             print(f"{ok(m and Path(m.group(1)).exists())} plist python: {m.group(1) if m else '?'}")
+            if m and Path(m.group(1)).exists() and real_program(m.group(1)) != m.group(1):
+                print("--  the helper is started through a launcher stub; macOS will not honour folder "
+                      "permissions for it. Fix: guardian.py install")
     print(f"{ok(CONFIG_PATH.exists())} config {CONFIG_PATH} ({'present' if CONFIG_PATH.exists() else 'defaults in use'}) "
           f"mode={cfg['mode']} autopilot={'on' if cfg.get('autopilot') else 'off'}")
     print(f"{ok(not PAUSE_PATH.exists())} {'PAUSED (run: resume)' if PAUSE_PATH.exists() else 'not paused'}")

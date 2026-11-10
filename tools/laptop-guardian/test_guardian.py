@@ -1242,8 +1242,20 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(lines[0], "Could not look in ~/Documents/Codex: macOS will not let this program read it.")
         self.assertNotIn("No work folder has been unused", "\n".join(lines))
         help_text = "\n".join(g.access_help("/Library/Developer/X/Python.app/Contents/MacOS/Python"))
-        self.assertIn("Files and Folders", help_text)
+        self.assertIn("Full Disk Access", help_text)
         self.assertIn("  /Library/Developer/X/Python.app\n", help_text)
+        self.assertIn("guardian.py install", help_text)
+
+    def test_the_helper_is_started_as_the_real_program_not_a_launcher_stub(self):
+        # the first real Mac: the same permission was refused when the job was started through
+        # /usr/bin/python3 (a stub) and honoured when started as the program the stub runs
+        real = g.real_program(g.sys.executable)
+        self.assertTrue(g.os.access(real, g.os.X_OK))
+        self.assertEqual(g.real_program(real), real, "already the real program: unchanged")
+        self.assertEqual(g.real_program("/nonexistent/python3"), "/nonexistent/python3", "cannot tell: left alone")
+        picked = g.pick_python()
+        self.assertTrue(g.os.access(picked, g.os.X_OK))
+        self.assertIn(f"<string>{picked}</string>", g.plist_text(g.Path("/x/guardian.py"), self.cfg, picked))
 
     def test_switching_the_offer_off_is_remembered(self):
         import contextlib

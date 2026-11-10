@@ -434,9 +434,15 @@ Chrome tab census.
   read Documents as 0 GB (it held 41) and its archive scan found nothing to move. Guardian
   now treats "refused" as unknown, never as empty. The agent checks its own access when it
   starts, tells you once a week while something is refused, and `guardian.py doctor` prints
-  its answer and the steps: System Settings > Privacy & Security > Files and Folders >
-  python3, switch on the folders. It notices the change within ten minutes. A removable
-  drive may need the same permission ("Removable Volumes") before a copy can be written.
+  its answer and the steps. What worked on that Mac: macOS never listed the helper under
+  Files and Folders, so the grant is Privacy & Security > Full Disk Access, with the real
+  Python program dragged into the list. Two things had to be true at once. The program
+  allowed must be the real one (`Python.app` inside the Command Line Tools), and the helper
+  must be *started* as that program: started through `/usr/bin/python3`, which is a launcher
+  stub, the same grant was refused. `guardian.py install` now resolves the stub to the real
+  program, and `doctor` warns when the helper is started through a stub. The price: that
+  path contains the Python version, so after an Apple tools update run `install` again;
+  and the grant covers any background job run by that Python, not Guardian alone.
 
 ## Uninstall
 
