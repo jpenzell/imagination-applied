@@ -33,7 +33,25 @@ from datetime import datetime
 from pathlib import Path
 
 HOME = Path.home()
-HOST = socket.gethostname().split(".")[0]
+
+
+def _mac_name() -> str:
+    """This Mac's own name. The network hostname changes with the network (the first real Mac
+    was 'Joshs-Air' at home and 'Joshs-MacBook-Air' on battery elsewhere), which would split
+    one Mac's archive across two folders; the name set in Sharing does not."""
+    if sys.platform == "darwin":
+        try:
+            import subprocess
+            name = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True, text=True,
+                                  timeout=5).stdout.strip()
+            if name:
+                return name
+        except Exception:
+            pass
+    return socket.gethostname().split(".")[0]
+
+
+HOST = _mac_name()
 ARCHIVE_FOLDER = "Guardian Archive"
 NOTE_NAME = "ARCHIVED-BY-GUARDIAN.txt"
 CHUNK = 1 << 20
@@ -69,9 +87,27 @@ def root_problem(root: Path, home: Path = None) -> str:
         return "the home folder itself"
     if rel.parts[0] in FORBIDDEN_TOP or rel.parts[0].startswith("."):
         return f"~/{rel.parts[0]} is never archived"
-    if root.is_symlink() or not root.is_dir():
-        return "not a folder"
+    try:
+        if root.is_symlink() or not root.is_dir():
+            return "not a folder"
+        os.scandir(root).close()
+    except PermissionError:
+        return "macOS will not let this program read it"
+    except OSError as e:
+        return f"it cannot be read ({e.strerror or e})"
     return ""
+
+
+def root_problems(roots, home: Path = None) -> list:
+    """[[root, why], ...] for every configured root guardian cannot use. The first real Mac's
+    background agent was refused ~/Documents by macOS and reported 'nothing to move'."""
+    out = []
+    for raw in roots or []:
+        root = resolve_root(raw, home)
+        why = root_problem(root, home)
+        if why:
+            out.append([str(root), why])
+    return out
 
 
 def _raise(err):

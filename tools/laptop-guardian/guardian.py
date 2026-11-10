@@ -1752,8 +1752,65 @@ def disk_cmd(cfg: dict, args):
             print("  Outside your home folder:")
             for mb, name in sorted(outside, reverse=True):
                 print(f"    {mb / 1024:6.1f} GB  {name}")
+        if entries[-1].get("unreadable"):
+            print("  Not measured in the latest snapshot (macOS did not allow it; see guardian.py doctor): "
+                  + ", ".join(entries[-1]["unreadable"]))
     print("More: disk --snapshot (measure now)   disk --big (biggest items in your folders)   disk --big --in FOLDER")
     print("Old work folders can move to an external drive, checked before anything is removed: guardian.py archive")
+
+
+# --------------------------------------------------------------------------
+# Access: macOS decides per program which of your folders it may read
+# --------------------------------------------------------------------------
+
+def access_check(cfg: dict) -> dict:
+    """Which of the owner's folders this very process may list. The background agent can be
+    refused what the same command typed in Terminal is allowed (the first real Mac's agent
+    read Documents, Downloads and Desktop as empty), so only the agent's own answer counts."""
+    import archive
+    import scratch
+    places = [HOME / n for n in ("Documents", "Downloads", "Desktop")]
+    places += [archive.resolve_root(r) for r in (cfg.get("archive") or {}).get("roots", [])]
+    places += [Path(v["path"]) for v in archive.volumes()]
+    ok, blocked = [], []
+    for p in places:
+        name = str(p).replace(str(HOME), "~")
+        try:
+            if not p.is_dir() or name in ok or name in blocked:
+                continue
+        except OSError:
+            pass
+        if any(name.startswith(b + "/") for b in blocked):
+            continue                                # its parent is already named
+        (ok if scratch.readable(p) else blocked).append(name)
+    program = sh(["ps", "-o", "comm=", "-p", str(os.getpid())]).strip() or sys.executable
+    return {"ts": time.time(), "ok": ok, "blocked": blocked, "program": program}
+
+
+def access_report(cfg: dict, announce: bool = True) -> dict:
+    """Check, write the answer to the diary (doctor reads it from there), and say so once a
+    week while something is blocked."""
+    a = access_check(cfg)
+    told = any(e.get("kind") == "access" and e.get("notified") for e in read_events(7 * 24))
+    tell = bool(a["blocked"]) and announce and not told
+    log_event("access", ok=a["ok"], blocked=a["blocked"], program=a["program"], notified=tell)
+    if tell:
+        notify("Guardian", f"macOS is not letting Guardian's background helper read {', '.join(a['blocked'])}. "
+                           "It cannot measure them or offer to move old work folders. "
+                           "The steps are in: guardian.py doctor", cfg)
+    return a
+
+
+def access_help(program: str) -> list:
+    app = program.split(".app/")[0] + ".app" if ".app/" in program else program
+    return ["macOS privacy protection decides this per program; the same command in Terminal is a different program.",
+            "Allow it: System Settings > Privacy & Security > Files and Folders > python3 (may be listed as",
+            "Python): switch on Documents Folder, Downloads Folder, Desktop Folder, Removable Volumes.",
+            "If it is not listed there: Privacy & Security > Full Disk Access > + and add",
+            f"  {app}",
+            "(that lets every script run by this Python read your files, so prefer the first way).",
+            "Guardian notices within ten minutes and `guardian.py doctor` shows its new answer. If it",
+            "still says CANNOT after that, restart the helper with: guardian.py install"]
 
 
 # --------------------------------------------------------------------------
@@ -1773,25 +1830,26 @@ def archive_plan(cfg: dict, days=None, to=None, only=None, roots=None) -> dict:
     acfg = cfg["archive"]
     days = acfg["min_age_days"] if days is None else days
     rows = archive.read_manifest(archive_manifest())
+    problems = archive.root_problems(roots or acfg["roots"])
     found = archive.scan(roots or acfg["roots"], days, acfg["min_folder_mb"], session_dirs=acfg["session_dirs"],
                          restored=archive.restored_at(rows))
     move = [c for c in found if not c["keep"] and (not only or c["name"] in only)]
     vol, why = archive.pick_destination(archive.volumes(), to or acfg.get("destination") or "",
                                         sum(c["logical_mb"] for c in move))
     return {"days": days, "move": move, "keep": [c for c in found if c["keep"]], "volume": vol, "why": why,
-            "mb": sum(c["mb"] for c in move)}
+            "mb": sum(c["mb"] for c in move), "problems": problems}
 
 
 def archive_lines(plan: dict) -> list:
     """The plan as plain lines: for the command line and for the dialog's 'Show me'."""
     short = lambda p: p.replace(str(HOME), "~")
-    out = []
+    out = [f"Could not look in {short(root)}: {why}." for root, why in plan.get("problems") or []]
     if plan["move"]:
         out.append(f"Not used for {plan['days']}+ days (no file changed, no Codex or Claude Code thread worked there):")
         for c in plan["move"]:
             out.append(f"  {c['mb'] / 1024:7.2f} GB  unused {c['age_days']:4d} days  {short(c['path'])}")
         out.append(f"  Total {plan['mb'] / 1024:.1f} GB in {len(plan['move'])} folders.")
-    else:
+    elif not out or plan["keep"]:
         out.append(f"No work folder has been unused for {plan['days']}+ days.")
     if plan["keep"]:
         out.append(f"Staying on this Mac ({len(plan['keep'])}):")
@@ -1969,7 +2027,8 @@ def archive_tick(cfg: dict, snap: dict, st: dict, background, now: float, ops=No
             st["scan"] = {"ts": time.time(), "plan": plan}
             st["next_check"] = 0.0
             log_event("archive", phase="scan", folders=len(plan["move"]), mb=plan["mb"],
-                      volume=plan["volume"]["name"] if plan["volume"] else None, why=plan["why"])
+                      volume=plan["volume"]["name"] if plan["volume"] else None, why=plan["why"],
+                      problems=plan.get("problems") or [])
         return "scan" if background.submit("archive-scan", scan_job) else None
     plan = scan["plan"]
     if plan["volume"] is None or plan["mb"] < acfg["offer_min_gb"] * 1024:
@@ -2139,6 +2198,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     ai = {"day": None, "runs": 0, "retry_after": 0.0, "fail_notified": None}
     refresh_state = refresh_state_from_events()
     archive_state = archive_state_from_events()
+    access = {"ts": time.time(), "ok": [], "blocked": []} if once else access_report(cfg)
     disk_hist = deque(maxlen=400)
     ledger = read_ledger(1)
     last_ledger = datetime.fromisoformat(ledger[-1]["ts"]).timestamp() if ledger else 0.0
@@ -2182,6 +2242,13 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 break
             if not simulate:
                 refresh_tick(cfg, snap, refresh_state, background, time.time(), dry_run=dry_run)
+                if access["blocked"] and time.time() - access["ts"] > 600:
+                    again = access_check(cfg)          # has the owner allowed it since?
+                    if again["blocked"] != access["blocked"]:
+                        log_event("access", ok=again["ok"], blocked=again["blocked"], program=again["program"],
+                                  notified=False)
+                        archive_state["scan"], archive_state["next_check"] = None, 0.0
+                    access = again
                 archive_tick(cfg, snap, archive_state, background, time.time(), dry_run=dry_run)
                 # ---- disk: ledger, fast-drop alert, caches of an app that just quit
                 dcfg, t_now = cfg["disk"], time.time()
@@ -2740,6 +2807,16 @@ def doctor(cfg: dict, script: Path):
         if li:
             items = [x.strip() for x in li.split(",") if x.strip()]
             print(f"   login items ({len(items)}): {', '.join(items)[:200]}")
+    acc = next((e for e in reversed(read_events(24 * 14)) if e.get("kind") == "access"), None)
+    if acc is None:
+        print("-- background agent: no access check in its diary yet (it writes one when it starts)")
+    elif acc["blocked"]:
+        print(f"-- background agent CANNOT read {', '.join(acc['blocked'])} (its own check, {acc['ts']}); "
+              "it measures them as unknown and cannot offer to move work folders")
+        for line in access_help(acc.get("program") or ""):
+            print("     " + line)
+    else:
+        print(f"OK  background agent can read {', '.join(acc['ok']) or 'your folders'} (its own check, {acc['ts']})")
     import archive
     acfg = cfg["archive"]
     good = [r for r in acfg["roots"] if not archive.root_problem(archive.resolve_root(r))]

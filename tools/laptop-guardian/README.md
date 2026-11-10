@@ -428,10 +428,15 @@ Chrome tab census.
 - On macOS, Apple's and Homebrew's `python3` really execute a `Python.app` inside a
   framework. Guardian treats those as command-line processes, not GUI apps, so Python MCP
   servers fold under Claude and guardian itself can be reniced like any other script.
-- Under launchd, the first disk census may trigger macOS "python3 would like to access your
-  Downloads folder" prompts. Allow them once; denying only makes those rows read 0. The
-  archive offer adds one for "files on a removable volume"; denying it means the drive is
-  never seen and nothing is offered.
+- macOS decides per program which of your folders it may read, and the background agent is
+  a different program from the same command typed in Terminal. On the first real Mac the
+  agent was refused Documents, Downloads and Desktop with no prompt anyone saw: its ledger
+  read Documents as 0 GB (it held 41) and its archive scan found nothing to move. Guardian
+  now treats "refused" as unknown, never as empty. The agent checks its own access when it
+  starts, tells you once a week while something is refused, and `guardian.py doctor` prints
+  its answer and the steps: System Settings > Privacy & Security > Files and Folders >
+  python3, switch on the folders. It notices the change within ten minutes. A removable
+  drive may need the same permission ("Removable Volumes") before a copy can be written.
 
 ## Uninstall
 

@@ -172,6 +172,19 @@ def du_kb(path: Path) -> int:
     return total // 1024
 
 
+def readable(path) -> bool:
+    """Can this folder be listed? macOS privacy protection (Documents, Downloads, Desktop,
+    removable drives) refuses a background program until the owner allows it, and `du` then
+    reports 0. On the first real Mac the agent's ledger read Documents as 0 GB; it held 41."""
+    try:
+        os.scandir(path).close()
+        return True
+    except NotADirectoryError:
+        return True
+    except OSError:
+        return False
+
+
 def expand(home: Path, pattern: str) -> list:
     if any(ch in pattern for ch in "*?["):
         return [p for p in home.glob(pattern) if p.exists() and not p.is_symlink()]
@@ -208,7 +221,8 @@ def census(home: Path = None, only_app: str = None) -> list:
             outermost = [q for q in inside if not any(r in q.parents for r in inside)]
             kb = max(0, kb - sum(du(q) for q in outermost))
         rows.append({"name": name, "tier": tier, "what": what, "method": method, "app": app,
-                     "paths": [str(p) for p in paths], "mb": kb // 1024})
+                     "paths": [str(p) for p in paths], "mb": kb // 1024,
+                     "unreadable": any(not readable(p) for p in paths)})
     rows.sort(key=lambda r: (-r["mb"], TIER_ORDER[r["tier"]]))
     return rows
 
@@ -272,22 +286,31 @@ def system_buckets(temp_dir: Path = None, vm_dir: Path = Path("/System/Volumes/V
 
 
 def ledger_entry(rows: list, buckets: list, free_gb, ts: float) -> dict:
-    items = {r["name"]: r["mb"] for r in rows}
+    """One ledger line. A place that could not be read is listed under 'unreadable' and left
+    out of 'items': unknown is not zero."""
+    items = {r["name"]: r["mb"] for r in rows if not r.get("unreadable")}
     items.update({b["name"]: b["mb"] for b in buckets})
-    return {"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(ts)), "free_gb": free_gb, "items": items}
+    entry = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(ts)), "free_gb": free_gb, "items": items}
+    blind = sorted(r["name"] for r in rows if r.get("unreadable"))
+    if blind:
+        entry["unreadable"] = blind
+    return entry
 
 
 def ledger_diff(old: dict, new: dict) -> dict:
     """What changed between two ledger entries. 'unexplained_mb' is the part of the change in
     free space that no measured place accounts for (positive: space went somewhere unseen)."""
-    names = set(old["items"]) | set(new["items"])
-    changes = [(n, new["items"].get(n, 0) - old["items"].get(n, 0)) for n in names]
+    names = set(old["items"]) & set(new["items"])      # only what both snapshots really measured
+    blind = sorted((set(old["items"]) ^ set(new["items"])) | set(old.get("unreadable", []))
+                   | set(new.get("unreadable", [])))
+    changes = [(n, new["items"][n] - old["items"][n]) for n in names]
     changes = sorted((c for c in changes if c[1]), key=lambda c: -abs(c[1]))
     used_mb = None
     if old.get("free_gb") is not None and new.get("free_gb") is not None:
         used_mb = round((old["free_gb"] - new["free_gb"]) * 1e9 / (1024 * 1024))
     unexplained = None if used_mb is None else used_mb - sum(mb for _, mb in changes)
-    return {"from": old["ts"], "to": new["ts"], "used_mb": used_mb, "changes": changes, "unexplained_mb": unexplained}
+    return {"from": old["ts"], "to": new["ts"], "used_mb": used_mb, "changes": changes,
+            "unexplained_mb": unexplained, "unreadable": blind}
 
 
 def render_ledger_diff(diff: dict, min_mb: int = 100, top: int = 8) -> list:
@@ -305,6 +328,9 @@ def render_ledger_diff(diff: dict, min_mb: int = 100, top: int = 8) -> list:
     un = diff["unexplained_mb"]
     if un is not None and abs(un) >= max(min_mb, 300):
         lines.append(f"    {sign(un):>9}  not explained by anything measured")
+    if diff.get("unreadable"):
+        lines.append("    not compared (one of the two snapshots could not read them): "
+                     + ", ".join(diff["unreadable"]))
     return lines
 
 
@@ -444,6 +470,8 @@ def render(rows: list, snapshots: list = None, disk_free_gb=None, running: set =
         who = blocked_by(r, running)
         if who:
             note = f"  [{who} is running; skipped until it quits]"
+        if r.get("unreadable"):
+            note += "  [macOS would not let this program read it: the size is not known]"
         lines.append(f"{r['mb'] / 1024:7.2f}  {r['tier']:9} {r['name']:26} {r['what']}{note}")
     missing = [r["name"] for r in rows if not r["paths"]]
     if missing:

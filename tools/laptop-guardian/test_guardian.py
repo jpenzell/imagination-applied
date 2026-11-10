@@ -1210,6 +1210,41 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual((src / "work" / "data.bin").read_bytes(), b"d" * 500_000)
         self.assertTrue(tar.exists(), "the drive keeps its copy")
 
+    def test_the_agent_says_which_folders_macos_keeps_from_it(self):
+        import archive
+        home = self.tmp / "home"
+        for n in ("Documents/Codex", "Downloads", "Desktop"):
+            (home / n).mkdir(parents=True)
+        saved = (g.HOME, archive.HOME, archive.volumes)
+        g.HOME = archive.HOME = home
+        archive.volumes = lambda: []
+
+        def restore():
+            g.HOME, archive.HOME, archive.volumes = saved
+            g.os.chmod(home / "Documents", 0o755)
+        self.addCleanup(restore)
+        a = g.access_check(self.cfg)
+        self.assertEqual((a["ok"], a["blocked"]), (["~/Documents", "~/Downloads", "~/Desktop", "~/Documents/Codex"], []))
+        g.os.chmod(home / "Documents", 0o000)
+        if g.os.access(home / "Documents", g.os.R_OK):
+            self.skipTest("running as a user who can read anything")
+        a = g.access_report(self.cfg)
+        self.assertEqual(a["blocked"], ["~/Documents"], "the root inside it is not named twice")
+        self.assertEqual(a["ok"], ["~/Downloads", "~/Desktop"])
+        g.access_report(self.cfg)
+        events = [e for e in g.read_events(1) if e["kind"] == "access"]
+        self.assertEqual([e["notified"] for e in events], [True, False], "said once, not at every start")
+        self.assertEqual(events[0]["blocked"], ["~/Documents"])
+        # the plan says so instead of "nothing to move"
+        plan = g.archive_plan(self.cfg)
+        self.assertEqual(plan["problems"], [[str(home / "Documents" / "Codex"), "macOS will not let this program read it"]])
+        lines = g.archive_lines(plan)
+        self.assertEqual(lines[0], "Could not look in ~/Documents/Codex: macOS will not let this program read it.")
+        self.assertNotIn("No work folder has been unused", "\n".join(lines))
+        help_text = "\n".join(g.access_help("/Library/Developer/X/Python.app/Contents/MacOS/Python"))
+        self.assertIn("Files and Folders", help_text)
+        self.assertIn("  /Library/Developer/X/Python.app\n", help_text)
+
     def test_switching_the_offer_off_is_remembered(self):
         import contextlib
         import io

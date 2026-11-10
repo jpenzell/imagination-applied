@@ -207,6 +207,19 @@ class ScanTests(Base):
         self.assertEqual(rows["2026-09-03"]["keep"], "you brought it back 2 days ago")
         self.assertEqual(rows["2026-09-04"]["keep"], "partly in the cloud, not on this disk")
 
+    def test_a_root_macos_will_not_let_guardian_read_is_a_problem_not_an_empty_plan(self):
+        # the first real Mac: the background agent was refused ~/Documents and logged "0 folders"
+        self.work_folder("2026-09-17", days=40)
+        self.assertEqual(archive.root_problems(["Documents/Codex", "Downloads"], self.home),
+                         [[str(self.home / "Downloads"), "~/Downloads is never archived"]])
+        os.chmod(self.root, 0o000)
+        self.addCleanup(os.chmod, self.root, 0o755)
+        if os.access(self.root, os.R_OK):
+            self.skipTest("running as a user who can read anything")
+        self.assertEqual(archive.root_problems(["Documents/Codex"], self.home),
+                         [[str(self.root), "macOS will not let this program read it"]])
+        self.assertEqual(archive.scan(["Documents/Codex"], 30, 0.1, home=self.home), [])
+
     def test_an_unreadable_folder_is_reported_not_treated_as_empty(self):
         src = self.work_folder("2026-09-05", days=90)
         os.chmod(src / "locked", 0o000)

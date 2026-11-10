@@ -225,5 +225,47 @@ class ScratchTests(unittest.TestCase):
         self.assertIn("Reclaimable now:", text)
 
 
+class BlockedTests(unittest.TestCase):
+    """macOS can refuse a background program the Documents, Downloads and Desktop folders.
+    The first real Mac's agent wrote 'Documents: 0' into its ledger; the folder held 41 GB."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.home = self.tmp / "home"
+        mk(self.home / "Documents/Codex/2026-09-23/big.bin", 3072)
+        mk(self.home / "Downloads/video.mp4", 2048)
+        self.blocked = self.home / "Documents"
+
+        def cleanup():
+            os.chmod(self.blocked, 0o755)
+            shutil.rmtree(self.tmp, ignore_errors=True)
+        self.addCleanup(cleanup)
+
+    def test_a_folder_that_cannot_be_read_is_unknown_not_empty(self):
+        full = scratch.ledger_entry(scratch.census(self.home), [], 20.0, 1_000_000)
+        self.assertEqual((full["items"]["Documents"], full["items"]["Downloads"]), (3, 2))
+        self.assertNotIn("unreadable", full)
+        os.chmod(self.blocked, 0o000)
+        if scratch.readable(self.blocked):
+            self.skipTest("running as a user who can read anything")
+        rows = {r["name"]: r for r in scratch.census(self.home)}
+        self.assertTrue(rows["Documents"]["unreadable"])
+        self.assertFalse(rows["Downloads"]["unreadable"])
+        self.assertFalse(rows["Trash"]["unreadable"], "a place that does not exist is simply absent")
+        blind = scratch.ledger_entry(list(rows.values()), [], 20.0, 1_003_600)
+        self.assertNotIn("Documents", blind["items"])
+        self.assertEqual(blind["unreadable"], ["Documents"])
+        self.assertIn("the size is not known", scratch.render(list(rows.values())))
+        # comparing a full snapshot with a blind one must not report 3 MB "freed"
+        for old, new in ((full, blind), (blind, full)):
+            diff = scratch.ledger_diff(old, new)
+            self.assertEqual(diff["changes"], [])
+            self.assertEqual(diff["unreadable"], ["Documents"])
+            self.assertIn("not compared", scratch.render_ledger_diff(diff)[-1])
+        mk(self.home / "Downloads/more.mp4", 5120)
+        later = scratch.ledger_entry(scratch.census(self.home), [], 19.9, 1_007_200)
+        self.assertEqual(scratch.ledger_diff(blind, later)["changes"], [("Downloads", 5)])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
