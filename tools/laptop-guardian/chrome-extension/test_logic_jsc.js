@@ -59,6 +59,17 @@ function makeChrome({ tabs = [], sync = {}, local = {}, session = {}, bookmarks 
     tabs: tabs.map(t => ({ ...t })),
     bookmarks: [{ id: "1", parentId: "0", title: "Bookmarks bar" }, { id: "2", parentId: "0", title: "Other bookmarks" }, ...bookmarks],
     nextBookmarkId: 100, nextTabId: 9000, alarms: {}, badge: {}, failCreate: null, opened: [],
+    focused: true,          // is a Chrome window the one in front?
+    guardian: null,         // what Guardian's status page answers; null = nothing is listening
+    asked: [],              // every address the worker fetched
+  };
+  // The only thing the extension ever fetches is Guardian's status page on this machine.
+  state.fetch = async (url) => {
+    await tick();
+    state.asked.push(String(url));
+    if (state.guardian === null) throw new TypeError("Failed to fetch");
+    if (state.guardian === "error") return { ok: false, async json() { return {}; } };
+    return { ok: true, async json() { return clone(state.guardian); } };
   };
   const events = [];
   const ev = () => { const e = { listeners: [], addListener(f) { e.listeners.push(f); }, fire: (...a) => e.listeners.map(f => f(...a)) }; events.push(e); return e; };
@@ -134,6 +145,7 @@ function makeChrome({ tabs = [], sync = {}, local = {}, session = {}, bookmarks 
       },
       openOptionsPage() { state.opened.push({ options: true }); },
     },
+    windows: { async getLastFocused() { await tick(); return { id: 1, focused: state.focused }; } },
     action: {
       async setBadgeText({ text }) { await tick(); state.badge.text = text; },
       async setBadgeBackgroundColor({ color }) { await tick(); state.badge.color = color; },
@@ -145,6 +157,7 @@ function makeChrome({ tabs = [], sync = {}, local = {}, session = {}, bookmarks 
 // Evaluate one of the extension's scripts, unmodified, against a fake chrome. `self` collects
 // what background.js exports. Each call is a fresh scope = a fresh service worker / page.
 function boot(chrome, file = "background.js", extra = {}) {
+  extra = { fetch: (...a) => chrome.state.fetch(...a), ...extra };
   const self = {}, names = Object.keys(extra);
   new Function("chrome", "self", ...names, readFile(DIR + "/" + file))(chrome, self, ...names.map(n => extra[n]));
   return self;
@@ -468,17 +481,115 @@ test("counts: 'Tidy up now' clicked twice saves each tab once and loses no count
   eq(folders(c, "Guardian Parked").length, 1, "'Guardian Parked' folders");
 });
 
+// ============================== stepping aside when the Mac is struggling ====================
+// Measured on the first real Mac: with another app in front, five background Chrome tabs were
+// still working and holding 2.6 GB while the Mac swapped 170 MB a second.
+const strip = () => {
+  at(BASE);
+  return { front: front(), idle: tab("https://a.example/idle", 10 * MIN), fresh: tab("https://a.example/fresh", 2 * MIN),
+           ancient: tab("https://a.example/ancient", 80 * HOUR), pinned: tab("https://a.example/pin", 3 * HOUR, { pinned: true }),
+           sound: tab("https://a.example/sound", 3 * HOUR, { audible: true }), ai: tab("https://claude.ai/chat/1", 3 * HOUR),
+           grouped: tab("https://a.example/agent-is-working-here", 3 * HOUR, { groupId: 7 }),
+           loading: tab("https://a.example/loading", 3 * HOUR, { status: "loading" }),
+           secret: tab("https://a.example/private", 3 * HOUR, { incognito: true }) };
+};
+
+test("step aside: the Mac is struggling and you are elsewhere: idle background tabs sleep at once, nothing is closed", async () => {
+  const t = strip();
+  const c = makeChrome({ tabs: Object.values(t) });
+  c.state.guardian = { v: 1, lag: "severe" }; c.state.focused = false;
+  const out = await boot(c).pulse();
+  eq(Object.fromEntries(Object.entries(t).map(([k, v]) => [k, fate(c, v)])),
+     { front: "untouched", idle: "asleep", fresh: "untouched", ancient: "asleep", pinned: "untouched", sound: "untouched",
+       ai: "untouched", grouped: "untouched", loading: "untouched", secret: "untouched" }, "fates");
+  eq(c.ops.filter(o => o.op === "bookmarks.create").length, 0, "nothing is parked in a hurry, not even a tab idle for days");
+  eq(c.state.asked, ["http://127.0.0.1:47613/status"], "asked Guardian, and nobody else");
+  eq([out.stats.slept, out.stats.parked, out.stats.skipped.grouped, out.stats.skipped.loading], [2, 0, 1, 1], "stats");
+  eq(c.storage.local.data.daily[today()], { slept: 2, parked: 0, aside: 2 }, "counted for today");
+  eq([c.storage.local.data.guardian.ok, c.storage.local.data.guardian.lag, c.storage.local.data.guardian.steppedAside], [true, "severe", 2], "link recorded");
+});
+
+for (const [why, setup] of [
+  ["you are in Chrome", c => { c.state.guardian = { v: 1, lag: "severe" }; c.state.focused = true; }],
+  ["Guardian says the Mac is coping", c => { c.state.guardian = { v: 1, lag: "none" }; c.state.focused = false; }],
+  ["Guardian is not running", c => { c.state.guardian = null; c.state.focused = false; }],
+  ["Guardian answers with an error", c => { c.state.guardian = "error"; c.state.focused = false; }],
+  ["Guardian answers nonsense", c => { c.state.guardian = { hello: 1 }; c.state.focused = false; }],
+]) {
+  test(`step aside: not when ${why}`, async () => {
+    const t = strip();
+    const c = makeChrome({ tabs: Object.values(t) });
+    setup(c);
+    const out = await boot(c).pulse();
+    eq([fate(c, t.idle), fate(c, t.ancient), out.stats], ["untouched", "untouched", null], "tabs");
+    eq(c.storage.local.data.guardian.ok, c.state.guardian !== null && c.state.guardian !== "error" && !!c.state.guardian.lag, "link health recorded");
+  });
+}
+
+test("step aside: switched off in Settings, or tidying switched off, Guardian is not even asked", async () => {
+  for (const sync of [{ stepAside: false }, { enabled: false }]) {
+    const t = strip();
+    const c = makeChrome({ tabs: Object.values(t), sync });
+    c.state.guardian = { v: 1, lag: "severe" }; c.state.focused = false;
+    await boot(c).pulse();
+    eq([fate(c, t.idle), c.state.asked], ["untouched", []], JSON.stringify(sync));
+  }
+});
+
+test("step aside: at most once every five minutes, and the memory of that survives a worker restart", async () => {
+  const t = strip();
+  const c = makeChrome({ tabs: Object.values(t) });
+  c.state.guardian = { v: 1, lag: "slow" }; c.state.focused = false;
+  await boot(c).pulse();
+  eq(fate(c, t.idle), "asleep", "first pulse");
+  at(BASE + 4 * MIN);    // the 2-minute tab is now 6 minutes idle, but Chrome stepped aside 4 minutes ago
+  c.restartWorker();
+  const again = await boot(c).pulse();
+  eq([fate(c, t.fresh), again.stats], ["untouched", null], "four minutes later");
+  at(BASE + 6 * MIN);
+  await boot(c).pulse();
+  eq(fate(c, t.fresh), "asleep", "six minutes later");
+});
+
+test("step aside: the one-minute 'pulse' alarm does it; the popup and settings show it", async () => {
+  const t = strip();
+  const c = makeChrome({ tabs: Object.values(t) });
+  c.state.guardian = { v: 1, lag: "severe" }; c.state.focused = false;
+  boot(c); c.runtime.onInstalled.fire({ reason: "update" }); await tick(20);
+  c.alarms.onAlarm.fire({ name: "pulse" }); await tick(200);
+  eq(fate(c, t.idle), "asleep", "after the pulse alarm");
+  const doc = makeDocument();
+  boot(c, "popup.js", { document: doc }); await tick(40);
+  eq(String(doc.els.aside.textContent), "2", "popup: slept to make room today");
+  assert(/struggling/.test(doc.els.link.textContent), "popup link line: " + doc.els.link.textContent);
+  c.state.guardian = { v: 1, lag: "none" };
+  at(clock.t + MIN); await boot(c).pulse();
+  const doc2 = makeDocument();
+  boot(c, "popup.js", { document: doc2 }); await tick(40);
+  assert(/coping/.test(doc2.els.link.textContent), "popup link line: " + doc2.els.link.textContent);
+  at(clock.t + 10 * MIN);
+  const doc3 = makeDocument();
+  boot(c, "popup.js", { document: doc3 }); await tick(40);
+  assert(/not answering/.test(doc3.els.link.textContent), "a stale answer is not shown as current: " + doc3.els.link.textContent);
+  const od = makeDocument();
+  boot(c, "options.js", { document: od, setTimeout: () => 0 }); await tick(20);
+  eq(od.els.stepAside.checked, true, "settings page shows it on by default");
+  od.radio("normal").checked = true; od.els.stepAside.checked = false;
+  await od.els.save.handlers.click();
+  eq((await boot(c).getSettings()).stepAside, false, "and can switch it off");
+});
+
 // ============================== worker lifecycle, popup, options, manifest ==================
 test("alarm: install and browser start both register the 5-minute 'sweep' alarm", async () => {
   const c = makeChrome({ tabs: [front()] });
   boot(c);
   eq(c.state.alarms, {}, "before any event");
   c.runtime.onInstalled.fire({ reason: "install" }); await tick(20);
-  eq(c.state.alarms, { sweep: { periodInMinutes: 5 } }, "after onInstalled");
+  eq(c.state.alarms, { sweep: { periodInMinutes: 5 }, pulse: { periodInMinutes: 1 } }, "after onInstalled");
   eq(c.state.badge.text, "1", "badge set on install");
   const c2 = makeChrome(); boot(c2);
   c2.runtime.onStartup.fire();
-  eq(c2.state.alarms, { sweep: { periodInMinutes: 5 } }, "after onStartup");
+  eq(c2.state.alarms, { sweep: { periodInMinutes: 5 }, pulse: { periodInMinutes: 1 } }, "after onStartup");
 });
 
 test("alarm: a restarted worker (no install/startup event) still sweeps when the 'sweep' alarm fires; other alarms do nothing", async () => {
@@ -539,7 +650,9 @@ test("manifest: MV3, files exist, and every chrome.* API the code calls is cover
   eq(m.manifest_version, 3, "manifest_version");
   const files = [m.background.service_worker, m.action.default_popup, m.options_page, "popup.js", "options.js"];
   for (const f of files) assert(readFile(DIR + "/" + f).length > 0, "missing file " + f);
-  const needs = { tabs: "tabs", bookmarks: "bookmarks", storage: "storage", alarms: "alarms" }, free = ["runtime", "action"];
+  const needs = { tabs: "tabs", bookmarks: "bookmarks", storage: "storage", alarms: "alarms" }, free = ["runtime", "action", "windows"];
+  const port = /guardianPort:\s*(\d+)/.exec(readFile(DIR + "/background.js"))[1];
+  eq(m.host_permissions, [`http://127.0.0.1:${port}/*`], "the only host the extension may talk to is Guardian on this machine");
   const used = new Set();
   for (const f of ["background.js", "popup.js", "options.js"]) for (const hit of readFile(DIR + "/" + f).matchAll(/chrome\.(\w+)\./g)) used.add(hit[1]);
   for (const ns of used) assert(free.includes(ns) || m.permissions.includes(needs[ns]), `chrome.${ns} is used but not permitted by the manifest`);

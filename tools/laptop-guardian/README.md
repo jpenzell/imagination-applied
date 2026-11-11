@@ -27,11 +27,11 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 104 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 111 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
-| `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 54 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
+| `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 63 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
 [PLAN.md](PLAN.md), with the work order for building it on a Mac.
@@ -41,7 +41,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 141 tests, should say OK three times
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 148 tests, should say OK three times
 python3 guardian.py menu install       # the shield in the menu bar (builds a small app; needs Apple's Command Line Tools)
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
@@ -129,6 +129,34 @@ Notifications changed with it. The first real day produced 43 notifications that
 memory was tight and offered nothing to do. Now a notification means a critical spell or
 something you can act on, and the icon carries the steady state. "Whenever memory is
 tight" in Settings brings the old behaviour back.
+
+## What "slow" really is, and who gets the RAM
+
+macOS reports memory pressure as normal, warn or critical. That number is not what you feel.
+The first real Mac, under heavy use, was swapping in 160 to 190 MB and decompressing 650 to
+1,400 MB every second, with its processor spending more than a core on the shuffling, while
+macOS said "level 2, 26% free". Its apps wanted 16.5 GB between them and 2.9 GB of that was
+in RAM. The app in front had 11% of its memory in RAM; a browser in the background, with
+five tabs still working, held more.
+
+- **The lag meter.** Guardian reads how much memory is moved between RAM, the compressor and
+  the disk per second (from `vm_stat`, every sample) and uses that as its definition of
+  trouble: `slow` from 30 MB/s swapped in or 300 MB/s decompressed, `severe` from 100 or 800.
+  Severe counts as critical everywhere: the shield, the notification, the automatic trim.
+  The rates go into `samples.tsv` as two extra columns, and the thresholds are among the
+  settings a diagnosis may tune.
+- **Why, in plain words.** The menu's first entry says how much is being read back from disk,
+  how much of the app in front is actually in RAM, and which background app is holding the
+  most. `doctor` prints the live rate.
+- **Chrome steps aside.** The helper serves one read-only line of status on this Mac only
+  (`http://127.0.0.1:47613/status`: `{"lag": "none" | "slow" | "severe"}`; no names, nothing
+  private). The extension asks once a minute. When the Mac is struggling and no Chrome window
+  is in front, it puts background tabs idle for five minutes to sleep at once, at most every
+  five minutes, and parks nothing. It is more careful here than in its normal sweep: besides
+  the active, pinned, private, sound-playing and never-touch tabs it also leaves any tab in a
+  tab group (you or an agent put it there, and an agent may be working in it) and any tab
+  still loading. If the helper is not running the extension behaves exactly as before. It can
+  be switched off on the extension's settings page, or with `chrome.step_aside` in the config.
 
 ## Getting ahead of a bad spell
 
@@ -403,7 +431,8 @@ into a form and not submitted is lost; pin a tab, or add its site to the list, t
 
 Load it: chrome://extensions, turn on Developer mode, "Load unpacked", pick the
 `chrome-extension` folder. After the files change (a `git pull`), click the round arrow on
-its card there so Chrome picks them up. Test the logic on any Mac, no install needed:
+its card there so Chrome picks them up. From 0.3.0 the extension may also talk to one
+address, Guardian's status page on this Mac (`127.0.0.1:47613`), and nowhere else. Test the logic on any Mac, no install needed:
 
 ```bash
 /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc chrome-extension/test_logic_jsc.js

@@ -1835,6 +1835,173 @@ class AheadTests(unittest.TestCase):
         self.assertIn("Agent threads written in the last 2 hours: 0", (g.LOG_DIR / "threads-now.txt").read_text())
 
 
+# vm_stat exactly as the first real Mac printed it while it was thrashing (2026-11-11 00:14)
+VM_STAT = """Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     5298.
+Pages active:                                  45745.
+Pages inactive:                                42458.
+Pages speculative:                              1252.
+Pages throttled:                                   0.
+Pages wired down:                             153255.
+Pages purgeable:                                   0.
+"Translation faults":                     2412686733.
+Pages copy-on-write:                        14841133.
+Pages zero filled:                         408213986.
+Pages reactivated:                        1366109996.
+Pages purged:                               46595456.
+File-backed pages:                             35033.
+Anonymous pages:                               54422.
+Pages stored in compressor:                   417704.
+Pages occupied by compressor:                 238673.
+Decompressions:                           1520319111.
+Compressions:                             1578748313.
+Pageins:                                   201564301.
+Pageouts:                                     943631.
+Swapins:                                   143729787.
+Swapouts:                                  148099631.
+"""
+
+
+class LagTests(unittest.TestCase):
+    """What slowness on a small Mac actually is. Measured on the first real one under heavy
+    use: 160-190 MB swapped in and 650-1400 MB decompressed every second, the app in front
+    with 11% of its memory in RAM, and macOS reporting 'level 2, 26% free' the whole time."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.saved = (g.LOG_DIR, g.EVENTS_PATH, g.SAMPLES_PATH, g.PAUSE_PATH, g.CONFIG_DIR)
+        g.LOG_DIR = self.tmp / "logs"
+        g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
+        g.SAMPLES_PATH = g.LOG_DIR / "samples.tsv"
+        g.CONFIG_DIR = self.tmp / "cfg"
+        g.PAUSE_PATH = g.CONFIG_DIR / "paused"
+        self.cfg = g.load_config(g.Path("/nonexistent"))
+        self.cfg["notify"] = False
+
+    def tearDown(self):
+        g.LOG_DIR, g.EVENTS_PATH, g.SAMPLES_PATH, g.PAUSE_PATH, g.CONFIG_DIR = self.saved
+
+    def later(self, seconds, swapin_mb_s, decompress_mb_s):
+        """The same vm_stat a while later, having moved this much per second."""
+        page = 16384
+        bump = lambda name, mb_s: lambda m: f"{name}:{' ' * 20}{int(m.group(1)) + int(mb_s * seconds * 1048576 / page)}."
+        text = g.re.sub(r"Swapins:\s+(\d+)\.", bump("Swapins", swapin_mb_s), VM_STAT)
+        text = g.re.sub(r"Decompressions:\s+(\d+)\.", bump("Decompressions", decompress_mb_s), text)
+        return text
+
+    def test_the_rate_of_shuffling_is_read_from_vm_stat(self):
+        a = g.vm_counters(VM_STAT)
+        self.assertAlmostEqual(a["Swapins"], 143729787 * 16384 / 1048576)
+        self.assertEqual(sorted(a), ["Compressions", "Decompressions", "Swapins", "Swapouts"])
+        b = g.vm_counters(self.later(10, 161.9, 652.3))
+        r = g.vm_rates(a, b, 10.0)
+        self.assertEqual((r["swapin_mb_s"], r["decompress_mb_s"], r["swapout_mb_s"]), (161.9, 652.3, 0.0))
+        self.assertIsNone(g.vm_rates(None, b, 10.0), "the first reading has nothing to compare with")
+        self.assertIsNone(g.vm_rates(a, b, 2.0), "two readings a moment apart are noise")
+        self.assertIsNone(g.vm_rates(a, b, 3600.0), "the Mac slept in between")
+        self.assertIsNone(g.vm_rates(b, a, 10.0), "totals went backwards: a restart")
+        self.assertIsNone(g.vm_counters("Pages free: 12."), "not vm_stat output")
+        self.assertIsNone(g.vm_counters(""))
+
+    def test_slow_and_very_slow(self):
+        lvl = lambda si, de: g.lag_level({"swapin_mb_s": si, "decompress_mb_s": de}, self.cfg)
+        self.assertEqual(lvl(161.9, 652.3), "severe", "the first real reading")
+        self.assertEqual(lvl(187.7, 1392.3), "severe")
+        self.assertEqual(lvl(12.0, 850.0), "severe", "squeezing alone can be the whole lag")
+        self.assertEqual(lvl(45.0, 120.0), "slow")
+        self.assertEqual(lvl(4.0, 310.0), "slow")
+        self.assertEqual(lvl(3.0, 40.0), "none")
+        self.assertEqual(g.lag_level({"swapin_mb_s": None, "decompress_mb_s": None}, self.cfg), "none", "no reading yet")
+        self.assertEqual(g.lag_level({}, self.cfg), "none")
+        auto, review = g.split_tuning({"lag": {"swapin_mb_s": 50, "severe_swapin_mb_s": 5}})
+        self.assertEqual((auto, review), ({"lag": {"swapin_mb_s": 50}}, {"lag": {"severe_swapin_mb_s": 5}}))
+
+    def real(self, **over):
+        """The moment as measured: macOS says level 2 and 26% free."""
+        return dict(sample(level=2, free=26, disk=28), swap_used_mb=7122, mem_total_mb=8192,
+                    swapin_mb_s=161.9, decompress_mb_s=652.3, **over)
+
+    def test_thrashing_counts_as_critical_whatever_macos_says(self):
+        self.assertTrue(g.is_critical(self.real(), self.cfg))
+        self.assertFalse(g.is_critical(dict(self.real(), swapin_mb_s=3.0, decompress_mb_s=40.0), self.cfg))
+        self.assertTrue(g.under_pressure(dict(sample(level=1, free=60), swapin_mb_s=45.0, decompress_mb_s=100.0), self.cfg))
+        procs = [P(1, "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT", rss_mb=5400)]
+        g.classify(procs, self.cfg, UID)
+        said = [d for d in g.Engine(self.cfg).step(self.real(), procs) if d.action == "notify" and d.cls == "pressure"]
+        self.assertEqual(len(said), 1, "the default is to speak up only when it is serious; this is")
+        self.assertIn("The Mac is slow: 162 MB a second of memory is going to and from disk (free 26%). Biggest: ChatGPT 5.3GB.",
+                      said[0].reason)
+        self.assertEqual(said[0].severity, "crit")
+
+    def test_the_menu_says_why_it_is_slow_and_who_has_the_ram(self):
+        groups = [{"key": "ChatGPT", "rss_mb": 5570, "res_mb": 625, "n": 60, "class": "ai_app"},
+                  {"key": "Google Chrome", "rss_mb": 4830, "res_mb": 870, "n": 33, "class": "browser"},
+                  {"key": "Claude", "rss_mb": 1480, "res_mb": 225, "n": 13, "class": "ai_app"}]
+        menu = {"access": {"blocked": []}, "archive_state": {}, "activity_age": lambda a: 30.0, "background": g.Background(),
+                "trim": [{"app": "ChatGPT", "n": 40, "mb": 900}], "last_action": None}
+        st = g.build_state(self.cfg, {"sample": self.real(), "groups": groups, "quiet": "", "front": "ChatGPT"}, menu)
+        self.assertEqual((st["headline"], st["attention"]), ("Very slow: memory is being shuffled to disk", "crit"))
+        self.assertEqual(st["lag"], {"level": "severe", "swapin_mb_s": 161.9, "decompress_mb_s": 652.3})
+        top = st["issues"][0]
+        self.assertEqual((top["id"], top["title"]), ("memory-critical", "This Mac is very slow right now"))
+        self.assertEqual(top["detail"], "162 MB of memory a second is being read back from disk. ChatGPT, in front, has 11% "
+                                        "of its memory in RAM. Google Chrome, in the background, is holding 0.8 GB of RAM.")
+        self.assertEqual(top["action"]["id"], "trim", "the gentlest help first")
+        slow = dict(self.real(), swapin_mb_s=45.0, decompress_mb_s=120.0)
+        st = g.build_state(self.cfg, {"sample": slow, "groups": groups, "quiet": "", "front": "Claude"}, menu)
+        self.assertEqual((st["headline"], st["attention"], st["issues"][0]["id"], st["issues"][0]["title"]),
+                         ("Slowing down: memory is being shuffled", "warn", "lag", "Things are slowing down"))
+        self.assertIn("Claude, in front, has 15% of its memory in RAM. Google Chrome, in the background, is holding 0.8 GB",
+                      st["issues"][0]["detail"])
+        squeezing = dict(self.real(), swapin_mb_s=12.1, decompress_mb_s=388.5)      # 00:35 on the first real night
+        st = g.build_state(self.cfg, {"sample": squeezing, "groups": groups, "quiet": "", "front": "TextEdit"}, menu)
+        self.assertTrue(st["issues"][0]["detail"].startswith(
+            "389 MB of memory a second is being squeezed and unsqueezed to make room. Google Chrome, in the background,"))
+        calm = dict(self.real(), swapin_mb_s=2.0, decompress_mb_s=30.0)
+        st = g.build_state(self.cfg, {"sample": calm, "groups": groups, "quiet": ""}, menu)
+        self.assertEqual((st["headline"], st["lag"]["level"]), ("Memory is tight", "none"))
+
+    def test_in_ram_is_kept_apart_from_what_an_app_wants(self):
+        procs = [P(1, "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT", rss_mb=600),
+                 P(2, "/Applications/ChatGPT.app/Contents/Frameworks/ChatGPT Helper (Renderer).app/Contents/MacOS/"
+                      "ChatGPT Helper (Renderer)", "x --type=renderer", ppid=1, rss_mb=300)]
+        procs[0].rss_kb, procs[1].rss_kb = 5000 * 1024, 2000 * 1024        # the full footprint, as libproc reports it
+        g.classify(procs, self.cfg, UID)
+        grp = g.aggregate(procs, self.cfg)[0]
+        self.assertEqual((grp["key"], grp["rss_mb"], grp["res_mb"]), ("ChatGPT", 7000, 900))
+
+    def test_the_diary_keeps_the_rates(self):
+        g.log_sample(self.real(), [{"key": "ChatGPT", "rss_mb": 5570}])
+        g.log_sample(sample(level=1, free=60), [])
+        lines = g.SAMPLES_PATH.read_text().splitlines()
+        self.assertTrue(lines[0].endswith("\ttop\tswapin_mb_s\tdecompress_mb_s"))
+        self.assertTrue(lines[1].endswith("\tChatGPT=5570\t161.9\t652.3"))
+        self.assertTrue(lines[2].endswith("\t\t\t"), "no reading is an empty cell, not a zero")
+        self.assertEqual(lines[1].split("\t")[6], "28", "older columns stay where every reader expects them")
+
+    def test_the_status_page_says_one_thing_to_this_mac_only(self):
+        import urllib.error
+        import urllib.request
+        saved = dict(g.LINK)
+        self.addCleanup(lambda: g.LINK.update(saved))
+        server = g.start_status_server(0)
+        self.addCleanup(lambda: (server.shutdown(), server.server_close()))
+        host, port = server.server_address
+        self.assertEqual(host, "127.0.0.1")
+        g.LINK.update(lag="severe", ts=123.0, seen=0.0)
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=5) as r:
+            body = g.json.loads(r.read())
+        self.assertEqual(body, {"v": 1, "lag": "severe", "ts": 123.0}, "how the Mac is doing, and nothing else")
+        self.assertAlmostEqual(g.LINK["seen"], g.time.time(), delta=5)
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5)
+        self.assertEqual(cm.exception.code, 404)
+        self.assertIsNone(g.start_status_server(port), "a taken port is reported, not fatal")
+
+
 class AutopilotTests(unittest.TestCase):
     """Bounded self-tuning, config history/undo, and the hygiene schedule."""
 

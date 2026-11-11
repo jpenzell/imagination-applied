@@ -73,6 +73,9 @@ struct GState {
     var refreshModes: [String: String] = [:]
     var archiveOffer = true
     var trimAuto = false
+    var lagLevel = "none"
+    var swapInMBs: Double?
+    var decompressMBs: Double?
 
     var age: Double { Date().timeIntervalSince1970 - ts }
     var helperDown: Bool { age > 150 }
@@ -118,6 +121,11 @@ func loadState(_ url: URL) -> GState? {
         s.lastText = l["text"] as? String ?? ""
         s.lastTS = num(l["ts"]) ?? 0
         s.lastOK = (l["ok"] as? Bool) ?? true
+    }
+    if let lag = d["lag"] as? [String: Any] {
+        s.lagLevel = lag["level"] as? String ?? "none"
+        s.swapInMBs = num(lag["swapin_mb_s"])
+        s.decompressMBs = num(lag["decompress_mb_s"])
     }
     s.refreshable = d["refreshable"] as? [String] ?? []
     for t in d["trim"] as? [[String: Any]] ?? [] {
@@ -553,7 +561,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // ---- header
         var bits: [String] = []
-        if let f = s.freePct { bits.append("\(Int(f))% memory free") }
+        if s.lagLevel != "none", let rate = s.swapInMBs, rate >= 30 {
+            bits.append("\(Int(rate)) MB/s to and from disk")
+        } else if s.lagLevel != "none", let rate = s.decompressMBs {
+            bits.append("\(Int(rate)) MB/s being squeezed")
+        } else if let f = s.freePct {
+            bits.append("\(Int(f))% memory free")
+        }
         if let u = s.swapUsedMB { bits.append("\(gb(u)) swap") }
         if let d = s.diskFreeGB { bits.append(String(format: "%.0f GB disk free", d)) }
         let head = NSMenuItem()

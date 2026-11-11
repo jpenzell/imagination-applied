@@ -8,6 +8,13 @@ async function refresh() {
   const d = daily[day] || { slept: 0, parked: 0 };
   document.getElementById("slept").textContent = d.slept;
   document.getElementById("parked").textContent = d.parked;
+  document.getElementById("aside").textContent = d.aside || 0;
+  const { guardian } = await chrome.storage.local.get("guardian");
+  const fresh = guardian && Date.now() - guardian.at < 3 * 60000;
+  document.getElementById("link").textContent =
+    !fresh || !guardian.ok ? "Guardian is not answering. Tabs are still tidied on the usual schedule."
+    : guardian.lag === "none" ? "Guardian says the Mac is coping. Nothing extra to do."
+    : "Guardian says the Mac is struggling. Background tabs go to sleep at once while you are elsewhere.";
   if (lastSweep) {
     const mins = Math.round((Date.now() - lastSweep.at) / 60000);
     document.getElementById("last").textContent = `Last check ${mins} min ago: ${lastSweep.looked} tabs looked at.`;

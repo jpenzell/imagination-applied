@@ -173,6 +173,13 @@ DEFAULT_CONFIG = {
     # Early warning: swap climbing this fast came before 19 of the first real day's 25
     # critical spells, usually by 5 to 12 minutes.
     "early": {"swap_climb_mb": 1000, "minutes": 10, "hold_minutes": 10},
+    # Lag: how fast memory is being moved between RAM, the compressor and the disk. This is
+    # what slowness on a small Mac actually is. The first real one was swapping in 160-190 MB
+    # and decompressing 650-1400 MB every second while macOS still said "level 2, 26% free".
+    "lag": {"swapin_mb_s": 30, "decompress_mb_s": 300, "severe_swapin_mb_s": 100, "severe_decompress_mb_s": 800},
+    # A read-only status page on this Mac only (127.0.0.1) that the Chrome extension asks once
+    # a minute, so it can put background tabs to sleep while the Mac is struggling.
+    "chrome": {"step_aside": True, "port": 47613},
     "autopilot": False,
     "hygiene": {"hour": 4, "safe_tier_when_reclaimable_gb": 5, "safe_tier_when_disk_below_x_ram": 2},
     "protect": [
@@ -214,6 +221,10 @@ TUNABLE = {
     "refresh.agent_idle_minutes": (10, 240),
     "refresh.cooldown_hours": (1, 48),
     "early.swap_climb_mb": (500, 4000),
+    "lag.swapin_mb_s": (10, 200),
+    "lag.decompress_mb_s": (100, 2000),
+    "lag.severe_swapin_mb_s": (50, 500),
+    "lag.severe_decompress_mb_s": (300, 4000),
     "coach.thread_mb": (100, 2000),
 }
 CONFIG_HISTORY = CONFIG_DIR / "config-history.jsonl"
@@ -335,7 +346,7 @@ def run_hygiene(cfg: dict, sample: dict, running: set, dry_run: bool = False) ->
 # --------------------------------------------------------------------------
 
 class Proc:
-    __slots__ = ("pid", "ppid", "pgid", "uid", "cpu", "rss_kb", "etime_s", "cputime_s",
+    __slots__ = ("pid", "ppid", "pgid", "uid", "cpu", "rss_kb", "res_kb", "etime_s", "cputime_s",
                  "comm", "args", "app", "cls", "key", "is_gui", "chrome_type")
 
     def __init__(self, pid, ppid, pgid, uid, cpu, rss_kb, etime_s, cputime_s, comm, args):
@@ -345,6 +356,7 @@ class Proc:
         self.uid = uid
         self.cpu = cpu
         self.rss_kb = rss_kb
+        self.res_kb = rss_kb        # what ps says is resident; rss_kb becomes the full footprint
         self.etime_s = etime_s
         self.cputime_s = cputime_s
         self.comm = comm
@@ -677,14 +689,16 @@ def aggregate(procs: list, cfg: dict) -> list:
         if p.cls == "foreign":
             continue
         g = groups.setdefault(p.key, {"key": p.key, "class": p.cls.split("/")[0],
-                                      "rss_mb": 0.0, "cpu": 0.0, "n": 0, "pids": []})
+                                      "rss_mb": 0.0, "res_mb": 0.0, "cpu": 0.0, "n": 0, "pids": []})
         g["rss_mb"] += p.rss_mb
+        g["res_mb"] += min(p.res_kb, p.rss_kb) / 1024.0
         g["cpu"] += p.cpu
         g["n"] += 1
         g["pids"].append(p.pid)
     out = sorted(groups.values(), key=lambda g: -g["rss_mb"])
     for g in out:
         g["rss_mb"] = round(g["rss_mb"])
+        g["res_mb"] = round(g["res_mb"])
         g["cpu"] = round(g["cpu"], 1)
     return out
 
@@ -751,13 +765,67 @@ def parse_mac_sample(raw: dict, s: dict) -> dict:
     return s
 
 
+VM_COUNTERS = {"Swapins": "swapin_mb_s", "Swapouts": "swapout_mb_s", "Decompressions": "decompress_mb_s",
+               "Compressions": "compress_mb_s"}
+_vm_prev = {}
+
+
+def vm_counters(vm_stat_text: str):
+    """vm_stat's running totals in MB ({'Swapins': ..., ...}), or None if they cannot be read."""
+    ps = re.search(r"page size of (\d+) bytes", vm_stat_text or "")
+    if not ps:
+        return None
+    out = {}
+    for name in VM_COUNTERS:
+        m = re.search(rf"^{name}:\s+(\d+)\.", vm_stat_text, re.M)
+        if not m:
+            return None
+        out[name] = int(m.group(1)) * int(ps.group(1)) / 1048576
+    return out
+
+
+def vm_rates(prev, cur, dt: float):
+    """MB per second moved since the previous reading, or None when there is nothing to
+    compare with: no previous reading, a gap (the Mac slept), or totals that went backwards
+    (a restart)."""
+    if not prev or not cur or dt < 5 or dt > 300 or any(cur[k] < prev[k] for k in cur):
+        return None
+    return {VM_COUNTERS[k]: round((cur[k] - prev[k]) / dt, 1) for k in cur}
+
+
+def lag_level(sample: dict, cfg: dict) -> str:
+    """'severe', 'slow' or 'none': is memory being shuffled fast enough to feel?"""
+    lc = cfg.get("lag") or {}
+    si, de = sample.get("swapin_mb_s"), sample.get("decompress_mb_s")
+    if si is None or de is None or not lc:
+        return "none"
+    if si >= lc["severe_swapin_mb_s"] or de >= lc["severe_decompress_mb_s"]:
+        return "severe"
+    if si >= lc["swapin_mb_s"] or de >= lc["decompress_mb_s"]:
+        return "slow"
+    return "none"
+
+
+def is_critical(sample: dict, cfg: dict) -> bool:
+    level, free = sample.get("pressure_level", 1), sample.get("free_pct")
+    return level >= 4 or (free is not None and free <= max(2, cfg["free_pct_floor"] // 2)) \
+        or lag_level(sample, cfg) == "severe"
+
+
 def sample_system() -> dict:
     s = {"ts": time.time(), "host": HOSTNAME, "pressure_level": 1, "free_pct": None,
          "swap_used_mb": None, "swap_total_mb": None, "compressed_mb": None,
          "mem_total_mb": None, "load1": None, "cpu_speed_limit": 100, "disk_free_gb": None,
          "source": "darwin" if IS_MAC else "linux"}
     if IS_MAC:
-        parse_mac_sample(read_mac_raw(), s)
+        raw = read_mac_raw()
+        parse_mac_sample(raw, s)
+        cur = vm_counters(raw.get("vm_stat"))
+        dt = s["ts"] - _vm_prev.get("ts", 0.0)
+        if dt >= 5 or not _vm_prev:          # two readings a second apart would only be noise
+            _vm_prev["rates"] = vm_rates(_vm_prev.get("c"), cur, dt)
+            _vm_prev.update(c=cur, ts=s["ts"])
+        s.update(_vm_prev.get("rates") or {})
     else:
         mi = {}
         try:
@@ -857,9 +925,10 @@ class Engine:
 
         level = sample["pressure_level"]
         free = sample.get("free_pct")
+        lag = lag_level(sample, cfg)
         under_pressure = level >= cfg["pressure_warn_level"] or (
-            free is not None and free <= cfg["free_pct_floor"])
-        critical = level >= 4 or (free is not None and free <= max(2, cfg["free_pct_floor"] // 2))
+            free is not None and free <= cfg["free_pct_floor"]) or lag != "none"
+        critical = is_critical(sample, cfg)
 
         mine = [p for p in procs if p.cls != "foreign"]
         groups = aggregate(mine, cfg)
@@ -895,8 +964,9 @@ class Engine:
             top = "; ".join(f"{g['key']} {g['rss_mb'] / 1024:.1f}GB" for g in groups[:cfg["top_n"]])
             hint = " Click the Guardian shield in the menu bar for one-click fixes." \
                 if critical and menu_installed() else ""
-            decisions.append(Decision("notify", None,
-                                      f"Memory {pressure_word(level)} (free {free}%). Biggest: {top}.{hint}",
+            lead = (f"The Mac is slow: {sample['swapin_mb_s']:.0f} MB a second of memory is going to and from disk"
+                    if lag == "severe" and level < 4 else f"Memory {pressure_word(level)}")
+            decisions.append(Decision("notify", None, f"{lead} (free {free}%). Biggest: {top}.{hint}",
                                       "pressure", "crit" if critical else "warn"))
 
         # ---- per process rules
@@ -1037,12 +1107,14 @@ def log_sample(sample: dict, groups: list):
     new = not SAMPLES_PATH.exists()
     with SAMPLES_PATH.open("a") as f:
         if new:
-            f.write("ts\tlevel\tfree_pct\tswap_used_mb\tcompressed_mb\tload1\tdisk_free_gb\ttop\n")
+            f.write("ts\tlevel\tfree_pct\tswap_used_mb\tcompressed_mb\tload1\tdisk_free_gb\ttop"
+                    "\tswapin_mb_s\tdecompress_mb_s\n")
         top = ";".join(f"{g['key']}={g['rss_mb']}" for g in groups[:5])
         f.write("\t".join(str(x) for x in [
             datetime.fromtimestamp(sample["ts"]).isoformat(timespec="seconds"),
             sample["pressure_level"], sample.get("free_pct"), sample.get("swap_used_mb"),
-            sample.get("compressed_mb"), sample.get("load1"), sample.get("disk_free_gb"), top]) + "\n")
+            sample.get("compressed_mb"), sample.get("load1"), sample.get("disk_free_gb"), top,
+            sample.get("swapin_mb_s", ""), sample.get("decompress_mb_s", "")]) + "\n")
 
 
 def still_same_process(p: Proc) -> bool:
@@ -1205,7 +1277,7 @@ def apply_decisions(decisions: list, cfg: dict, quiet: str = "", dry_run: bool =
 def under_pressure(sample: dict, cfg: dict) -> bool:
     free = sample.get("free_pct")
     return sample.get("pressure_level", 1) >= cfg["pressure_warn_level"] or (
-        free is not None and free <= cfg["free_pct_floor"])
+        free is not None and free <= cfg["free_pct_floor"]) or lag_level(sample, cfg) != "none"
 
 
 def newest_mtime(paths: list) -> float:
@@ -2527,6 +2599,43 @@ def swap_climb(history: list, now: float, window_s: float, climb_mb: float) -> f
 # everything is still done by the one program that has the permissions, the worker and the
 # diary, and a click is logged like any other action.
 
+LINK = {"lag": "none", "ts": 0.0, "seen": 0.0, "server": None}
+
+
+def start_status_server(port: int):
+    """Serve {"lag": ...} on 127.0.0.1 only. Read-only, no names, nothing private: it says how
+    hard the Mac is struggling and nothing else. Returns the server, or None if the port is
+    taken (then the extension simply behaves as it did before)."""
+    import http.server
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path.split("?")[0] != "/status":
+                self.send_error(404)
+                return
+            LINK["seen"] = time.time()
+            body = json.dumps({"v": 1, "lag": LINK["lag"], "ts": LINK["ts"]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", int(port)), Handler)
+    except OSError as e:
+        log_event("error", error=repr(e), job="status-server")
+        return None
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, name="guardian-status", daemon=True).start()
+    LINK["server"] = server
+    return server
+
+
 def menu_installed() -> bool:
     return MENU_APP.exists()
 
@@ -2556,8 +2665,8 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
     put a dot on the icon; 'info' is only listed. A warning means there is a problem or a
     good moment to act, not merely that memory is tight (on a small Mac it always is)."""
     s, groups = snap["sample"], snap["groups"]
-    level, free = s.get("pressure_level", 1), s.get("free_pct")
-    critical = level >= 4 or (free is not None and free <= max(2, cfg["free_pct_floor"] // 2))
+    critical = is_critical(s, cfg)
+    lag = lag_level(s, cfg)
     tight = under_pressure(s, cfg)
     rcfg = cfg.get("refresh") or {}
     age_of = menu.get("activity_age") or (lambda app: MacAppOps().activity_age(app, cfg))
@@ -2590,9 +2699,33 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
 
     crit_refresh, offered_trim = None, False
     early = menu.get("early") or {}
+    def why_slow() -> str:
+        """In plain words: how much is being shuffled, and who has the RAM."""
+        if s["swapin_mb_s"] >= cfg["lag"]["swapin_mb_s"]:
+            text = f"{s['swapin_mb_s']:.0f} MB of memory a second is being read back from disk."
+        else:
+            text = f"{s['decompress_mb_s']:.0f} MB of memory a second is being squeezed and unsqueezed to make room."
+        front = snap.get("front") or ""
+        fg = next((g for g in groups if g["key"] == front), None)
+        if fg and fg["rss_mb"] >= 500:
+            text += f" {front}, in front, has {100 * fg['res_mb'] // max(1, fg['rss_mb'])}% of its memory in RAM."
+        back = max((g for g in groups if g["key"] != front and g.get("res_mb", 0) >= 400),
+                   key=lambda g: g["res_mb"], default=None)
+        if back:
+            text += f" {back['key']}, in the background, is holding {back['res_mb'] / 1024:.1f} GB of RAM."
+        return text
+
     if critical:
-        issue = {"id": "memory-critical", "severity": "crit", "title": "Memory is critically low",
-                 "detail": f"Biggest: {top}"}
+        issue = {"id": "memory-critical", "severity": "crit",
+                 "title": "This Mac is very slow right now" if lag == "severe" else "Memory is critically low",
+                 "detail": why_slow() if lag == "severe" else f"Biggest: {top}"}
+        act, crit_refresh = first_aid()
+        if act:
+            issue["action"] = act
+            offered_trim = act["id"] == "trim"
+        out.append(issue)
+    elif lag == "slow":
+        issue = {"id": "lag", "severity": "warn", "title": "Things are slowing down", "detail": why_slow()}
         act, crit_refresh = first_aid()
         if act:
             issue["action"] = act
@@ -2686,8 +2819,12 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
     level = s.get("pressure_level", 1)
     if paused is not None:
         headline = "Paused" + (f" until {datetime.fromtimestamp(paused):%-I:%M %p}" if paused else "")
+    elif lag_level(s, cfg) == "severe":
+        headline = "Very slow: memory is being shuffled to disk"
     elif worst == "crit":
         headline = "Memory is critically low"
+    elif lag_level(s, cfg) == "slow":
+        headline = "Slowing down: memory is being shuffled"
     elif under_pressure(s, cfg):
         headline = "Memory is tight"
     else:
@@ -2704,6 +2841,9 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
         "disk_free_gb": s.get("disk_free_gb"), "disk_floor_gb": cfg["disk_floor_gb"],
         "attention": worst if worst in ("crit", "warn") else "none", "headline": headline,
         "top": [{"key": g["key"], "gb": round(g["rss_mb"] / 1024, 1), "n": g["n"]} for g in snap["groups"][:6]],
+        "lag": {"level": lag_level(s, cfg), "swapin_mb_s": s.get("swapin_mb_s"),
+                "decompress_mb_s": s.get("decompress_mb_s")},
+        "chrome_link_age": (round(time.time() - LINK["seen"]) if LINK["seen"] else None),
         "issues": issues, "busy": (bg.name or "") if bg is not None and bg.busy() else "",
         "last_action": menu.get("last_action"),
         "refreshable": [a for a, m in (rcfg.get("apps") or {}).items() if a in running],
@@ -3101,6 +3241,9 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     menu = {"dirty": False, "snap": None, "last_action": None, "background": background,
             "archive_state": archive_state, "refresh_state": refresh_state, "access": access,
             "helpers": {}, "helper_cwd": {}, "trim": [], "threads": None, "early": None, "last_auto_trim": 0.0}
+    if not once and (cfg.get("chrome") or {}).get("step_aside"):
+        start_status_server(cfg["chrome"]["port"])
+    last_lag_log = 0.0
     menu["homes"] = None
     reminded = max([datetime.fromisoformat(e["ts"]).timestamp() for e in read_events(24 * 30)
                     if e.get("kind") == "archive" and e.get("phase") == "one-copy"] or [0.0])
@@ -3248,6 +3391,17 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 if path and not snap["quiet"]:
                     notify("Guardian", digest_oneliner(24), cfg)
             if not simulate:
+                # ---- how slow is it really, and who has the RAM
+                lag_now = lag_level(snap["sample"], cfg)
+                LINK.update(lag=lag_now if not snap["quiet"] else "none", ts=time.time())
+                if lag_now != "none":
+                    snap["front"] = MacAppOps().front_app() if IS_MAC else ""
+                    if time.time() - last_lag_log > 600:
+                        last_lag_log = time.time()
+                        log_event("lag", level=lag_now, swapin_mb_s=snap["sample"].get("swapin_mb_s"),
+                                  decompress_mb_s=snap["sample"].get("decompress_mb_s"),
+                                  free_pct=snap["sample"].get("free_pct"), front=snap.get("front"),
+                                  macos_level=snap["sample"].get("pressure_level"))
                 # ---- getting ahead of a bad spell
                 t_now = time.time()
                 helper_track(menu["helpers"], snap["procs"], cfg, t_now)
@@ -3278,7 +3432,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 ecfg = cfg["early"]
                 swap_hist.append((t_now, snap["sample"].get("swap_used_mb")))
                 rise = swap_climb(list(swap_hist), t_now, ecfg["minutes"] * 60, ecfg["swap_climb_mb"])
-                if rise and snap["sample"].get("pressure_level", 1) < 4:
+                if rise and not is_critical(snap["sample"], cfg):
                     menu["early"] = {"until": t_now + ecfg["hold_minutes"] * 60, "rise_mb": rise,
                                      "minutes": ecfg["minutes"]}
                     if t_now - last_early_log > 20 * 60:
@@ -3287,7 +3441,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                                   swap_used_mb=snap["sample"].get("swap_used_mb"))
                     if not dry_run:
                         auto_trim(cfg, menu, snap["procs"], t_now, "early", snap["quiet"])
-                elif snap["sample"].get("pressure_level", 1) >= 4 and not dry_run:
+                elif is_critical(snap["sample"], cfg) and not dry_run:
                     auto_trim(cfg, menu, snap["procs"], t_now, "critical", snap["quiet"])
             menu["snap"] = snap
             write_state(build_state(cfg, snap, menu))
@@ -3826,6 +3980,22 @@ def doctor(cfg: dict, script: Path):
             print("     " + line)
     else:
         print(f"OK  background agent can read {', '.join(acc['ok']) or 'your folders'} (its own check, {acc['ts']})")
+    if IS_MAC:
+        a = vm_counters(sh(["vm_stat"]))
+        time.sleep(6)
+        r = vm_rates(a, vm_counters(sh(["vm_stat"])), 6.0) or {}
+        lvl = lag_level(r, cfg)
+        print(f"{ok(bool(r))} lag meter: swapping in {r.get('swapin_mb_s', '?')} MB/s, decompressing "
+              f"{r.get('decompress_mb_s', '?')} MB/s right now: " + {"none": "fine", "slow": "slowing down",
+                                                                    "severe": "very slow"}[lvl])
+        st_file = state_path()
+        try:
+            age = json.loads(st_file.read_text()).get("chrome_link_age")
+        except (OSError, ValueError):
+            age = None
+        print(f"{ok(age is not None and age < 300)} Chrome extension link: " + (
+            f"it last asked {age}s ago" if age is not None else
+            "the extension has not asked since the helper started (reload it on chrome://extensions; needs 0.3.0)"))
     import archive
     acfg = cfg["archive"]
     good = [r for r in acfg["roots"] if not archive.root_problem(archive.resolve_root(r))]

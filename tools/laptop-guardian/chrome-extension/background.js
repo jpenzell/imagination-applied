@@ -19,7 +19,12 @@ const DEFAULTS = {
   neverTouch: ["claude.ai", "chatgpt.com", "chat.openai.com", "meet.google.com", "zoom.us", "mail.google.com", "calendar.google.com"],
   parkFolderName: "Guardian Parked",
   advanced: false,
+  stepAside: true,            // when Guardian says the Mac is struggling and Chrome is not in front,
+  stepAsideIdleMin: 5,        // sleep background tabs idle this long, at once
+  guardianPort: 47613,        // Guardian's status page, on this Mac only (127.0.0.1)
 };
+
+const STEP_ASIDE_EVERY_MIN = 5;
 
 const LEVELS = {
   gentle:     { sleepAfterMin: 180, parkAfterHours: 168 },
@@ -81,8 +86,46 @@ function runSweep(overrides = {}) {
   return run;
 }
 
+// Ask Guardian (the helper that watches this Mac) how hard the Mac is struggling. It answers on
+// 127.0.0.1 only. No answer means it is not running: carry on exactly as before.
+async function askGuardian(settings) {
+  try {
+    const signal = (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(2500) : undefined;
+    const r = await fetch(`http://127.0.0.1:${settings.guardianPort}/status`, { signal, cache: "no-store" });
+    if (!r.ok) return null;
+    const s = await r.json();
+    return s && typeof s.lag === "string" ? s : null;
+  } catch (e) { return null; }
+}
+
+async function chromeInFront() {
+  try { const w = await chrome.windows.getLastFocused(); return !!(w && w.focused); }
+  catch (e) { return true; }      // cannot tell: assume you are here, and do nothing
+}
+
+// Once a minute. If the Mac is struggling and you are not in Chrome, Chrome steps aside: the
+// background tabs go to sleep now instead of after an hour. Nothing is closed or parked.
+async function pulse(overrides = {}) {
+  const settings = { ...(await getSettings()), ...overrides };
+  const now = overrides.now || Date.now();
+  const status = settings.enabled && settings.stepAside ? await askGuardian(settings) : null;
+  const link = { at: now, ok: !!status, lag: status ? status.lag : null };
+  let stats = null;
+  if (status && (status.lag === "slow" || status.lag === "severe") && !(await chromeInFront())) {
+    const { lastAside = 0 } = await chrome.storage.session.get("lastAside");
+    if (now - lastAside >= STEP_ASIDE_EVERY_MIN * 60000) {
+      await chrome.storage.session.set({ lastAside: now });
+      stats = await runSweep({ ...overrides, stepAside: true });
+      link.steppedAside = stats.slept;
+    }
+  }
+  await chrome.storage.local.set({ guardian: link });
+  return { link, stats };
+}
+
 async function sweepOnce(overrides) {
   const settings = { ...(await getSettings()), ...overrides };
+  const aside = !!overrides.stepAside;
   const stats = { looked: 0, slept: 0, parked: 0, skipped: {} };
   if (!settings.enabled) return stats;
   const now = overrides.now || Date.now();
@@ -100,17 +143,21 @@ async function sweepOnce(overrides) {
   let folderId = null;
   for (const tab of tabs) {
     stats.looked++;
-    const why = untouchable(tab, settings);
+    let why = untouchable(tab, settings);
+    // Stepping aside is done in a hurry, so it is more careful: a tab in a group was put there
+    // by you or by an agent that may be working in it, and a tab still loading is in use.
+    if (!why && aside && tab.groupId !== undefined && tab.groupId !== -1) why = "grouped";
+    if (!why && aside && tab.status === "loading") why = "loading";
     if (why) { stats.skipped[why] = (stats.skipped[why] || 0) + 1; continue; }
     const idleMin = (now - Math.max(tab.lastAccessed || now, seen[tab.id] || 0)) / 60000;
-    if (idleMin >= settings.parkAfterHours * 60) {
+    if (!aside && idleMin >= settings.parkAfterHours * 60) {
       try {
         folderId = folderId || await parkFolder(settings);
         await chrome.bookmarks.create({ parentId: folderId, title: tab.title || tab.url, url: tab.url });
         await chrome.tabs.remove(tab.id);
         stats.parked++;
       } catch (e) { stats.skipped.error = (stats.skipped.error || 0) + 1; }
-    } else if (idleMin >= settings.sleepAfterMin && !tab.discarded) {
+    } else if (idleMin >= (aside ? settings.stepAsideIdleMin : settings.sleepAfterMin) && !tab.discarded) {
       try { await chrome.tabs.discard(tab.id); stats.slept++; }
       catch (e) { stats.skipped.error = (stats.skipped.error || 0) + 1; }
     }
@@ -119,9 +166,10 @@ async function sweepOnce(overrides) {
   const { daily = {} } = await chrome.storage.local.get("daily");
   const d = daily[day] || { slept: 0, parked: 0 };
   d.slept += stats.slept; d.parked += stats.parked;
+  if (aside) d.aside = (d.aside || 0) + stats.slept;
   daily[day] = d;
   for (const k of Object.keys(daily)) if (k < dayKey(new Date(Date.now() - 14 * 86400000))) delete daily[k];
-  await chrome.storage.local.set({ daily, lastSweep: { at: Date.now(), ...stats } });
+  await chrome.storage.local.set({ daily, lastSweep: { at: Date.now(), ...stats, aside } });
   await updateBadge();
   return stats;
 }
@@ -133,18 +181,24 @@ async function updateBadge() {
   await chrome.action.setBadgeBackgroundColor({ color: awake > 60 ? "#c0392b" : awake > 30 ? "#e67e22" : "#2c7a4b" });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+function ensureAlarms() {
   chrome.alarms.create("sweep", { periodInMinutes: 5 });
-  updateBadge();
+  chrome.alarms.create("pulse", { periodInMinutes: 1 });
+}
+chrome.runtime.onInstalled.addListener(() => { ensureAlarms(); updateBadge(); });
+chrome.runtime.onStartup.addListener(ensureAlarms);
+chrome.alarms.onAlarm.addListener(a => {
+  if (a.name === "sweep") runSweep();
+  else if (a.name === "pulse") pulse();
 });
-chrome.runtime.onStartup.addListener(() => chrome.alarms.create("sweep", { periodInMinutes: 5 }));
-chrome.alarms.onAlarm.addListener(a => { if (a.name === "sweep") runSweep(); });
 chrome.tabs.onCreated.addListener(updateBadge);
 chrome.tabs.onRemoved.addListener(updateBadge);
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg && msg.type === "sweep") { runSweep(msg.overrides || {}).then(reply); return true; }
   if (msg && msg.type === "badge") { updateBadge().then(() => reply(true)); return true; }
+  if (msg && msg.type === "pulse") { pulse(msg.overrides || {}).then(reply); return true; }
 });
 
 self.runSweep = runSweep;
+self.pulse = pulse;
 self.getSettings = getSettings;

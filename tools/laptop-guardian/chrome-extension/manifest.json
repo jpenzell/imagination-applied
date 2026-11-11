@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Guardian for Chrome",
-  "version": "0.2.0",
-  "description": "Puts tabs you are done with to sleep, and parks tabs you have not touched in days into a bookmark folder. Nothing is lost.",
+  "version": "0.3.0",
+  "description": "Puts tabs you are done with to sleep, parks tabs untouched for days into a bookmark folder, and steps aside when the Mac is struggling. Nothing is lost.",
   "permissions": [
     "tabs",
     "storage",
@@ -27,5 +27,8 @@
     "32": "icons/32.png",
     "48": "icons/48.png",
     "128": "icons/128.png"
-  }
+  },
+  "host_permissions": [
+    "http://127.0.0.1:47613/*"
+  ]
 }
