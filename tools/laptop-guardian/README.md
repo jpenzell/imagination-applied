@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 93 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 99 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 17 tests, plus a real move of 5 GB to a USB drive |
@@ -41,7 +41,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 127 tests, should say OK three times
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 133 tests, should say OK three times
 python3 guardian.py menu install       # the shield in the menu bar (builds a small app; needs Apple's Command Line Tools)
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
@@ -109,8 +109,8 @@ One click on the shield shows what is going on and what you can do about it righ
   Memory being merely tight puts no dot there: on a small Mac it always is.
 - **Needs a look.** Each entry says what is wrong and carries the one button that helps.
 - **Using the most memory.** The five biggest apps, in GB as Activity Monitor counts them.
-- **Fix it now.** Refresh a bloated AI app (it asks first, and warns if its agent was just
-  working), close duplicate Chrome tabs, clear rebuildable caches, move old work folders to
+- **Fix it now.** Trim an AI app's idle helpers (interrupts nothing), refresh a bloated AI
+  app (it asks first, and warns if its agent was just working), close duplicate Chrome tabs, clear rebuildable caches, move old work folders to
   a drive. These work at any time, not only when guardian would have offered.
 - **Pause** for 30 minutes, an hour, three hours or until tomorrow; it resumes on its own.
 - **Settings**, the few that matter: how much guardian does on its own, how often it
@@ -129,6 +129,36 @@ Notifications changed with it. The first real day produced 43 notifications that
 memory was tight and offered nothing to do. Now a notification means a critical spell or
 something you can act on, and the icon carries the steady state. "Whenever memory is
 tight" in Settings brings the old behaviour back.
+
+## Getting ahead of a bad spell
+
+A refresh is relief, not prevention. On the first real Mac, ChatGPT was back at 10 GB half
+an hour after being refreshed to 2.3 GB: that is what five Codex threads cost. Three things
+came out of measuring where that memory sits.
+
+```bash
+python3 guardian.py trim            # dry run: idle helper programs that could close
+python3 guardian.py trim --yes
+python3 guardian.py threads         # agent threads written recently, with the size of their histories
+```
+
+- **Trim idle helpers.** Codex starts three tool servers and a few scripting helpers for
+  every thread it opens. Ninety minutes after a relaunch, 62 of 80 had used no processor
+  time at all and held 1.2 GB. Trim asks only those to stop: helpers of a listed app, over
+  an hour old, idle for half an hour, with no children and not part of a running session.
+  The app, its windows and anything working are untouched, and nothing is force-killed.
+  Tested by closing two: Codex did not restart them and carried on. Not yet known: whether
+  an old thread you return to later can still use a tool whose helper was trimmed; if one
+  does not respond, a refresh restores it. Trim runs on a click, never on its own.
+- **Flag heavy threads.** The Codex engine holding a thread with a 1.2 GB history open was
+  itself using 1.1 GB. Guardian lists a thread once its history passes 300 MB, says so once
+  in a notification, and counts how many threads are in use at the same time. It cannot
+  start a fresh thread for you; it tells you when one would help.
+- **Warn early.** Swap climbing 1 GB within ten minutes came before 19 of that day's 25
+  critical spells, usually by 5 to 12 minutes; 9 of its 16 firings were followed by one.
+  When it fires, the shield gets its amber dot and the menu offers the gentlest fix first:
+  trim if there is something to trim, otherwise a refresh. No notification; the dot is
+  enough for a signal that is right a little over half the time.
 
 ## Disk: what the free space was spent on
 
@@ -392,6 +422,8 @@ guardian.py chrome                 tab census: how many tabs, how many duplicate
 guardian.py chrome --close-duplicates   close duplicate URLs (all stay in History)
 guardian.py doctor                 check install, permissions, swap ceiling, login items
 guardian.py install | uninstall    launchd agent
+guardian.py trim [--yes]           close an AI app's idle helper programs (dry run without --yes)
+guardian.py threads                agent threads in use and the size of their histories
 guardian.py menu install|uninstall|status   the shield in the menu bar
 guardian.py autopilot on|off|status   always running and optimizing: act mode + daily hygiene + bounded self-tuning
 guardian.py pause | resume

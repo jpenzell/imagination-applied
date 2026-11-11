@@ -1467,6 +1467,208 @@ class MenuTests(unittest.TestCase):
         self.assertIn("<key>SuccessfulExit</key><false/>", text)
 
 
+NODE = "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node"
+
+
+class AheadTests(unittest.TestCase):
+    """Getting ahead of a bad spell. Measured on the first real Mac: ChatGPT was back at 10 GB
+    half an hour after a refresh; 36 tool servers it had started for its threads had used no
+    processor time in 90 minutes (1.1 GB); one thread had a 1.2 GB history; and swap climbing
+    1 GB in ten minutes came before 19 of the day's 25 critical spells."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.saved = (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH, g.PAUSE_PATH, g.HOME,
+                      g.still_same_process, g.os.kill)
+        g.CONFIG_DIR = self.tmp / "cfg"
+        g.CONFIG_PATH = g.CONFIG_DIR / "config.json"
+        g.CONFIG_HISTORY = g.CONFIG_DIR / "config-history.jsonl"
+        g.PAUSE_PATH = g.CONFIG_DIR / "paused"
+        g.LOG_DIR = self.tmp / "logs"
+        g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
+        g.HOME = self.tmp / "home"
+        self.killed = []
+        g.still_same_process = lambda p: True
+        g.os.kill = lambda pid, sig: self.killed.append((pid, sig))
+        self.cfg = g.load_config(g.Path("/nonexistent"))
+        self.cfg["notify"] = False
+
+    def tearDown(self):
+        (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH, g.PAUSE_PATH, g.HOME,
+         g.still_same_process, g.os.kill) = self.saved
+
+    def family(self, over=None):
+        """ChatGPT as recorded: the app, the Codex engine, and the tool servers it starts per thread."""
+        hour = 5400
+        spec = {
+            100: ("/Applications/ChatGPT.app/Contents/MacOS/ChatGPT", "", 1, 700, hour, 300),
+            110: ("/Applications/ChatGPT.app/Contents/Resources/codex", " app-server", 100, 1100, hour, 900),
+            201: (NODE, " ./mcp/launch.mjs", 110, 35, hour, 0.0),                 # never did anything
+            202: (NODE, " ./server.mjs", 110, 35, hour, 0.3),                     # next to nothing
+            203: (NODE, " scripts/mcp/server.mjs --stdio", 110, 30, hour, 6.0),   # worked earlier
+            204: (NODE, " kernel.js --session-id c43", 110, 420, hour, 26.0),     # a live session with a child
+            205: (NODE, " trusted-worker.js", 204, 200, hour, 9.0),
+            206: (NODE, " ./mcp/launch.mjs", 110, 35, 600, 0.0),                  # ten minutes old
+            300: ("/Applications/ChatGPT.app/Contents/Frameworks/ChatGPT Helper (Renderer).app/Contents/MacOS/"
+                  "ChatGPT Helper (Renderer)", " --type=renderer", 100, 1400, hour, 50),
+            400: ("/Applications/Claude.app/Contents/MacOS/Claude", "", 1, 800, hour, 100),
+            401: ("/Applications/Claude.app/Contents/Resources/cua_node/bin/node", " ./server.mjs", 400, 60, hour, 0.0),
+        }
+        spec.update(over or {})
+        procs = [P(pid, comm, comm + args, ppid=ppid, rss_mb=mb, age=age, cputime=cpu)
+                 for pid, (comm, args, ppid, mb, age, cpu) in spec.items()]
+        g.classify(procs, self.cfg, UID)
+        return procs
+
+    def test_only_old_idle_childless_helpers_of_a_listed_app_are_trimmed(self):
+        procs, track, now = self.family(), {}, 1_000_000.0
+        self.assertEqual({p.key for p in procs if p.pid in (201, 202, 203, 204, 205, 206, 300)}, {"ChatGPT"})
+        g.helper_track(track, procs, self.cfg, now)
+        self.assertEqual(sorted(track), [201, 202, 203, 204, 205, 206], "the app, its engine and its windows are not helpers")
+        ids = lambda t: sorted(p.pid for p in g.trim_candidates("ChatGPT", procs, track, self.cfg, t))
+        self.assertEqual(ids(now), [201, 202], "never worked, over an hour old")
+        self.assertEqual(g.trim_candidates("Claude", procs, track, self.cfg, now), [], "Claude is not on the list")
+        # 31 minutes later: the one that worked earlier has been quiet all that time; the young
+        # one is now old enough but is still younger than an hour
+        later = now + 31 * 60
+        aged = self.family({203: (NODE, " scripts/mcp/server.mjs --stdio", 110, 30, 5400 + 1860, 6.0),
+                            206: (NODE, " ./mcp/launch.mjs", 110, 35, 600 + 1860, 0.0),
+                            202: (NODE, " ./server.mjs", 110, 35, 5400 + 1860, 2.5)})      # it just did some work
+        g.helper_track(track, aged, self.cfg, later)
+        self.assertEqual(ids(later), [201, 203])
+        self.assertEqual(g.trim_summary(aged, track, self.cfg, later), [{"app": "ChatGPT", "n": 2, "mb": 65}])
+        # a reused pid starts from scratch; a helper that quit is forgotten
+        reused = [p for p in self.family({201: (NODE, " kernel.js", 110, 300, 5, 3.0)}) if p.pid != 203]
+        g.helper_track(track, reused, self.cfg, later + 30)
+        self.assertNotIn(203, track)
+        self.assertEqual(track[201]["since"], later + 30)
+
+    def test_trimming_asks_politely_and_only_when_told(self):
+        procs, track, now = self.family(), {}, 1_000_000.0
+        g.helper_track(track, procs, self.cfg, now)
+        rec = g.trim_app("ChatGPT", self.cfg, procs, track, now, dry_run=True)
+        self.assertEqual((rec["found"], rec["mb"], rec["closed"], self.killed), (2, 70, 0, []))
+        rec = g.trim_app("ChatGPT", self.cfg, procs, track, now)
+        self.assertEqual(sorted(self.killed), [(201, g.signal.SIGTERM), (202, g.signal.SIGTERM)], "a request to quit, never a kill")
+        self.assertEqual(rec["closed"], 2)
+        self.assertEqual([e["closed"] for e in g.read_events(1) if e["kind"] == "trim"], [0, 2])
+        self.assertNotIn("trim.idle_minutes", g.TUNABLE, "a diagnosis cannot make trimming more eager")
+
+    def test_swap_climbing_fast_is_the_early_warning(self):
+        t0 = 1_000_000.0
+        hist = lambda vals, step=30: [(t0 + i * step, v) for i, v in enumerate(vals)]
+        last = lambda h: h[-1][0]
+        # 21:53 to 22:03 on the first real day: 5.1 GB to 7.8 GB, then thirteen critical samples
+        real = hist([5120 + i * 135 for i in range(21)])
+        self.assertEqual(g.swap_climb(real, last(real), 600, 1000), 2700)
+        slow = hist([8400 + i * 30 for i in range(21)])
+        self.assertEqual(g.swap_climb(slow, last(slow), 600, 1000), 0.0, "0.6 GB in ten minutes is ordinary")
+        falling = hist([9000 - i * 100 for i in range(21)])
+        self.assertEqual(g.swap_climb(falling, last(falling), 600, 1000), 0.0)
+        dip = hist([9000] * 8 + [7000] * 4 + [8600] * 8)
+        self.assertEqual(g.swap_climb(dip, last(dip), 600, 1000), 1600, "measured from the lowest point in the window")
+        asleep = [(t0, 3000), (t0 + 30, 3000)] + [(t0 + 3600 + i * 30, 6000) for i in range(4)]
+        self.assertEqual(g.swap_climb(asleep, last(asleep), 600, 1000), 0.0, "a lid closed for an hour is not a climb")
+        self.assertEqual(g.swap_climb(real[:4], last(real[:4]), 600, 100), 0.0, "four readings prove nothing")
+        self.assertEqual(g.swap_climb([], t0, 600, 1000), 0.0)
+
+    def test_long_threads_and_how_many_are_active(self):
+        import os
+        sess = g.HOME / ".codex" / "sessions"
+        now = g.time.time()
+
+        def thread(rel, mb, minutes_ago, cwd):
+            p = sess / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(('{"type":"session_meta","payload":{"id":"x","cwd":%s}}\n' % g.json.dumps(cwd)).encode())
+                f.truncate(max(mb * 1048576, 200))          # size on paper; no disk used
+            os.utime(p, (now - minutes_ago * 60,) * 2)
+        home = str(g.HOME)
+        thread("2026/09/09/rollout-2026-09-09T16-59-02-aaa.jsonl", 1231, 0, home + "/Documents/Codex/2026-09-09/i-x20")
+        thread("2026/11/06/rollout-2026-11-06T09-00-00-bbb.jsonl", 57, 1, home + "/Documents/Codex/2026-11-06/i-fe")
+        thread("2026/11/10/rollout-2026-11-10T21-00-00-ccc.jsonl", 2, 11, home)
+        thread("2026/11/10/rollout-2026-11-10T21-33-00-ddd.jsonl", 0, 95, home)       # touched when the app reopened
+        thread("2026/10/28/rollout-2026-10-28T10-00-00-eee.jsonl", 77, 56, home + "/Documents/Codex/2026-10-28/my-x20")
+        thread("2026/10/01/rollout-2026-10-01T10-00-00-fff.jsonl", 900, 600, home)    # not touched for ten hours
+        (sess / "2026/11/10/notes.txt").write_text("not a thread")
+        scan = g.thread_scan(self.cfg, now)
+        self.assertEqual([t["mb"] for t in scan["threads"]], [1231, 77, 57, 2, 0])
+        self.assertEqual(scan["active"], 3, "written in the last half hour and not empty")
+        big = scan["big"]
+        self.assertEqual([(t["mb"], t["started"], t["cwd"]) for t in big],
+                         [(1231, "2026-09-09", "~/Documents/Codex/2026-09-09/i-x20")])
+        text = g.render_threads(scan, self.cfg)
+        self.assertIn("1231 MB   started 2026-09-09   last written    just now   ~/Documents/Codex/2026-09-09/i-x20   <-- long history", text)
+        self.assertIn("start a new thread", text)
+        self.assertEqual((sess / "2026/11/06/rollout-2026-11-06T09-00-00-bbb.jsonl").stat().st_size, 57 * 1048576,
+                         "reading never writes")
+
+    def snap(self, level=2, free=24):
+        return {"sample": dict(sample(level=level, free=free, disk=30), swap_used_mb=7800, mem_total_mb=8192),
+                "groups": [{"key": "ChatGPT", "rss_mb": 10100, "n": 113, "class": "ai_app"},
+                           {"key": "Google Chrome", "rss_mb": 3100, "n": 29, "class": "browser"}], "quiet": ""}
+
+    def menu(self, **more):
+        return dict({"dirty": False, "snap": None, "last_action": None, "background": g.Background(),
+                     "archive_state": {}, "refresh_state": {}, "access": {"blocked": []}, "helpers": {},
+                     "activity_age": lambda app: 30.0, "trim": [], "threads": None, "early": None}, **more)
+
+    def test_the_gentlest_fix_is_offered_first(self):
+        trim = [{"app": "ChatGPT", "n": 33, "mb": 1100}]
+        ids = lambda st: [(i["id"], i["severity"], (i.get("action") or {}).get("id")) for i in st["issues"]]
+        early = {"until": g.time.time() + 600, "rise_mb": 2700, "minutes": 10}
+        st = g.build_state(self.cfg, self.snap(), self.menu(trim=trim, early=early))
+        self.assertEqual(ids(st), [("filling", "warn", "trim"), ("grown:ChatGPT", "info", "refresh")])
+        self.assertEqual(st["attention"], "warn", "the dot comes on before the slow spell")
+        self.assertIn("Swap grew 2.6 GB in the last 10 minutes", st["issues"][0]["detail"])
+        self.assertEqual(st["issues"][0]["action"]["label"], "Trim idle ChatGPT helpers")
+        self.assertEqual(st["trim"], trim)
+        # nothing to trim: the warning falls back to the refresh, and says its agent is busy
+        st = g.build_state(self.cfg, self.snap(), self.menu(early=early))
+        self.assertEqual(ids(st), [("filling", "warn", "refresh")])
+        self.assertTrue(st["issues"][0]["action"]["busy"])
+        # the warning lapses on its own
+        st = g.build_state(self.cfg, self.snap(), self.menu(trim=trim, early=dict(early, until=g.time.time() - 1)))
+        self.assertEqual(ids(st), [("grown:ChatGPT", "info", "refresh"), ("trim:ChatGPT", "info", "trim")])
+        self.assertEqual(st["attention"], "none")
+        self.assertIn("33 idle ChatGPT helpers hold 1.1 GB", st["issues"][1]["title"])
+        # critical: trim first there too, and it is not listed twice
+        st = g.build_state(self.cfg, self.snap(level=4, free=12), self.menu(trim=trim, early=early))
+        self.assertEqual(ids(st), [("memory-critical", "crit", "trim"), ("grown:ChatGPT", "info", "refresh")])
+        # too little to be worth a click
+        st = g.build_state(self.cfg, self.snap(), self.menu(trim=[{"app": "ChatGPT", "n": 3, "mb": 90}]))
+        self.assertEqual(ids(st), [("grown:ChatGPT", "info", "refresh")])
+        # threads
+        heavy = {"mb": 1231, "started": "2026-09-09", "cwd": "~/x", "idle_s": 5, "file": "f"}
+        st = g.build_state(self.cfg, self.snap(), self.menu(threads={"ts": 0, "active": 4, "threads": [heavy], "big": [heavy]}))
+        thread = [i for i in st["issues"] if i["id"] == "threads"][0]
+        self.assertEqual(thread["title"], "One agent thread has a 1.2 GB history")
+        self.assertIn("Started 2026-09-09.", thread["detail"])
+        self.assertIn("4 threads are active at once", thread["detail"])
+        st = g.build_state(self.cfg, self.snap(), self.menu(threads={"ts": 0, "active": 5, "threads": [], "big": []}))
+        self.assertEqual([i["title"] for i in st["issues"] if i["id"] == "threads"], ["5 agent threads are active at once"])
+        st = g.build_state(self.cfg, self.snap(), self.menu(threads={"ts": 0, "active": 2, "threads": [], "big": []}))
+        self.assertEqual([i for i in st["issues"] if i["id"] == "threads"], [])
+
+    def test_clicks_for_trim_and_threads(self):
+        procs = self.family()
+        menu = self.menu(procs=lambda: procs)
+        g.helper_track(menu["helpers"], procs, self.cfg, g.time.time())
+        g.handle_request({"action": "trim", "app": "ChatGPT", "ts": g.time.time()}, self.cfg, menu)
+        self.assertEqual(sorted(pid for pid, _ in self.killed), [201, 202])
+        self.assertIn("Closed 2 idle ChatGPT helpers, about 0.1 GB. ChatGPT itself was not touched.", menu["last_action"]["text"])
+        self.killed.clear()
+        g.handle_request({"action": "trim", "app": "Claude", "ts": g.time.time()}, self.cfg, menu)
+        self.assertEqual(self.killed, [])
+        self.assertFalse(menu["last_action"]["ok"])
+        g.handle_request({"action": "threads", "ts": g.time.time()}, self.cfg, menu)
+        self.assertIn("Agent threads written in the last 2 hours: 0", (g.LOG_DIR / "threads-now.txt").read_text())
+
+
 class AutopilotTests(unittest.TestCase):
     """Bounded self-tuning, config history/undo, and the hygiene schedule."""
 

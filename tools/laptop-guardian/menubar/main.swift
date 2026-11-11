@@ -66,6 +66,7 @@ struct GState {
     var lastTS: Double = 0
     var lastOK = true
     var refreshable: [String] = []
+    var trim: [(app: String, n: Int, mb: Double)] = []
     var chromeRunning = false
     var notify = true
     var notifyLevel = "important"
@@ -118,6 +119,9 @@ func loadState(_ url: URL) -> GState? {
         s.lastOK = (l["ok"] as? Bool) ?? true
     }
     s.refreshable = d["refreshable"] as? [String] ?? []
+    for t in d["trim"] as? [[String: Any]] ?? [] {
+        s.trim.append((app: t["app"] as? String ?? "?", n: Int(num(t["n"]) ?? 0), mb: num(t["mb"]) ?? 0))
+    }
     s.chromeRunning = (d["chrome_running"] as? Bool) ?? false
     if let st = d["settings"] as? [String: Any] {
         s.notify = (st["notify"] as? Bool) ?? true
@@ -479,10 +483,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    func trimApp(_ app: String) {
+        let t = state?.trim.first { $0.app == app }
+        let what = t.map { "\($0.n) helper programs holding about \(gb($0.mb))" } ?? "its idle helper programs"
+        let text = "Guardian closes \(what). They are programs \(app) started for its threads that have done nothing "
+            + "for at least half an hour. \(app) stays open and what you are doing is not interrupted.\n\n"
+            + "If you later go back to an older thread and one of its tools does not respond, refresh \(app)."
+        if confirm("Trim idle \(app) helpers?", text, button: "Trim") {
+            send("trim", ["app": app], note: "Trimming idle \(app) helpers...")
+        }
+    }
+
     func perform(_ a: Action) {
         switch a.id {
         case "refresh":
             if let app = a.args["app"] as? String { refreshApp(app) }
+        case "trim":
+            if let app = a.args["app"] as? String { trimApp(app) }
+        case "threads": send("threads", note: "Opening the list of threads...")
         case "reclaim": send("reclaim", note: "Clearing caches...")
         case "archive": send("archive", note: "Measuring your work folders...")
         case "close_duplicate_tabs": send("close_duplicate_tabs", note: "Asking Chrome for its tabs...")
@@ -592,6 +610,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // ---- fix it now
         menu.addItem(.separator())
         menu.addItem(sectionTitle("Fix it now"))
+        for t in s.trim where t.mb >= 100 {
+            let app = t.app
+            menu.addItem(ClosureItem("Trim idle \(app) helpers (\(gb(t.mb)))\u{2026}") { [weak self] in
+                self?.trimApp(app)
+            })
+        }
         for app in s.refreshable {
             menu.addItem(ClosureItem("Refresh \(app)\u{2026}") { [weak self] in self?.refreshApp(app) })
         }
@@ -659,6 +683,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // ---- look
         menu.addItem(.separator())
+        menu.addItem(ClosureItem("Agent threads and their size") { [weak self] in
+            self?.send("threads", note: "Opening the list of threads...")
+        })
         menu.addItem(ClosureItem("Today's report") { [weak self] in self?.send("report", note: "Opening the report...") })
         menu.addItem(ClosureItem("Run a check-up") { [weak self] in self?.send("doctor", note: "Running the check-up...") })
         menu.addItem(ClosureItem("Ask the AI what is slowing this Mac\u{2026}") { [weak self] in
