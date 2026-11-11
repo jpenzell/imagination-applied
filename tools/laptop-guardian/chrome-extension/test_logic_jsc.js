@@ -145,6 +145,7 @@ function makeChrome({ tabs = [], sync = {}, local = {}, session = {}, bookmarks 
       },
       openOptionsPage() { state.opened.push({ options: true }); },
       getManifest() { return { version: "9.8.7" }; },
+      reload() { state.reloads = (state.reloads || 0) + 1; },
     },
     windows: { async getLastFocused() { await tick(); return { id: 1, focused: state.focused }; } },
     action: {
@@ -527,6 +528,28 @@ for (const [why, setup] of [
     eq(c.storage.local.data.guardian.ok, c.state.guardian !== null && c.state.guardian !== "error" && !!c.state.guardian.lag, "link health recorded");
   });
 }
+
+test("a newer copy in Guardian's folder: the extension reloads itself, once per version, and never for an older or odd one", async () => {
+  const t = strip();
+  const c = makeChrome({ tabs: Object.values(t) });
+  c.state.focused = false;
+  for (const ext of ["9.8.7", "9.8.6", "9.8", "rm -rf", 10, undefined]) {
+    c.state.guardian = { v: 1, lag: "none", ext };
+    const out = await boot(c).pulse();
+    eq([c.state.reloads || 0, out.reloading], [0, undefined], "no reload for " + JSON.stringify(ext));
+  }
+  c.state.guardian = { v: 1, lag: "severe", ext: "9.10.0" };     // 10 is more than 8: numbers, not text
+  const out = await boot(c).pulse();
+  eq([c.state.reloads, out.reloading, out.stats, fate(c, t.idle)], [1, "9.10.0", null, "untouched"], "reloads first; the new copy does the work");
+  eq(c.storage.local.data.reloadTried, "9.10.0", "remembered");
+  c.restartWorker();
+  await boot(c).pulse();
+  eq(c.state.reloads, 1, "still 9.8.7 after the reload (Chrome loaded another folder): no second try, no loop");
+  eq(fate(c, t.idle), "asleep", "and it carries on with its work");
+  c.state.guardian = { v: 1, lag: "none", ext: "9.10.1" };
+  await boot(c).pulse();
+  eq(c.state.reloads, 2, "a later version is a new reason");
+});
 
 test("step aside: switched off in Settings, or tidying switched off, Guardian is not even asked", async () => {
   for (const sync of [{ stepAside: false }, { enabled: false }]) {

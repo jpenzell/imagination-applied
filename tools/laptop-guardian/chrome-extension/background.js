@@ -102,6 +102,30 @@ async function askGuardian(settings) {
   } catch (e) { return null; }
 }
 
+// Is version a newer than version b? Numbers, not text ("0.10.0" is newer than "0.9.0").
+function newer(a, b) {
+  const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0;
+  }
+  return false;
+}
+
+// Guardian says which version of this extension is in its folder on this Mac. When that is
+// newer than the copy Chrome is running, reload: the same thing as clicking the round arrow on
+// chrome://extensions, which nobody remembers to do. Once per version, so a folder that does
+// not match (Chrome loaded a different one) can never cause a loop.
+async function reloadIfNewerHere(status) {
+  const here = status && status.ext;
+  if (typeof here !== "string" || !/^\d{1,3}(\.\d{1,3}){1,3}$/.test(here) || !newer(here, VERSION)) return false;
+  const { reloadTried } = await chrome.storage.local.get("reloadTried");
+  if (reloadTried === here) return false;
+  await chrome.storage.local.set({ reloadTried: here });
+  try { chrome.runtime.reload(); } catch (e) { return false; }
+  return true;
+}
+
 async function chromeInFront() {
   try { const w = await chrome.windows.getLastFocused(); return !!(w && w.focused); }
   catch (e) { return true; }      // cannot tell: assume you are here, and do nothing
@@ -115,6 +139,10 @@ async function pulse(overrides = {}) {
   const status = settings.enabled && settings.stepAside ? await askGuardian(settings) : null;
   const link = { at: now, ok: !!status, lag: status ? status.lag : null };
   let stats = null;
+  if (await reloadIfNewerHere(status)) {
+    await chrome.storage.local.set({ guardian: link });
+    return { link, stats, reloading: status.ext };
+  }
   if (status && (status.lag === "slow" || status.lag === "severe") && !(await chromeInFront())) {
     const { lastAside = 0 } = await chrome.storage.session.get("lastAside");
     if (now - lastAside >= STEP_ASIDE_EVERY_MIN * 60000) {

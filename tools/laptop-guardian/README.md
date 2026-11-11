@@ -27,11 +27,11 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 117 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 120 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
-| `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 63 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
+| `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 64 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
 [PLAN.md](PLAN.md), with the work order for building it on a Mac.
@@ -222,6 +222,9 @@ python3 guardian.py threads         # agent threads written recently, with the s
 - **One spell, one episode.** macOS flips between "normal" and "warn" every half minute on a
   full Mac, and the diary counted each flip: 46 "episodes" in a day, many 31 seconds long.
   An episode now ends after four calm readings in a row (`episode_end_samples`).
+- **The diary names its columns.** Columns were added to `samples.tsv` over time while the
+  first line of a file that already existed kept the old names. That line is now brought up to
+  date once per run; older rows are left as they are, with fewer fields.
 
 ## Disk: what the free space was spent on
 
@@ -342,6 +345,15 @@ pressure, its agent has been idle for `agent_idle_minutes` (20; for Codex that m
 session file written), the app is not the one in front, and it was not refreshed in the
 last six hours.
 
+"Under memory pressure" turned out to be the wrong moment to look. An agent is idle when the
+Mac is calm, and busy when it is not: the first real day had 16 slow spells and 2 offers, and
+with ChatGPT at 10.5 GB on an 8 GB Mac the verdict read "nothing to do: no memory pressure".
+So the calm after a slow spell counts too: if the Mac was measured slow in the last two hours
+(`slow_memory_minutes`) and the app holds three quarters of the RAM's worth or more
+(`outgrown_ram_share`), the offer is made then, and the menu lists it as a good moment. A
+"not now" still holds for two hours. The dialog also waits for a pause of ten seconds in
+typing (`ask_pause_seconds`): one that appears under a keystroke gets answered by it.
+
 Consent is per app:
 
 - **ask** (default, and only for ChatGPT out of the box): a dialog with *Not now*,
@@ -458,10 +470,14 @@ last saw each tab in front. Sleeping a tab reloads it when you come back, so tex
 into a form and not submitted is lost; pin a tab, or add its site to the list, to keep it.
 
 Load it: chrome://extensions, turn on Developer mode, "Load unpacked", pick the
-`chrome-extension` folder. After the files change (a `git pull`), click the round arrow on
-its card there so Chrome picks them up. From 0.3.2 the extension says which version it is
-when it asks, so when Chrome is still running an older copy than the folder holds, the
-shield's menu says so and has a button that opens that page; `doctor` prints both versions.
+`chrome-extension` folder. Chrome only loads new files when the round arrow on that card is
+clicked, and nobody remembers to: on the first real Mac, Chrome ran a day-old copy through
+three updates. So from 0.3.2 the extension says which version it is when it asks, and from
+0.3.3 Guardian answers with the version in its folder and the extension reloads itself when
+that is newer (once per version, so a folder that does not match cannot cause a loop). The
+shield's menu only brings it up when that did not happen within five minutes, or when the
+running copy is too old to do it; then it has a button that opens the page. `doctor` prints
+both versions.
 From 0.3.0 the extension may also talk to one
 address, Guardian's status page on this Mac (`127.0.0.1:47613`), and nowhere else. Test the logic on any Mac, no install needed:
 
@@ -469,7 +485,7 @@ address, Guardian's status page on this Mac (`127.0.0.1:47613`), and nowhere els
 /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc chrome-extension/test_logic_jsc.js
 ```
 
-63 checks against a stand-in for Chrome: every never-touch rule, the bookmark saved before
+64 checks against a stand-in for Chrome: every never-touch rule, the bookmark saved before
 a tab is closed, the counts. `node chrome-extension/test_extension.mjs` runs it end to end
 in a throwaway Chrome profile (needs Node 22).
 

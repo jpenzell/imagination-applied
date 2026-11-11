@@ -758,9 +758,11 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(d("ask", 30, False, 5), "wait", "agent wrote 30 s ago")
         self.assertEqual(d("auto", 30, False, 9999), "wait")
         self.assertEqual(d("ask", 3600, True, 5), "wait", "you are using the app")
-        self.assertEqual(d("ask", 3600, False, 5), "ask")
+        self.assertEqual(d("ask", 3600, False, 30), "ask")
+        self.assertEqual(g.refresh_decide("ask", self.rcfg, 3600, False, 2), ("wait", g.TYPING),
+                         "a dialog under a keystroke gets answered by that keystroke")
         self.assertEqual(d("ask", 3600, False, 3600), "wait", "nobody there to answer; ask later")
-        self.assertEqual(d("ask", None, False, 5), "ask", "no agent signal: the owner decides")
+        self.assertEqual(d("ask", None, False, 30), "ask", "no agent signal: the owner decides")
         self.assertEqual(d("auto", 3600, False, 5), "wait", "auto waits until you are away")
         self.assertEqual(d("auto", 3600, False, 600), "refresh")
         self.assertEqual(d("auto", None, False, 600), "wait", "auto needs proof the agent is idle")
@@ -778,6 +780,49 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(due(s=calm), "no memory pressure")
         self.assertIn("refreshed 1.0h ago", due(st={"last": 10 ** 6 - 3600}))
         self.assertIn("you said not now", due(st={"snooze_until": 10 ** 6 + 600}))
+
+    def test_the_calm_after_a_slow_spell_is_the_moment_to_offer_a_refresh(self):
+        # The first real day: 16 slow spells, 2 offers. The agent is idle when the Mac is calm,
+        # and the old rule only looked while it was not.
+        now = 10 ** 6
+        calm = dict(sample(level=1, free=60), mem_total_mb=8192)
+        huge, modest = {"key": "ChatGPT", "rss_mb": 10500}, {"key": "ChatGPT", "rss_mb": 6200}
+        due = lambda grp=huge, s=calm, last=now - 1800, st=None: g.refresh_due("ask", grp, s, self.cfg, st or {}, now, last)
+        self.assertEqual(due(), "", "slow half an hour ago, and the app holds more than the Mac has")
+        self.assertEqual(due(last=now - 3 * 3600), "no memory pressure", "three hours ago is not recent")
+        self.assertEqual(due(last=0.0), "no memory pressure", "never slow: nothing to fix")
+        self.assertEqual(due(grp={"key": "ChatGPT", "rss_mb": 9000}, s=dict(calm, mem_total_mb=12288)),
+                         "no memory pressure", "under three quarters of a 12 GB Mac")
+        self.assertEqual(due(grp=modest), "", "6.2 GB of 8")
+        self.assertEqual(due(grp=modest, s=dict(calm, mem_total_mb=16384)), "no memory pressure", "a 16 GB Mac has room")
+        self.assertEqual(due(s=sample(level=1, free=60)), "no memory pressure", "RAM size unknown: stay with the old rule")
+        self.assertIn("you said not now", due(st={"snooze_until": now + 600}), "a no is still a no")
+        self.assertIn("refreshed 0.5h ago", due(st={"last": now - 1800}))
+        # the diary remembers the last slow spell across a restart
+        self.assertEqual(g.last_slow_from_events(), 0.0)
+        g.log_event("lag", level="slow")
+        self.assertAlmostEqual(g.last_slow_from_events(), g.time.time(), delta=5)
+
+    def test_tick_offers_in_the_calm_and_waits_for_a_pause_in_typing(self):
+        snap = {"groups": [{"key": "ChatGPT", "rss_mb": 10500, "n": 94}],
+                "sample": dict(sample(level=1, free=60), mem_total_mb=8192), "quiet": ""}
+
+        def tick(ops, state, last_slow):
+            bg = g.Background()
+            app = g.refresh_tick(self.cfg, snap, state, bg, g.time.time(), ops=ops, last_slow=last_slow)
+            if bg.thread:
+                bg.thread.join(5)
+            return app
+
+        self.assertIsNone(tick(FakeOps(answer="Not now"), {}, 0.0), "calm and never slow")
+        typing, state = FakeOps(idle=1.5, answer="Not now"), {}
+        self.assertIsNone(tick(typing, state, g.time.time() - 600), "typing: no dialog")
+        self.assertEqual(typing.calls, [])
+        self.assertLess(state["ChatGPT"]["next_check"], g.time.time() + 30, "it looks again at the next sample")
+        paused = FakeOps(idle=25.0, answer="Not now")
+        state["ChatGPT"]["next_check"] = 0.0
+        self.assertEqual(tick(paused, state, g.time.time() - 600), "ChatGPT")
+        self.assertEqual([c[0] for c in paused.calls], ["ask"])
 
     def test_refresh_quits_cleans_reopens_and_records_before_and_after(self):
         ops = FakeOps()
@@ -1458,6 +1503,12 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(crit["issues"][0]["action"]["label"], "Refresh ChatGPT")
         calm = state(self.snap(level=1, free=60, chatgpt=2000), self.menu())
         self.assertEqual((calm["headline"], calm["attention"], calm["issues"]), ("All good", "none", []))
+        # calm now, slow half an hour ago, and the app holds more than the Mac has: the good moment is listed
+        after = state(self.snap(level=1, free=60), self.menu(age=3600.0, last_slow=g.time.time() - 1800))
+        self.assertEqual([(i["id"], i["severity"]) for i in after["issues"]], [("grown:ChatGPT", "warn")])
+        self.assertIn("more than this Mac's 8 GB of memory", after["issues"][0]["detail"])
+        long_ago = state(self.snap(level=1, free=60), self.menu(age=3600.0, last_slow=g.time.time() - 4 * 3600))
+        self.assertEqual(long_ago["issues"], [])
         # disk, permissions, Chrome and the archive each bring their own button
         plan = {"days": 30, "mb": 5148, "volume": {"name": "My Passport", "path": "/Volumes/My Passport"},
                 "move": [{"name": "a"}, {"name": "b"}, {"name": "c"}]}
@@ -2096,6 +2147,24 @@ class LagTests(unittest.TestCase):
         self.assertTrue(g.SAMPLES_PATH.read_text().splitlines()[3].endswith("\t161.9\t652.3\tChatGPT=62;Dropbox=9"))
         self.assertEqual(lines[1].split("\t")[6], "28", "older columns stay where every reader expects them")
 
+    def test_an_old_diary_gets_the_names_of_the_newer_columns(self):
+        # The first real Mac: the file was started before the rates were recorded, so its first
+        # line named 8 columns while new rows carried 11.
+        old_header = "ts\tlevel\tfree_pct\tswap_used_mb\tcompressed_mb\tload1\tdisk_free_gb\ttop"
+        old_row = "2026-11-10T00:00:00\t1\t60\t100\t200\t1.0\t30\tChatGPT=5000"
+        g.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        g.SAMPLES_PATH.write_text(old_header + "\n" + old_row + "\n")
+        g.log_sample(self.real(), [{"key": "ChatGPT", "rss_mb": 5570}])
+        lines = g.SAMPLES_PATH.read_text().splitlines()
+        self.assertEqual(lines[0], g.SAMPLES_HEADER)
+        self.assertEqual(lines[1], old_row, "old rows are kept as they were")
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(len(lines[2].split("\t")), len(g.SAMPLES_HEADER.split("\t")))
+        self.assertFalse(g.SAMPLES_PATH.with_name("samples.tsv.tmp").exists())
+        g.log_sample(self.real(), [])
+        self.assertEqual(g.SAMPLES_PATH.read_text().splitlines()[0], g.SAMPLES_HEADER)
+        self.assertEqual(len(g.SAMPLES_PATH.read_text().splitlines()), 4)
+
     def test_the_status_page_says_one_thing_to_this_mac_only(self):
         import urllib.error
         import urllib.request
@@ -2108,7 +2177,8 @@ class LagTests(unittest.TestCase):
         g.LINK.update(lag="severe", ts=123.0, seen=0.0)
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=5) as r:
             body = g.json.loads(r.read())
-        self.assertEqual(body, {"v": 1, "lag": "severe", "ts": 123.0}, "how the Mac is doing, and nothing else")
+        self.assertEqual(body, {"v": 1, "lag": "severe", "ts": 123.0, "ext": g.bundled_extension_version()},
+                         "how the Mac is doing, which extension version is on this Mac, and nothing else")
         self.assertAlmostEqual(g.LINK["seen"], g.time.time(), delta=5)
         with self.assertRaises(urllib.error.HTTPError) as cm:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5)
@@ -2150,6 +2220,22 @@ class LagTests(unittest.TestCase):
         self.assertIsNone(g.extension_stale(now))
         g.LINK.update(seen=now - 4000, ext=None)
         self.assertIsNone(g.extension_stale(now), "Chrome was closed an hour ago")
+        # a copy that can reload itself gets five minutes to do so before anyone is bothered
+        saved_here = g.bundled_extension_version
+        g.bundled_extension_version = lambda: "0.9.0"
+        self.addCleanup(lambda: setattr(g, "bundled_extension_version", saved_here))
+        g.LINK.update(seen=now, ext="0.3.3", stale_since=None)
+        self.assertIsNone(g.extension_stale(now), "it will reload itself")
+        g.LINK.update(seen=now + 200)
+        self.assertIsNone(g.extension_stale(now + 200))
+        g.LINK.update(seen=now + 400)
+        self.assertEqual(g.extension_stale(now + 400), ("0.3.3", "0.9.0"), "it did not: say so")
+        g.LINK.update(seen=now + 460, ext="0.9.0")
+        self.assertIsNone(g.extension_stale(now + 460))
+        g.LINK.update(seen=now + 500, ext="0.8.0")
+        self.assertIsNone(g.extension_stale(now + 500), "the next update starts its own five minutes")
+        g.LINK.update(seen=now + 500, ext="0.3.2")
+        self.assertEqual(g.extension_stale(now + 500), ("0.3.2", "0.9.0"), "0.3.2 cannot reload itself: say so at once")
 
     def test_who_is_reaching_for_memory(self):
         cfg = g.load_config(g.Path("/nonexistent"))

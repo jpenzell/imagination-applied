@@ -136,6 +136,14 @@ DEFAULT_CONFIG = {
         "cooldown_hours": 6,
         "snooze_minutes": 120,
         "only_under_pressure": True,
+        # The moment an app is worth refreshing (its agent idle, the Mac calm) is rarely a moment
+        # of pressure: on the first real day there were 16 slow spells and 2 offers, and at
+        # 10.5 GB on an 8 GB Mac the answer was "nothing to do: no memory pressure". So a slow
+        # spell in the last N minutes also counts, for an app that outgrew this share of the RAM.
+        "slow_memory_minutes": 120,
+        "outgrown_ram_share": 0.75,
+        # A dialog that appears under a keystroke gets answered by that keystroke. Wait for a pause.
+        "ask_pause_seconds": 10,
         "clear_caches": True,
         "reopen": True,
         "quit_timeout_seconds": 45,
@@ -1206,13 +1214,41 @@ def log_event(kind: str, **fields):
     return rec
 
 
+SAMPLES_HEADER = ("ts\tlevel\tfree_pct\tswap_used_mb\tcompressed_mb\tload1\tdisk_free_gb\ttop"
+                  "\tswapin_mb_s\tdecompress_mb_s\tbusiest")
+_header_checked = set()
+
+
+def repair_samples_header():
+    """Columns were added over time, and the first line of a diary that already existed went on
+    naming only the old ones: on the first real Mac the three newest readings had no names.
+    Rewrite that one line (older rows simply have fewer fields). Checked once per run."""
+    key = str(SAMPLES_PATH)
+    if key in _header_checked:
+        return
+    _header_checked.add(key)
+    tmp = SAMPLES_PATH.with_name(SAMPLES_PATH.name + ".tmp")
+    try:
+        with SAMPLES_PATH.open() as f:
+            first = f.readline().rstrip("\n")
+            if first == SAMPLES_HEADER or not first.startswith("ts\t"):
+                return
+            with tmp.open("w") as out:
+                out.write(SAMPLES_HEADER + "\n")
+                shutil.copyfileobj(f, out)
+        os.replace(tmp, SAMPLES_PATH)
+    except OSError as e:
+        log_event("error", error=repr(e), job="samples-header")
+
+
 def log_sample(sample: dict, groups: list):
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     new = not SAMPLES_PATH.exists()
+    if not new:
+        repair_samples_header()
     with SAMPLES_PATH.open("a") as f:
         if new:
-            f.write("ts\tlevel\tfree_pct\tswap_used_mb\tcompressed_mb\tload1\tdisk_free_gb\ttop"
-                    "\tswapin_mb_s\tdecompress_mb_s\tbusiest\n")
+            f.write(SAMPLES_HEADER + "\n")
         top = ";".join(f"{g['key']}={g['rss_mb']}" for g in groups[:5])
         f.write("\t".join(str(x) for x in [
             datetime.fromtimestamp(sample["ts"]).isoformat(timespec="seconds"),
@@ -1461,7 +1497,22 @@ def app_family(procs: list, app: str):
     return fam, (mains[0] if mains else None)
 
 
-def refresh_due(mode: str, grp, sample: dict, cfg: dict, st: dict, now: float) -> str:
+def outgrown_after_slow(grp, sample: dict, cfg: dict, last_slow: float, now: float) -> bool:
+    """The Mac was measurably slow not long ago and this app holds most of the RAM's worth:
+    refreshing it in the calm that follows is how the next slow spell is avoided."""
+    rcfg = cfg.get("refresh") or {}
+    total = sample.get("mem_total_mb") or 0
+    return bool(grp and total and last_slow and now - last_slow <= rcfg.get("slow_memory_minutes", 0) * 60
+                and grp["rss_mb"] >= rcfg.get("outgrown_ram_share", 0.75) * total)
+
+
+def last_slow_from_events(hours: float = 3) -> float:
+    """When the Mac was last measured slow, from the diary (for a restart, and for the command line)."""
+    return max([datetime.fromisoformat(e["ts"]).timestamp() for e in read_events(hours) if e.get("kind") == "lag"]
+               or [0.0])
+
+
+def refresh_due(mode: str, grp, sample: dict, cfg: dict, st: dict, now: float, last_slow: float = 0.0) -> str:
     """'' when a refresh is worth considering, otherwise the reason it is not."""
     rcfg = cfg["refresh"]
     if mode not in ("ask", "auto"):
@@ -1470,13 +1521,17 @@ def refresh_due(mode: str, grp, sample: dict, cfg: dict, st: dict, now: float) -
         return "not running"
     if grp["rss_mb"] < rcfg["min_gb"] * 1024:
         return f"only {grp['rss_mb'] / 1024:.1f}GB (acts at {rcfg['min_gb']}GB)"
-    if rcfg["only_under_pressure"] and not under_pressure(sample, cfg):
+    if rcfg["only_under_pressure"] and not under_pressure(sample, cfg) \
+            and not outgrown_after_slow(grp, sample, cfg, last_slow, now):
         return "no memory pressure"
     if now - st.get("last", 0) < rcfg["cooldown_hours"] * 3600:
         return f"refreshed {(now - st['last']) / 3600:.1f}h ago"
     if now < st.get("snooze_until", 0):
         return f"you said not now ({int((st['snooze_until'] - now) / 60)}min left)"
     return ""
+
+
+TYPING = "you are typing; it will ask at your next pause"
 
 
 def refresh_decide(mode: str, rcfg: dict, activity_age_s, is_front: bool, user_idle_s):
@@ -1495,6 +1550,8 @@ def refresh_decide(mode: str, rcfg: dict, activity_age_s, is_front: bool, user_i
         return "refresh", "its agent is idle and you are away"
     if user_idle_s is not None and user_idle_s > 600:
         return "wait", "you are away; it will ask when you are back"
+    if user_idle_s is not None and user_idle_s < rcfg.get("ask_pause_seconds", 0):
+        return "wait", TYPING
     return "ask", "its agent is idle"
 
 
@@ -1671,7 +1728,8 @@ def refresh_state_from_events(hours: float = 48) -> dict:
     return state
 
 
-def refresh_tick(cfg: dict, snap: dict, state: dict, background, now: float, ops=None, dry_run: bool = False):
+def refresh_tick(cfg: dict, snap: dict, state: dict, background, now: float, ops=None, dry_run: bool = False,
+                 last_slow: float = 0.0):
     """Called once per sample. Cheap checks first; the dialog and the refresh run on the worker.
     Returns the app a job was started for, or None."""
     rcfg = cfg.get("refresh") or {}
@@ -1682,15 +1740,17 @@ def refresh_tick(cfg: dict, snap: dict, state: dict, background, now: float, ops
         if now < st["next_check"]:
             continue
         grp = next((g for g in snap["groups"] if g["key"] == app), None)
-        if refresh_due(mode, grp, snap["sample"], cfg, st, now):
+        if refresh_due(mode, grp, snap["sample"], cfg, st, now, last_slow):
             continue
         st["next_check"] = now + 120
         ops = ops or MacAppOps()
         if mode == "auto" and cfg["mode"] != "act":
             mode = "ask"                      # acting unasked is for act mode only
         age = ops.activity_age(app, cfg)
-        verdict, _why = refresh_decide(mode, rcfg, age, ops.front_app() == app, ops.user_idle())
+        verdict, why = refresh_decide(mode, rcfg, age, ops.front_app() == app, ops.user_idle())
         if verdict == "wait":
+            if why == TYPING:
+                st["next_check"] = now + 10       # a pause is short: look again at the next sample
             continue
         gb = grp["rss_mb"] / 1024
 
@@ -1737,7 +1797,7 @@ def refresh_cmd(cfg: dict, args):
         mode = (rcfg.get("apps") or {}).get(app, "never")
         grp = next((g for g in snap["groups"] if g["key"] == app), None)
         size = f"{grp['rss_mb'] / 1024:.1f}GB in {grp['n']} processes" if grp else "not running"
-        why = refresh_due(mode, grp, snap["sample"], cfg, state.get(app, {}), now)
+        why = refresh_due(mode, grp, snap["sample"], cfg, state.get(app, {}), now, last_slow_from_events())
         if not why:
             age = ops.activity_age(app, cfg)
             verdict, reason = refresh_decide(mode, rcfg, age, ops.front_app() == app, ops.user_idle())
@@ -2783,14 +2843,26 @@ def bundled_extension_version():
         return None
 
 
+SELF_UPDATING = (0, 3, 3)     # from this version the extension reloads itself when told of a newer copy
+
+
 def extension_stale(now: float = None):
     """(running, here) when Chrome is talking to us with an older copy than the one on disk,
-    else None. Chrome only picks up a new copy when its reload arrow is clicked."""
+    else None. A copy from 0.3.3 on reloads itself within a minute or two, so for those this
+    only speaks up when that did not happen; older copies need the reload arrow clicked."""
+    now = now or time.time()
     here = bundled_extension_version()
-    if not here or not LINK["seen"] or (now or time.time()) - LINK["seen"] > 300:
+    if not here or not LINK["seen"] or now - LINK["seen"] > 300:
         return None
     running = LINK.get("ext")
-    return (running, here) if version_tuple(running) < version_tuple(here) else None
+    if version_tuple(running) >= version_tuple(here):
+        LINK["stale_since"] = None
+        return None
+    if version_tuple(running) >= SELF_UPDATING:
+        LINK["stale_since"] = LINK.get("stale_since") or now
+        if now - LINK["stale_since"] < 300:
+            return None
+    return (running, here)
 
 
 def start_status_server(port: int):
@@ -2811,7 +2883,10 @@ def start_status_server(port: int):
             if "aside" in said:             # the extension saying what it just did; two small numbers
                 LINK["aside_total"] = LINK.get("aside_total", 0) + said["aside"]
                 log_event("chrome", stepped_aside=said["aside"], tabs_looked_at=said["looked"], ext=said.get("v"))
-            body = json.dumps({"v": 1, "lag": LINK["lag"], "ts": LINK["ts"]}).encode()
+            # "ext": the version of the extension folder on this Mac, so a running copy that is
+            # older can reload itself instead of waiting for someone to click an arrow.
+            body = json.dumps({"v": 1, "lag": LINK["lag"], "ts": LINK["ts"],
+                               "ext": bundled_extension_version()}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -2938,12 +3013,16 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
             issue["action"] = act
             offered_trim = act["id"] == "trim"
         out.append(issue)
-    if big and tight and big["rss_mb"] >= rcfg["min_gb"] * 1024 and big["key"] != crit_refresh:
+    after_slow = outgrown_after_slow(big, s, cfg, menu.get("last_slow") or 0.0, time.time())
+    if big and (tight or after_slow) and big["rss_mb"] >= rcfg["min_gb"] * 1024 and big["key"] != crit_refresh:
         act = refresh_action(big)
+        total = s.get("mem_total_mb") or 0
+        more = (f" That is more than this Mac's {total / 1024:.0f} GB of memory, so part of it always lives on disk."
+                if total and big["rss_mb"] > total else "")
         out.append({"id": f"grown:{big['key']}", "severity": "info" if act["busy"] else "warn",
                     "title": f"{big['key']} has grown to {big['rss_mb'] / 1024:.1f} GB",
                     "detail": ("Its agent is working, so this is not the moment." if act["busy"] else
-                               "Its agent is idle: a good moment to refresh it. Chats and threads are kept."),
+                               "Its agent is idle: a good moment to refresh it. Chats and threads are kept.") + more,
                     "action": act})
     if trims and tight and not offered_trim:
         t = max(trims, key=lambda t: t["mb"])
@@ -3473,6 +3552,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     swap_hist = deque(maxlen=80)
     last_early_log = 0.0
     fault_prev, fault_ts = {}, time.time()
+    menu["last_slow"] = last_slow_from_events()
     told_threads = {e.get("thread") for e in read_events(7 * 24) if e.get("kind") == "coach"}
 
     def idle():
@@ -3551,7 +3631,10 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                     print(json.dumps(a, default=str))
                 break
             if not simulate:
-                refresh_tick(cfg, snap, refresh_state, background, time.time(), dry_run=dry_run)
+                if lag_level(snap["sample"], cfg) != "none":
+                    menu["last_slow"] = time.time()
+                refresh_tick(cfg, snap, refresh_state, background, time.time(), dry_run=dry_run,
+                             last_slow=menu["last_slow"])
                 if access["blocked"] and time.time() - access["ts"] > 600:
                     again = access_check(cfg)          # has the owner allowed it since?
                     if again["blocked"] != access["blocked"]:
