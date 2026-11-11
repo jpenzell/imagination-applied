@@ -566,6 +566,130 @@ def archive_one(cand: dict, folder: Path, manifest=None, restore_hint: str = "gu
     return res
 
 
+# ----------------------------------------------------------------- a second home
+# A folder that has been moved exists in one place: the drive. The copy was checked, but one
+# drive is not a backup. Guardian keeps track of where each archive has copies, says so while
+# there is only one, and can make a checked second copy on another drive.
+
+def archive_rel(path: str) -> str:
+    """The part of an archive's path below the 'Guardian Archive' folder ('' if it has none)."""
+    marker = "/" + ARCHIVE_FOLDER + "/"
+    return path.split(marker, 1)[1] if marker in path else ""
+
+
+def recorded_copies(rows: list) -> dict:
+    """{first copy: [second copies...]} as written in the manifest."""
+    out = {}
+    for r in rows:
+        if r.get("kind") == "second" and r.get("archive") and r.get("copy"):
+            if r["copy"] not in out.setdefault(r["archive"], []):
+                out[r["archive"]].append(r["copy"])
+    return out
+
+
+def find_copies(row: dict, places: list) -> list:
+    """Files that look like another copy of this archive: the same name and the same number of
+    bytes, under any of the given places (a drive, or a folder the owner named), either at the
+    usual spot below 'Guardian Archive' or straight inside."""
+    first, size = row["archive"], row.get("bytes")
+    rel, name = archive_rel(first), os.path.basename(first)
+    out = []
+    for place in places:
+        spots = ([os.path.join(place, ARCHIVE_FOLDER, rel), os.path.join(place, rel)] if rel else []) + \
+                [os.path.join(place, name)]
+        for cand in spots:
+            try:
+                if os.path.abspath(cand) != os.path.abspath(first) and os.path.isfile(cand) and \
+                        (size is None or os.path.getsize(cand) == size):
+                    out.append(cand)
+                    break
+            except OSError:
+                continue
+    return out
+
+
+def copy_still_counts(copy: str, size: int = None) -> bool:
+    """A recorded copy counts while its drive is away. It stops counting when the folder it
+    was in is there and the file is not, or the file is no longer the size it should be."""
+    try:
+        if os.path.isfile(copy):
+            return size is None or os.path.getsize(copy) == size
+    except OSError:
+        return False
+    return not os.path.isdir(os.path.dirname(copy))
+
+
+def _same_disk(a, b) -> bool:
+    return os.stat(a).st_dev == os.stat(b).st_dev
+
+
+def _file_sha256(path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb", buffering=0) as f:
+        _nocache(f)
+        while True:
+            b = _readn(f, CHUNK)
+            if not b:
+                return h.hexdigest()
+            h.update(b)
+
+
+def copy_archive(row: dict, dest_root, manifest=None, same_disk=None) -> dict:
+    """Make a second copy of one archive under <dest_root>/Guardian Archive/. The first copy is
+    read once and must still match the checksum recorded when it was written; the new copy is
+    then read back and must match too. Nothing is ever removed. {'ok', 'name', 'why', ...}"""
+    src = Path(row["archive"])
+    res = {"ok": False, "name": row["name"], "why": "", "mb": row.get("mb", 0)}
+    dest = Path(dest_root) / ARCHIVE_FOLDER / (archive_rel(str(src)) or src.name)
+    part = None
+    try:
+        if not src.is_file():
+            raise ArchiveError(f"the first copy is not reachable ({src})")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if (same_disk or _same_disk)(src, dest.parent):
+            raise ArchiveError("that is the same drive as the first copy")
+        if dest.exists():
+            raise ArchiveError(f"{dest} already exists")
+        part = dest.with_name(dest.name + ".partial")
+        h = hashlib.sha256()
+        with open(src, "rb", buffering=0) as fi, open(part, "wb", buffering=4 * CHUNK) as fo:
+            _nocache(fi)
+            _nocache(fo)
+            while True:
+                b = _readn(fi, CHUNK)
+                if not b:
+                    break
+                h.update(b)
+                fo.write(b)
+            fo.flush()
+            os.fsync(fo.fileno())
+            _fcntl(fo, "F_FULLFSYNC", 51)
+        if row.get("sha256") and h.hexdigest() != row["sha256"]:
+            res["first_copy_damaged"] = True
+            raise ArchiveError("the first copy no longer matches the checksum recorded when it was written")
+        if _file_sha256(part) != h.hexdigest():
+            raise ArchiveError("the second copy does not read back the same")
+        os.replace(part, dest)
+        part = None
+        try:
+            shutil.copyfile(str(src) + ".json", str(dest) + ".json")
+        except OSError:
+            pass
+    except (OSError, ArchiveError) as e:
+        if part is not None:
+            try:
+                part.unlink()
+            except OSError:
+                pass
+        res["why"] = str(e)
+        return res
+    _append(manifest, {"ts": datetime.now().isoformat(timespec="seconds"), "host": row.get("host", HOST),
+                       "kind": "second", "name": row["name"], "archive": str(src), "copy": str(dest),
+                       "verified": True})
+    res.update(ok=True, copy=str(dest))
+    return res
+
+
 # ----------------------------------------------------------------- bring one back
 
 _TRUSTED = {"filter": "fully_trusted"} if hasattr(tarfile, "fully_trusted_filter") else {}
@@ -596,9 +720,10 @@ def _extract(tar, into):
         os.chmod(target, mode & 0o7777)
 
 
-def restore(row: dict, manifest=None, keep_free_mb: int = 2048) -> dict:
-    """Put an archived folder back where it was. The drive's copy stays."""
-    tar_path, target = Path(row["archive"]), Path(row["source"])
+def restore(row: dict, manifest=None, keep_free_mb: int = 2048, source: str = None) -> dict:
+    """Put an archived folder back where it was. The drive's copy stays. `source` names another
+    copy of the archive to read when the first one's drive is not connected."""
+    tar_path, target = Path(source or row["archive"]), Path(row["source"])
     res = {"ok": False, "name": row["name"], "source": str(target), "why": ""}
     if not tar_path.exists():
         res["why"] = f"its drive is not connected (looked for {tar_path})"
@@ -628,6 +753,7 @@ def restore(row: dict, manifest=None, keep_free_mb: int = 2048) -> dict:
         res["why"] = str(e)
         return res
     _append(manifest, {"ts": datetime.now().isoformat(timespec="seconds"), "host": row.get("host", HOST),
-                       "kind": "restored", "name": row["name"], "source": str(target), "archive": str(tar_path)})
+                       "kind": "restored", "name": row["name"], "source": str(target), "archive": row["archive"],
+                       "read_from": str(tar_path)})
     res.update(ok=True, archive=str(tar_path), mb=row.get("mb", 0))
     return res

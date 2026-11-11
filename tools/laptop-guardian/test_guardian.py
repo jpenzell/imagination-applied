@@ -1044,9 +1044,14 @@ class ArchiveTests(unittest.TestCase):
         g.sample_system = lambda: {"disk_free_gb": 24.9}
         self.cfg = g.load_config(g.Path("/nonexistent"))
         self.cfg["notify"] = False
+        import archive
+        self.saved_archive = (archive.volumes, archive._same_disk)
+        archive.volumes = lambda: []                 # never look at the drives really connected
 
     def tearDown(self):
         g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH, g.sample_system = self.saved
+        import archive
+        archive.volumes, archive._same_disk = self.saved_archive
 
     def tick(self, ops, st, cfg=None, free=19.0, quiet="", bg=False):
         bg = g.Background() if bg is False else bg
@@ -1200,7 +1205,7 @@ class ArchiveTests(unittest.TestCase):
         import contextlib
         import io
         args = g.argparse.Namespace(offer=None, list=False, restore="2026-09-17", announce=False, yes=False,
-                                    older_than=None, to=None, only=None, root=None)
+                                    older_than=None, to=None, only=None, root=None, second_copy=False, second_home=None, check=False)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             g.archive_cmd(self.cfg, args)
@@ -1257,11 +1262,106 @@ class ArchiveTests(unittest.TestCase):
         self.assertTrue(g.os.access(picked, g.os.X_OK))
         self.assertIn(f"<string>{picked}</string>", g.plist_text(g.Path("/x/guardian.py"), self.cfg, picked))
 
+    def test_an_archive_with_one_home_is_flagged_until_it_has_two(self):
+        # the first real Mac: three work folders moved to one USB drive and removed from the Mac
+        import archive
+        home, first, second = self.tmp / "home", self.tmp / "first", self.tmp / "second"
+        saved_home = archive.HOME
+        archive.HOME = home
+        self.addCleanup(setattr, archive, "HOME", saved_home)
+        for name in ("2026-09-17", "2026-10-01"):
+            src = home / "Documents" / "Codex" / name
+            (src / "work").mkdir(parents=True)
+            (src / "work" / "data.bin").write_bytes(name.encode() * 40_000)
+            folder = first / "Guardian Archive" / "Mac" / "Documents" / "Codex"
+            r = archive.archive_one({"path": str(src), "root": str(src.parent), "name": name, "mb": 1}, folder,
+                                    manifest=g.archive_manifest(), host="Mac")
+            self.assertTrue(r["ok"], r)
+        homes = g.archive_homes(self.cfg)
+        self.assertEqual((homes["total"], len(homes["single"]), len(homes["reachable"]), homes["other"]), (2, 2, 2, None))
+        menu = {"homes": homes, "access": {"blocked": []}, "archive_state": {}, "activity_age": lambda a: None,
+                "background": g.Background(), "dirty": False, "last_action": None}
+        snap = {"sample": sample(level=1, free=60, disk=100), "groups": [], "quiet": ""}
+        issue = [i for i in g.build_issues(self.cfg, snap, menu) if i["id"] == "one-copy"][0]
+        self.assertEqual(issue["title"], f"2 archived folders exist only on {homes['drive']}")
+        self.assertIn("If that drive fails, it is gone.", issue["detail"])
+        self.assertEqual(issue["action"], {"id": "second_copy", "label": "How to make a second copy", "args": {}},
+                         "no second drive connected: explain, do not guess a place")
+        g.handle_request({"action": "second_copy", "ts": g.time.time()}, self.cfg, menu)
+        self.assertIn("a single drive is not a backup", (g.LOG_DIR / "second-copy.txt").read_text())
+        # a second drive is connected: the button names it, and the copy is checked
+        second.mkdir()
+        archive.volumes = lambda: [{"name": "Backup", "path": str(second), "fs": "apfs", "free_mb": 900_000}]
+        archive._same_disk = lambda a, b: False
+        homes = g.archive_homes(self.cfg)
+        menu["homes"] = homes
+        issue = [i for i in g.build_issues(self.cfg, snap, menu) if i["id"] == "one-copy"][0]
+        self.assertEqual(issue["action"], {"id": "second_copy", "label": "Copy them to Backup too",
+                                           "args": {"to": str(second)}})
+        g.handle_request({"action": "second_copy", "to": str(second), "ts": g.time.time()}, self.cfg, menu)
+        menu["background"].thread.join(20)
+        self.assertIn("2 archived folders (0.0 GB) now also on second; each copy was checked.", menu["last_action"]["text"])
+        copy = second / "Guardian Archive" / "Mac" / "Documents" / "Codex" / "2026-09-17.tar"
+        self.assertEqual(copy.read_bytes(), (first / "Guardian Archive/Mac/Documents/Codex/2026-09-17.tar").read_bytes())
+        self.assertEqual(menu["homes"]["single"], [])
+        self.assertEqual([i for i in g.build_issues(self.cfg, snap, menu) if i["id"] == "one-copy"], [])
+        # the second drive is unplugged again: the copies are remembered
+        import shutil
+        archive.volumes = lambda: []
+        shutil.move(str(second), str(self.tmp / "unplugged"))
+        self.assertEqual(g.archive_homes(self.cfg)["single"], [])
+        # the first drive dies: the folder comes back from the second copy
+        shutil.move(str(self.tmp / "unplugged"), str(second))
+        shutil.rmtree(first)
+        import contextlib
+        import io
+        args = g.argparse.Namespace(offer=None, list=False, restore="2026-09-17", announce=False, yes=False,
+                                    older_than=None, to=None, only=None, root=None, second_copy=False, second_home=None, check=False)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            g.archive_cmd(self.cfg, args)
+            g.archive_cmd(self.cfg, g.argparse.Namespace(**dict(vars(args), restore=None, list=True)))
+        self.assertIn("back at", buf.getvalue())
+        self.assertEqual((home / "Documents/Codex/2026-09-17/work/data.bin").read_bytes(), b"2026-09-17" * 40_000)
+        self.assertIn("second copy: " + str(second), buf.getvalue())
+        self.assertIn("drive not connected", buf.getvalue())
+
+    def test_your_own_copy_in_a_folder_you_name_counts(self):
+        import archive
+        import shutil
+        home, first, cloud = self.tmp / "home", self.tmp / "first", self.tmp / "cloud" / "Backups"
+        saved_home = archive.HOME
+        archive.HOME = home
+        self.addCleanup(setattr, archive, "HOME", saved_home)
+        src = home / "Documents" / "Codex" / "2026-09-17"
+        src.mkdir(parents=True)
+        (src / "a.txt").write_bytes(b"a" * 9000)
+        folder = first / "Guardian Archive" / "Mac" / "Documents" / "Codex"
+        archive.archive_one({"path": str(src), "root": str(src.parent), "name": src.name, "mb": 1}, folder,
+                            manifest=g.archive_manifest(), host="Mac")
+        shutil.copytree(first / "Guardian Archive", cloud / "Guardian Archive")      # dragged there in Finder
+        self.assertEqual(len(g.archive_homes(self.cfg)["single"]), 1, "guardian does not know about that folder yet")
+        cfg = g.json.loads(g.json.dumps(self.cfg))
+        cfg["archive"]["second_homes"] = [str(cloud)]
+        homes = g.archive_homes(cfg)
+        self.assertEqual(homes["single"], [])
+        rows = archive.read_manifest(g.archive_manifest())
+        self.assertEqual([(r["kind"], r.get("verified")) for r in rows], [("archived", None), ("second", False)],
+                         "found by name and size, and said to be unchecked")
+        # a file of the same name but another size is not a copy
+        other = cloud / "Guardian Archive" / "Mac" / "Documents" / "Codex" / "2026-09-17.tar"
+        other.write_bytes(b"truncated")
+        self.assertEqual(len(g.archive_homes(cfg)["single"]), 1, "the folder is there and the file no longer matches")
+
+    def test_the_question_says_they_will_have_one_home(self):
+        plan = FakeArchiveOps().the_plan
+        self.assertIn("They will then exist only on My Passport until you make a second copy.", g.archive_text(plan, 19.0))
+
     def test_switching_the_offer_off_is_remembered(self):
         import contextlib
         import io
         args = g.argparse.Namespace(offer="off", list=False, restore=None, announce=False, yes=False,
-                                    older_than=None, to=None, only=None, root=None)
+                                    older_than=None, to=None, only=None, root=None, second_copy=False, second_home=None, check=False)
         with contextlib.redirect_stdout(io.StringIO()):
             g.archive_cmd(self.cfg, args)
         self.assertFalse(g.load_config(g.CONFIG_PATH)["archive"]["offer"])

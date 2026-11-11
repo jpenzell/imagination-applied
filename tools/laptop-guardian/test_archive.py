@@ -354,6 +354,77 @@ class CopyTests(Base):
         self.assertEqual(len(archive.on_drive(archive.read_manifest(self.manifest))), 2)
         self.assertEqual((self.root / archive.NOTE_NAME).read_text().count("bring it back:"), 2)
 
+    def test_a_second_copy_is_checked_against_the_recorded_checksum(self):
+        src = self.work_folder()
+        archive.archive_one(self.cand(src), self.drive, manifest=self.manifest, host="Mac")
+        row = archive.read_manifest(self.manifest)[0]
+        first = Path(row["archive"])
+        second = self.tmp / "second"
+        other_disk = lambda a, b: False
+        self.assertEqual(archive.archive_rel(str(first)), "Mac/Documents/Codex/2026-09-17.tar")
+        self.assertIn("same drive", archive.copy_archive(row, second, self.manifest)["why"], "tmp is one disk")
+        r = archive.copy_archive(row, second, self.manifest, same_disk=other_disk)
+        self.assertTrue(r["ok"], r)
+        copy = second / "Guardian Archive" / "Mac" / "Documents" / "Codex" / "2026-09-17.tar"
+        self.assertEqual((r["copy"], copy.read_bytes()), (str(copy), first.read_bytes()))
+        self.assertTrue(Path(str(copy) + ".json").exists(), "the card travels with it")
+        rows = archive.read_manifest(self.manifest)
+        self.assertEqual([(x["kind"], x.get("verified")) for x in rows], [("archived", None), ("second", True)])
+        self.assertEqual(archive.recorded_copies(rows), {str(first): [str(copy)]})
+        self.assertIn("already exists", archive.copy_archive(row, second, self.manifest, same_disk=other_disk)["why"])
+        self.assertTrue(first.exists(), "nothing is ever removed by copying")
+        # finding copies someone made by hand: same name and exact size, in the usual place or loose
+        self.assertEqual(archive.find_copies(row, [str(second)]), [str(copy)])
+        loose = self.tmp / "loose"
+        loose.mkdir()
+        (loose / "2026-09-17.tar").write_bytes(first.read_bytes())
+        (self.tmp / "wrong").mkdir()
+        (self.tmp / "wrong" / "2026-09-17.tar").write_bytes(first.read_bytes()[:-1])
+        self.assertEqual(archive.find_copies(row, [str(loose), str(self.tmp / "wrong"), str(self.tmp / "nowhere")]),
+                         [str(loose / "2026-09-17.tar")])
+        self.assertEqual(archive.find_copies(row, [str(first.parents[4])]), [], "the first copy is not its own second")
+        # a recorded copy counts while its drive is away, not once the file is gone from it
+        self.assertTrue(archive.copy_still_counts(str(copy)))
+        self.assertTrue(archive.copy_still_counts("/Volumes/Unplugged/Guardian Archive/x.tar"))
+        self.assertTrue(archive.copy_still_counts(str(copy), row["bytes"]))
+        self.assertFalse(archive.copy_still_counts(str(copy), row["bytes"] + 1), "cut short or grown: not a copy any more")
+        copy.unlink()
+        self.assertFalse(archive.copy_still_counts(str(copy)))
+
+    def test_a_first_copy_that_has_gone_bad_is_said_loudly_and_not_copied(self):
+        src = self.work_folder(big=bytes(range(256)) * 4000)
+        archive.archive_one(self.cand(src), self.drive, manifest=self.manifest, host="Mac")
+        row = archive.read_manifest(self.manifest)[0]
+        first = Path(row["archive"])
+        raw = bytearray(first.read_bytes())
+        raw[len(raw) // 2] ^= 0x01                              # one bit rots on the drive
+        first.write_bytes(raw)
+        second = self.tmp / "second"
+        r = archive.copy_archive(row, second, self.manifest, same_disk=lambda a, b: False)
+        self.assertFalse(r["ok"])
+        self.assertTrue(r["first_copy_damaged"])
+        self.assertIn("no longer matches the checksum", r["why"])
+        left = [str(p) for p in second.rglob("*") if p.is_file()]
+        self.assertEqual(left, [], "a bad copy is not kept as if it were a backup")
+        self.assertEqual([x["kind"] for x in archive.read_manifest(self.manifest)], ["archived"])
+        first.unlink()
+        self.assertIn("not reachable", archive.copy_archive(row, second, self.manifest, same_disk=lambda a, b: False)["why"])
+
+    def test_a_folder_comes_back_from_the_second_copy_when_the_first_drive_is_gone(self):
+        src = self.work_folder()
+        before = listing(src)
+        archive.archive_one(self.cand(src), self.drive, manifest=self.manifest, host="Mac")
+        row = archive.read_manifest(self.manifest)[0]
+        r = archive.copy_archive(row, self.tmp / "second", self.manifest, same_disk=lambda a, b: False)
+        Path(row["archive"]).unlink()
+        self.assertIn("not connected", archive.restore(row, manifest=self.manifest, keep_free_mb=0)["why"])
+        back = archive.restore(row, manifest=self.manifest, keep_free_mb=0, source=r["copy"])
+        self.assertTrue(back["ok"], back)
+        self.assertEqual(listing(src), before)
+        rows = archive.read_manifest(self.manifest)
+        self.assertEqual((rows[-1]["kind"], rows[-1]["archive"], rows[-1]["read_from"]), ("restored", row["archive"], r["copy"]))
+        self.assertEqual(archive.on_drive(rows), [])
+
     def test_restore_refuses_rather_than_overwrite_or_fill_the_disk(self):
         src = self.work_folder()
         archive.archive_one(self.cand(src), self.drive, manifest=self.manifest)

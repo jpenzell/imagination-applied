@@ -501,6 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "trim":
             if let app = a.args["app"] as? String { trimApp(app) }
         case "threads": send("threads", note: "Opening the list of threads...")
+        case "second_copy": send("second_copy", a.args, note: "Looking at where your archives live...")
         case "reclaim": send("reclaim", note: "Clearing caches...")
         case "archive": send("archive", note: "Measuring your work folders...")
         case "close_duplicate_tabs": send("close_duplicate_tabs", note: "Asking Chrome for its tabs...")

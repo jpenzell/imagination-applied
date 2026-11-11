@@ -27,10 +27,10 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 99 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 102 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
-| `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 17 tests, plus a real move of 5 GB to a USB drive |
+| `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 54 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
@@ -41,7 +41,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 133 tests, should say OK three times
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 139 tests, should say OK three times
 python3 guardian.py menu install       # the shield in the menu bar (builds a small app; needs Apple's Command Line Tools)
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
@@ -207,6 +207,9 @@ python3 guardian.py archive --root ~/Documents/Codex/2026-09-23/project/work   #
 python3 guardian.py archive --list             # what is on a drive now
 python3 guardian.py archive --restore 2026-09-17
 python3 guardian.py archive --offer off        # stop guardian asking on its own
+python3 guardian.py archive --second-copy      # copy archives that have one home to a second drive, checked
+python3 guardian.py archive --second-home DIR  # a folder where you keep your own copies; guardian looks there
+python3 guardian.py archive --check            # read every reachable copy and compare it with its checksum
 ```
 
 - **"Unused" is measured, not guessed.** A folder qualifies when no file or folder anywhere
@@ -229,6 +232,16 @@ python3 guardian.py archive --offer off        # stop guardian asking on its own
   and the command that brings each one back. `archive --restore` unpacks to the original
   place, checks the result against the drive's copy, and refuses to overwrite anything or
   to fill the disk. The drive keeps its copy; guardian never deletes from the drive.
+- **One drive is not a backup.** After a move the folder exists in one place. Guardian says
+  so in the question before you agree, in the notification afterwards, in `archive --list`,
+  in `doctor`, behind the shield, and once a week for as long as it stays true. It keeps
+  track of where each archive has copies. With a second drive connected, the shield offers
+  to copy the archives there: the first copy is read once and must still match the checksum
+  recorded when it was written, and the new copy is read back. If you keep your own copy
+  somewhere (a cloud folder, a network share), name the folder with `--second-home` and
+  guardian recognises a copy by name and exact size, marked as unchecked. A copy counts
+  while its drive is away; it stops counting if the file disappears or changes size. When
+  the first drive is not connected, `--restore` reads from the second copy.
 - **It asks; it never decides.** When less than 40 GB is free, an external drive is
   connected, at least 2 GB would move and you are at the keyboard, guardian shows one dialog
   with three buttons. "Not now" (the default button, so a stray Return moves nothing) means

@@ -149,6 +149,8 @@ DEFAULT_CONFIG = {
         "min_age_days": 30,
         "min_folder_mb": 50,
         "destination": "",
+        "second_homes": [],          # folders (a cloud drive, a network share) to look in for second copies
+        "remind_days": 7,
         "offer": True,
         "offer_below_gb": 40,
         "offer_min_gb": 2,
@@ -1927,7 +1929,8 @@ def archive_text(plan: dict, free_gb) -> str:
             f"for {plan['days']}+ days and take{'' if n != 1 else 's'} {plan['mb'] / 1024:.1f} GB (the biggest is "
             f"{move[0]['name']}, {move[0]['mb'] / 1024:.1f} GB). Move {'them' if n != 1 else 'it'} to "
             f"{plan['volume']['name']}? Each folder is copied, the copy is checked byte for byte, and only "
-            "then is it removed here. Any folder can be brought back later.")
+            f"then is it removed here. Any folder can be brought back later. They will then exist only on "
+            f"{plan['volume']['name']} until you make a second copy.")
 
 
 def archive_run(cfg: dict, plan: dict, announce: bool = False, out=print) -> dict:
@@ -1972,12 +1975,93 @@ def archive_run(cfg: dict, plan: dict, announce: bool = False, out=print) -> dic
     if kept:
         text += f" {len(kept)} stayed: " + "; ".join(f"{r['name']} ({r['why']})" for r in kept[:3]) + "."
     if moved:
-        text += " Bring one back: guardian.py archive --restore NAME."
+        text += f" They now exist only on {vol['name']}: make a second copy when you can (the shield has a button)."
     log_event("archive", phase="done", moved=len(moved), mb=mb, kept=[[r["name"], r["why"]] for r in kept],
               volume=vol["name"], free_before=free0, free_after=free1, text=text)
     if announce:
         notify("Guardian", text, cfg)
     return {"moved": moved, "kept": kept, "text": text}
+
+
+def archive_homes(cfg: dict) -> dict:
+    """Which archived folders have only one copy. Looks on every connected drive and in the
+    folders named in archive.second_homes; a copy it finds by itself is remembered, so the
+    answer holds when that drive is unplugged. Cheap: a few file lookups."""
+    import archive
+    rows = archive.read_manifest(archive_manifest())
+    there = archive.on_drive(rows)
+    places = [v["path"] for v in archive.volumes()] + \
+             [str(archive.resolve_root(p)) for p in (cfg["archive"].get("second_homes") or [])]
+    known = archive.recorded_copies(rows)
+    single, copies_of = [], {}
+    for r in there:
+        copies = [c for c in known.get(r["archive"], []) if archive.copy_still_counts(c, r.get("bytes"))]
+        if not copies:
+            for c in archive.find_copies(r, places):
+                archive._append(archive_manifest(), {"ts": datetime.now().isoformat(timespec="seconds"),
+                                                     "host": r.get("host", HOSTNAME), "kind": "second",
+                                                     "name": r["name"], "archive": r["archive"], "copy": c,
+                                                     "verified": False})
+                log_event("archive", phase="second-found", name=r["name"], copy=c)
+                copies.append(c)
+        copies_of[r["archive"]] = copies
+        if not copies:
+            single.append(r)
+    drive = ""
+    if single:
+        m = re.match(r"/Volumes/([^/]+)/", single[0]["archive"])
+        drive = m.group(1) if m else str(Path(single[0]["archive"]).parent)
+    others = [v for v in archive.volumes() if not any(r["archive"].startswith(v["path"] + "/") for r in single)]
+    return {"ts": time.time(), "total": len(there), "single": single, "mb": sum(r["mb"] for r in single),
+            "drive": drive, "copies": copies_of,
+            "reachable": [r for r in single if os.path.isfile(r["archive"])],
+            "other": max(others, key=lambda v: v["free_mb"]) if others and single else None}
+
+
+SECOND_COPY_HELP = """Guardian moved these folders to one drive and removed them from this Mac. Each copy was
+checked, but a single drive is not a backup: if it fails, that work is gone.
+
+To give them a second home, either:
+
+  1. Connect a second external drive together with the first one, click the Guardian shield,
+     and choose the entry about a second copy. Guardian copies each archive and checks it
+     against the checksum it recorded when the archive was written.
+
+  2. Or copy the "Guardian Archive" folder from the drive to wherever you keep backups (a
+     cloud folder, a network drive), then tell Guardian where to look:
+         python3 {script} archive --second-home "/path/to/that/folder"
+     Guardian recognises a copy by its name and exact size.
+
+See what has how many copies:  python3 {script} archive --list
+"""
+
+
+def second_copy_run(cfg: dict, homes: dict, to: str = None, out=print) -> dict:
+    """Copy every single-copy archive that is reachable to another drive (or the folder
+    given), checking each. Nothing is removed anywhere."""
+    import archive
+    dest = to or (homes["other"]["path"] if homes.get("other") else None)
+    done, failed = [], []
+    for r in homes["reachable"]:
+        out(f"  {r['name']}: copying {r['mb'] / 1024:.1f} GB and checking it ...")
+        res = archive.copy_archive(r, dest, manifest=archive_manifest())
+        log_event("archive", phase="second-copy" if res["ok"] else "second-copy-failed", name=r["name"],
+                  copy=res.get("copy"), why=res["why"], first_copy_damaged=res.get("first_copy_damaged", False))
+        (done if res["ok"] else failed).append(res)
+        out("    done" if res["ok"] else f"    not copied: {res['why']}")
+    where = Path(dest).name if dest else "?"
+    if done:
+        text = (f"{len(done)} archived folder{'s' if len(done) != 1 else ''} "
+                f"({sum(r['mb'] for r in done) / 1024:.1f} GB) now also on {where}; each copy was checked.")
+    else:
+        text = "No second copy was made."
+    if failed:
+        text += f" {len(failed)} failed: " + "; ".join(f"{r['name']} ({r['why']})" for r in failed[:2]) + "."
+    damaged = [r["name"] for r in failed if r.get("first_copy_damaged")]
+    if damaged:
+        text += (f" IMPORTANT: the first copy of {', '.join(damaged)} no longer matches its checksum. "
+                 "Bring it back now while it still reads: guardian.py archive --restore NAME.")
+    return {"done": done, "failed": failed, "text": text}
 
 
 class ArchiveOps:
@@ -2104,10 +2188,63 @@ def archive_cmd(cfg: dict, args):
         if not there:
             print("Nothing has been moved to a drive.")
             return
+        homes = archive_homes(cfg)
         print("Moved to an external drive (bring one back: guardian.py archive --restore NAME):")
         for r in there:
             here = "connected" if Path(r["archive"]).exists() else "drive not connected"
+            copies = homes["copies"].get(r["archive"], [])
             print(f"  {r['ts'][:10]}  {r['mb'] / 1024:6.1f} GB  {r['name']:22} {r['archive']}  ({here})")
+            for c in copies:
+                print(f"  {'':10}  {'':9}  {'':22} second copy: {c}")
+            if not copies:
+                print(f"  {'':10}  {'':9}  {'':22} ONLY COPY. One drive is not a backup.")
+        if homes["single"]:
+            print(f"{len(homes['single'])} of {len(there)} have a single copy ({homes['mb'] / 1024:.1f} GB). "
+                  "Make a second: guardian.py archive --second-copy   (with a second drive connected, or --to FOLDER)")
+        return
+    if args.check:
+        there = archive.on_drive(rows)
+        copies = archive.recorded_copies(rows)
+        if not there:
+            print("Nothing has been moved to a drive.")
+        for r in there:
+            for path in [r["archive"]] + copies.get(r["archive"], []):
+                if not os.path.isfile(path):
+                    print(f"  not connected   {path}")
+                    continue
+                print(f"  reading {r['mb'] / 1024:.1f} GB ...  {path}", end="", flush=True)
+                good = archive._file_sha256(path) == r.get("sha256")
+                log_event("archive", phase="checked", name=r["name"], path=path, ok=good)
+                print("   intact" if good else "   DAMAGED: it no longer matches the checksum recorded when it was written")
+        return
+    if args.second_home:
+        folder = str(Path(args.second_home).expanduser().resolve())
+        if not os.path.isdir(folder):
+            print(f"{folder} is not a folder")
+            return
+        apply_config_change({"archive": {"second_homes": sorted(set((cfg["archive"].get("second_homes") or []) + [folder]))}},
+                            f"archive second home {folder}")
+        homes = archive_homes(load_config(CONFIG_PATH))
+        print(f"looking in {folder} from now on: {homes['total'] - len(homes['single'])} of {homes['total']} "
+              "archived folders have a second copy")
+        return
+    if args.second_copy:
+        homes = archive_homes(cfg)
+        dest = str(Path(args.to).expanduser()) if args.to and "/" in args.to else None
+        if args.to and not dest:
+            vol = next((v for v in archive.volumes() if v["name"] == args.to), None)
+            dest = vol["path"] if vol else None
+        dest = dest or (homes["other"]["path"] if homes["other"] else None)
+        if not homes["single"]:
+            print("Every archived folder already has a second copy.")
+        elif not homes["reachable"]:
+            print(f"Connect {homes['drive']} first: the archives have to be read from it.")
+        elif not dest:
+            print(SECOND_COPY_HELP.format(script=Path(__file__).resolve()))
+        else:
+            print(f"Copying {len(homes['reachable'])} archives ({sum(r['mb'] for r in homes['reachable']) / 1024:.1f} GB) "
+                  f"to {dest} ...", flush=True)
+            print(second_copy_run(cfg, homes, dest, out=lambda t: print(t, flush=True))["text"])
         return
     if args.restore:
         want = str(Path(args.restore).expanduser())
@@ -2116,8 +2253,11 @@ def archive_cmd(cfg: dict, args):
             print(f"nothing called {args.restore} is on a drive; see: guardian.py archive --list")
             return
         row = found[-1]
-        print(f"bringing back {row['name']} ({row['mb'] / 1024:.1f} GB) from {row['archive']} ...", flush=True)
-        r = archive.restore(row, manifest=manifest)
+        src = row["archive"]
+        if not os.path.isfile(src):                 # its drive is away: is another copy at hand?
+            src = next((c for c in archive.recorded_copies(rows).get(row["archive"], []) if os.path.isfile(c)), src)
+        print(f"bringing back {row['name']} ({row['mb'] / 1024:.1f} GB) from {src} ...", flush=True)
+        r = archive.restore(row, manifest=manifest, source=src)
         log_event("archive", phase="restored" if r["ok"] else "restore-failed", name=row["name"], mb=row["mb"],
                   why=r["why"])
         print(f"  back at {r['source']} (the drive keeps its copy)" if r["ok"] else f"  not restored: {r['why']}")
@@ -2445,6 +2585,18 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
                     "detail": f"{n} folder{'s' if n != 1 else ''} unused for {plan['days']}+ days. "
                               "Each copy is checked before anything is removed here.",
                     "action": {"id": "archive", "label": "Review and move", "args": {}}})
+    homes = menu.get("homes") or {}
+    if homes.get("single"):
+        n, other = len(homes["single"]), homes.get("other")
+        ready = bool(other and homes.get("reachable"))
+        out.append({"id": "one-copy", "severity": "info",
+                    "title": f"{n} archived folder{'s' if n != 1 else ''} exist{'' if n != 1 else 's'} only on "
+                             f"{homes['drive']}",
+                    "detail": f"{homes['mb'] / 1024:.1f} GB of your work has a single copy. If that drive fails, "
+                              "it is gone.",
+                    "action": {"id": "second_copy",
+                               "label": f"Copy them to {other['name']} too" if ready else "How to make a second copy",
+                               "args": {"to": other["path"]} if ready else {}}})
     order = {"crit": 0, "warn": 1, "info": 2}
     return sorted(out, key=lambda i: order[i["severity"]])
 
@@ -2621,6 +2773,23 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
         menu["trim"] = []
         say(f"Closed {rec['closed']} idle {app} helpers, about {rec['mb'] / 1024:.1f} GB. {app} itself was not touched."
             if rec["closed"] else f"No {app} helper has been idle long enough to trim.")
+    elif action == "second_copy":
+        homes = archive_homes(cfg)
+        menu["homes"] = homes
+        to = req.get("to")
+        if not homes["single"]:
+            say("Every archived folder already has a second copy.")
+        elif not to or not homes["reachable"] or not homes["other"] or to != homes["other"]["path"]:
+            _show_text("second-copy.txt", SECOND_COPY_HELP.format(script=Path(__file__).resolve()))
+            say("Opened the steps for a second copy." if homes["reachable"] else
+                f"Connect {homes['drive']} as well: the archives have to be read from it.", ok=bool(homes["reachable"]))
+        else:
+            def job():
+                res = second_copy_run(cfg, homes, to, out=lambda _t: None)
+                menu["homes"] = archive_homes(cfg)
+                say(res["text"], ok=bool(res["done"]) and not res["failed"])
+                notify("Guardian", res["text"], cfg)
+            later(job, f"Copying {len(homes['reachable'])} archives to {homes['other']['name']} and checking them...")
     elif action == "threads":
         scan = thread_scan(cfg)
         menu["threads"] = scan
@@ -2853,6 +3022,9 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     menu = {"dirty": False, "snap": None, "last_action": None, "background": background,
             "archive_state": archive_state, "refresh_state": refresh_state, "access": access,
             "helpers": {}, "trim": [], "threads": None, "early": None}
+    menu["homes"] = None
+    reminded = max([datetime.fromisoformat(e["ts"]).timestamp() for e in read_events(24 * 30)
+                    if e.get("kind") == "archive" and e.get("phase") == "one-copy"] or [0.0])
     swap_hist = deque(maxlen=80)
     last_early_log = 0.0
     told_threads = {e.get("thread") for e in read_events(7 * 24) if e.get("kind") == "coach"}
@@ -3011,6 +3183,17 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                                 notify("Guardian", f"One agent thread has a {th['mb'] / 1024:.1f} GB history (started "
                                                    f"{th['started']}). Long threads make the app heavy; a fresh thread "
                                                    "for new work helps. Details behind the Guardian shield.", cfg)
+                if menu["homes"] is None or t_now - menu["homes"]["ts"] > 600:
+                    menu["homes"] = archive_homes(cfg)
+                    hm = menu["homes"]
+                    if hm["single"] and t_now - reminded > cfg["archive"]["remind_days"] * 86400 \
+                            and cfg["mode"] != "observe" and not snap["quiet"]:
+                        reminded = t_now
+                        n = len(hm["single"])
+                        log_event("archive", phase="one-copy", folders=n, mb=hm["mb"], drive=hm["drive"])
+                        notify("Guardian", f"{n} archived folder{'s' if n != 1 else ''} "
+                                           f"({hm['mb'] / 1024:.1f} GB) exist only on {hm['drive']}. One drive is "
+                                           "not a backup. The Guardian shield has a button for a second copy.", cfg)
                 ecfg = cfg["early"]
                 swap_hist.append((t_now, snap["sample"].get("swap_used_mb")))
                 rise = swap_climb(list(swap_hist), t_now, ecfg["minutes"] * 60, ecfg["swap_climb_mb"])
@@ -3566,6 +3749,12 @@ def doctor(cfg: dict, script: Path):
           + (", ".join(f"{v['name']} ({v['free_mb'] / 1024:.0f} GB free)" for v in vols) or "none connected")
           + f"; offer {'on' if acfg['offer'] else 'off'}; "
           f"{len(archive.on_drive(archive.read_manifest(archive_manifest())))} folders on a drive")
+    hm = archive_homes(cfg)
+    if hm["total"]:
+        print(f"{ok(not hm['single'])} archive copies: " + (
+            f"{len(hm['single'])} of {hm['total']} archived folders exist only on {hm['drive']} "
+            f"({hm['mb'] / 1024:.1f} GB): one drive is not a backup; see `guardian.py archive --list`"
+            if hm["single"] else f"all {hm['total']} archived folders have a second copy"))
     led = read_ledger(1)
     print(f"{ok(led)} disk ledger: {'last snapshot ' + led[-1]['ts'] if led else 'no snapshot yet (the agent takes one after start, then every ' + str(cfg['disk']['ledger_hours']) + 'h)'}")
     ev = read_events(24)
@@ -3736,6 +3925,10 @@ def main(argv=None):
     p.add_argument("--list", action="store_true", help="what is on a drive now")
     p.add_argument("--restore", metavar="NAME", help="bring one folder back (the drive keeps its copy)")
     p.add_argument("--offer", choices=["on", "off"], help="whether guardian asks on its own")
+    p.add_argument("--second-copy", action="store_true",
+                   help="copy archives that exist on one drive only to a second drive (or --to FOLDER), checked")
+    p.add_argument("--second-home", metavar="FOLDER", help="a folder where you keep your own copies; guardian looks there")
+    p.add_argument("--check", action="store_true", help="read every reachable copy and compare it with its recorded checksum")
     p.add_argument("--announce", action="store_true", help=argparse.SUPPRESS)
     sub.add_parser("doctor", help="check the install")
     sub.add_parser("install", help="install the launchd agent (starts at login)")
