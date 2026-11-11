@@ -1458,7 +1458,8 @@ class MenuTests(unittest.TestCase):
         self.assertIn("5.0 GB of old work folders can move to My Passport", many["issues"][3]["title"])
         self.assertEqual(many["top"][0], {"key": "ChatGPT", "gb": 1.0, "n": 118})
         self.assertEqual(many["settings"], {"mode": "nudge", "notify": False, "notify_level": "important",
-                                            "refresh": {"ChatGPT": "ask"}, "archive_offer": True})
+                                            "refresh": {"ChatGPT": "ask"}, "archive_offer": True,
+                                            "trim_auto": False})
         self.assertEqual((many["refreshable"], many["chrome_running"]), (["ChatGPT"], True))
 
     def test_the_status_file_is_whole_or_absent(self):
@@ -1656,6 +1657,71 @@ class AheadTests(unittest.TestCase):
         self.assertEqual(rec["closed"], 2)
         self.assertEqual([e["closed"] for e in g.read_events(1) if e["kind"] == "trim"], [0, 2])
         self.assertNotIn("trim.idle_minutes", g.TUNABLE, "a diagnosis cannot make trimming more eager")
+
+    def test_helpers_of_a_thread_in_use_are_spared_where_guardian_can_tell(self):
+        # the first real Mac: scripting helpers run in their thread's folder; the tool servers
+        # run in a plugin folder and carry nothing that names a thread
+        home = str(g.HOME)
+        procs, track, now = self.family(), {}, 1_000_000.0
+        g.helper_track(track, procs, self.cfg, now)
+        cwds = {201: home + "/.codex/plugins/cache/data-analytics/1.1.0", 202: home + "/Documents/Codex/2026-09-09/i-x20"}
+        ids = lambda in_use: sorted(p.pid for p in g.trim_candidates("ChatGPT", procs, track, self.cfg, now, cwds, in_use))
+        self.assertEqual(ids(set()), [201, 202])
+        self.assertEqual(ids({home + "/Documents/Codex/2026-09-09/i-x20"}), [201], "its thread is in use")
+        self.assertEqual(ids({home + "/Documents/Codex/2026-09-09"}), [201], "a folder inside the thread's folder counts")
+        self.assertEqual(ids({home + "/Documents/Codex/2026-11-06/i-fe"}), [201, 202], "another thread's folder does not")
+        self.assertEqual(ids({home}), [201, 202], "a thread working in the home folder does not shield everything under it")
+        cwds[202] = home
+        self.assertEqual(ids({home}), [201], "but a helper working in home itself is tied to it")
+        # which folders are in use comes from the threads written in the last half hour
+        scan = {"threads": [{"cwd": "~/Documents/Codex/2026-09-09/i-x20", "idle_s": 30, "mb": 1231},
+                            {"cwd": "~", "idle_s": 600, "mb": 2},
+                            {"cwd": "~/Documents/Codex/2026-10-28/my-x20", "idle_s": 5900, "mb": 77},
+                            {"cwd": "", "idle_s": 5, "mb": 1}]}
+        self.assertEqual(g.dirs_in_use(scan, self.cfg), {home + "/Documents/Codex/2026-09-09/i-x20", home})
+        self.assertEqual(g.dirs_in_use(None, self.cfg), set())
+        # working folders are asked for once per helper and forgotten when it is gone
+        cache = {5: "/old", 7: "/kept"}
+        saved = g.IS_MAC
+        g.IS_MAC = False
+        try:
+            self.assertEqual(g.helper_cwds(cache, [7, 9]), {7: "/kept", 9: ""})
+        finally:
+            g.IS_MAC = saved
+
+    def test_trimming_by_itself_is_off_until_switched_on_and_says_what_it_did(self):
+        procs, now = self.family(), 1_000_000.0
+        menu = self.menu(trim=[{"app": "ChatGPT", "n": 2, "mb": 70}])
+        g.helper_track(menu["helpers"], procs, self.cfg, now)
+        cfg = g.json.loads(g.json.dumps(self.cfg))
+        cfg["mode"] = "act"
+        cfg["trim"]["min_mb"] = 50
+        self.assertFalse(self.cfg["trim"]["auto"], "off by default")
+        self.assertEqual(g.auto_trim(cfg, menu, procs, now, "early"), [])
+        self.assertEqual(self.killed, [])
+        cfg["trim"]["auto"] = True
+        self.assertEqual(g.auto_trim(dict(cfg, mode="nudge"), menu, procs, now, "early"), [], "only in autopilot")
+        small = dict(menu, trim=[{"app": "ChatGPT", "n": 2, "mb": 40}])
+        self.assertEqual(g.auto_trim(cfg, small, procs, now, "early"), [], "too little to be worth it")
+        self.assertEqual(self.killed, [])
+        done = g.auto_trim(cfg, menu, procs, now, "early")
+        self.assertEqual([(r["closed"], r["trigger"]) for r in done], [(2, "early")])
+        self.assertEqual(sorted(pid for pid, _ in self.killed), [201, 202])
+        self.assertIn("Memory was filling up fast, so Guardian closed 2 idle ChatGPT helpers", menu["last_action"]["text"])
+        self.assertIn("If a tool in a thread stops responding, refresh the app.", menu["last_action"]["text"])
+        self.assertTrue(menu["dirty"])
+        # not again for half an hour, however the readings look
+        self.killed.clear()
+        menu["trim"] = [{"app": "ChatGPT", "n": 2, "mb": 70}]
+        self.assertEqual(g.auto_trim(cfg, menu, procs, now + 600, "critical"), [])
+        self.assertEqual(self.killed, [])
+        self.assertEqual(len(g.auto_trim(cfg, menu, procs, now + 1900, "critical")), 1)
+        self.assertIn("Memory was critically low", menu["last_action"]["text"])
+        # the switch is one of the few settings the menu may change, and a diagnosis may not
+        g.handle_request({"action": "set", "key": "trim_auto", "value": True, "ts": g.time.time()}, self.cfg, self.menu())
+        self.assertTrue(g.load_config(g.CONFIG_PATH)["trim"]["auto"])
+        auto, review = g.split_tuning({"trim": {"auto": True, "idle_minutes": 1}})
+        self.assertEqual(auto, {})
 
     def test_swap_climbing_fast_is_the_early_warning(self):
         t0 = 1_000_000.0

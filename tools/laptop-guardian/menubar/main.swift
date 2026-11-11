@@ -72,6 +72,7 @@ struct GState {
     var notifyLevel = "important"
     var refreshModes: [String: String] = [:]
     var archiveOffer = true
+    var trimAuto = false
 
     var age: Double { Date().timeIntervalSince1970 - ts }
     var helperDown: Bool { age > 150 }
@@ -128,6 +129,7 @@ func loadState(_ url: URL) -> GState? {
         s.notifyLevel = st["notify_level"] as? String ?? "important"
         s.refreshModes = st["refresh"] as? [String: String] ?? [:]
         s.archiveOffer = (st["archive_offer"] as? Bool) ?? true
+        s.trimAuto = (st["trim_auto"] as? Bool) ?? false
     }
     return s
 }
@@ -677,6 +679,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             choice("Refresh it when it is idle and I am away", mode == "auto", "refresh", "auto", extra: ["app": app])
             choice("Leave it alone", mode == "never", "refresh", "never", extra: ["app": app])
         }
+        sm.addItem(.separator())
+        sm.addItem(sectionTitle("When memory fills up fast"))
+        choice("Trim idle helpers on its own", s.trimAuto, "trim_auto", true)
+        choice("Only show the dot", !s.trimAuto, "trim_auto", false)
         sm.addItem(.separator())
         choice("Offer to move old work folders to a drive", s.archiveOffer, "archive_offer", !s.archiveOffer)
         settings.submenu = sm

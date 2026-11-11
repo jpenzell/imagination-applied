@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 102 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 104 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
@@ -41,7 +41,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 139 tests, should say OK three times
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 141 tests, should say OK three times
 python3 guardian.py menu install       # the shield in the menu bar (builds a small app; needs Apple's Command Line Tools)
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
@@ -149,7 +149,13 @@ python3 guardian.py threads         # agent threads written recently, with the s
   The app, its windows and anything working are untouched, and nothing is force-killed.
   Tested by closing two: Codex did not restart them and carried on. Not yet known: whether
   an old thread you return to later can still use a tool whose helper was trimmed; if one
-  does not respond, a refresh restores it. Trim runs on a click, never on its own.
+  does not respond, a refresh restores it. Scripting helpers run in their thread's folder,
+  so those of a thread written in the last half hour are spared. The tool servers carry
+  nothing that names their thread, so one serving the thread in use can be among those
+  closed. For that reason trimming on its own is a switch that starts off ("When memory
+  fills up fast: Trim idle helpers on its own" in the menu's Settings). Switched on, and in
+  autopilot, guardian trims when the early warning fires or memory is critical, at most
+  once every half hour, and says what it did.
 - **Flag heavy threads.** The Codex engine holding a thread with a 1.2 GB history open was
   itself using 1.1 GB. Guardian lists a thread once its history passes 300 MB, says so once
   in a notification, and counts how many threads are in use at the same time. It cannot

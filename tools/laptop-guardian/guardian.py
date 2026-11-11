@@ -160,7 +160,12 @@ DEFAULT_CONFIG = {
     # Trim: helper programs an AI app starts for each thread and then leaves idle (the first
     # real Mac: 36 tool servers that had used no processor time in 90 minutes, 1.1 GB). Only
     # programs whose path contains one of these markers, only when idle, only on a click.
-    "trim": {"apps": {"ChatGPT": ["/cua_node/bin/"]}, "min_age_minutes": 60, "idle_minutes": 30, "min_mb": 300},
+    # "auto": trim by itself when memory is filling up fast or is critical (act mode only). Off
+    # until the owner has seen a trim leave their agent's tools working: the tool servers
+    # carry nothing that says which thread they serve, so one that belongs to the thread in
+    # use can be among those closed.
+    "trim": {"apps": {"ChatGPT": ["/cua_node/bin/"]}, "min_age_minutes": 60, "idle_minutes": 30, "min_mb": 300,
+             "auto": False, "auto_cooldown_minutes": 30},
     # Coach: a thread with a very long history makes its app heavy (one 1.2 GB Codex thread
     # kept the engine at 1.1 GB), and every thread kept active costs memory.
     "coach": {"session_dirs": [".codex/sessions"], "thread_mb": 300, "active_hours": 2, "active_minutes": 30,
@@ -2324,9 +2329,48 @@ def helper_track(track: dict, procs: list, cfg: dict, now: float):
             del track[pid]
 
 
-def trim_candidates(app: str, procs: list, track: dict, cfg: dict, now: float) -> list:
+def helper_cwds(cache: dict, pids: list) -> dict:
+    """{pid: working folder} for helper programs, asking lsof only about pids not seen before
+    (a program's working folder does not change) and forgetting pids that are gone."""
+    for pid in list(cache):
+        if pid not in pids:
+            del cache[pid]
+    new = [pid for pid in pids if pid not in cache]
+    if new and IS_MAC:
+        out = sh(["lsof", "-a", "-d", "cwd", "-Fpn", "-p", ",".join(str(x) for x in new)], timeout=20)
+        cur = None
+        for line in out.splitlines():
+            if line.startswith("p"):
+                cur = int(line[1:]) if line[1:].isdigit() else None
+            elif line.startswith("n") and cur is not None:
+                cache[cur] = line[1:]
+    for pid in new:
+        cache.setdefault(pid, "")
+    return cache
+
+
+def dirs_in_use(scan: dict, cfg: dict) -> set:
+    """Working folders of agent threads written in the last half hour."""
+    if not scan:
+        return set()
+    limit = cfg["coach"]["active_minutes"] * 60
+    return {t["cwd"].replace("~", str(HOME), 1) if t["cwd"].startswith("~") else t["cwd"]
+            for t in scan["threads"] if t["idle_s"] <= limit and t["cwd"]}
+
+
+def tied_to_thread_in_use(cwd: str, in_use: set) -> bool:
+    """Does this helper work in the folder of a thread that is in use? The home folder only
+    counts as itself: everything lives under it, and a thread working 'in home' must not shield
+    every helper on the Mac."""
+    home = str(HOME)
+    return bool(cwd) and any(cwd == d or (d != home and cwd.startswith(d + "/")) for d in in_use)
+
+
+def trim_candidates(app: str, procs: list, track: dict, cfg: dict, now: float,
+                    cwds: dict = None, in_use: set = None) -> list:
     """Helpers of this app that are old, idle and stand alone: not running anything of their
-    own, and not themselves part of a session another helper is running."""
+    own, not part of a session another helper is running, and not working in the folder of a
+    thread that is in use."""
     tcfg = cfg["trim"]
     marks = tcfg["apps"].get(app) or []
     parents = {p.ppid for p in procs}
@@ -2334,29 +2378,30 @@ def trim_candidates(app: str, procs: list, track: dict, cfg: dict, now: float) -
     for p in procs:
         t = track.get(p.pid)
         if p.key != app or t is None or not any(m in p.comm for m in marks) or p.pid in parents \
-                or p.ppid in track:
+                or p.ppid in track or tied_to_thread_in_use((cwds or {}).get(p.pid, ""), in_use or set()):
             continue
         if p.etime_s >= tcfg["min_age_minutes"] * 60 and now - t["since"] >= tcfg["idle_minutes"] * 60:
             out.append(p)
     return out
 
 
-def trim_summary(procs: list, track: dict, cfg: dict, now: float) -> list:
+def trim_summary(procs: list, track: dict, cfg: dict, now: float, cwds: dict = None, in_use: set = None) -> list:
     out = []
     for app in (cfg.get("trim") or {}).get("apps") or {}:
-        c = trim_candidates(app, procs, track, cfg, now)
+        c = trim_candidates(app, procs, track, cfg, now, cwds, in_use)
         if c:
             out.append({"app": app, "n": len(c), "mb": round(sum(p.rss_mb for p in c))})
     return out
 
 
-def trim_app(app: str, cfg: dict, procs: list, track: dict, now: float = None, dry_run: bool = False) -> dict:
+def trim_app(app: str, cfg: dict, procs: list, track: dict, now: float = None, dry_run: bool = False,
+             cwds: dict = None, in_use: set = None, trigger: str = "click") -> dict:
     """Ask the idle helpers to stop (a plain request to quit; nothing is forced). The app
     itself, its windows and anything that is working are left alone."""
     now = now or time.time()
-    cands = trim_candidates(app, procs, track, cfg, now)
+    cands = trim_candidates(app, procs, track, cfg, now, cwds, in_use)
     rec = {"app": app, "found": len(cands), "mb": round(sum(p.rss_mb for p in cands)), "closed": 0,
-           "dry_run": dry_run}
+           "dry_run": dry_run, "trigger": trigger}
     if not dry_run:
         for p in cands:
             if not still_same_process(p):
@@ -2368,6 +2413,37 @@ def trim_app(app: str, cfg: dict, procs: list, track: dict, now: float = None, d
                 pass
     log_event("trim", **rec)
     return rec
+
+
+def auto_trim(cfg: dict, menu: dict, procs: list, now: float, why: str, quiet: str = "") -> list:
+    """Trim without being asked: only when the owner switched it on, only in act mode, only
+    when there is enough to be worth it, and not more often than the cooldown. Says what it
+    did, in the menu and in a notification, so a tool that later fails has an explanation."""
+    tcfg = cfg.get("trim") or {}
+    if not tcfg.get("auto") or cfg["mode"] != "act" or \
+            now - menu.get("last_auto_trim", 0.0) < tcfg["auto_cooldown_minutes"] * 60:
+        return []
+    done = []
+    in_use = dirs_in_use(menu.get("threads"), cfg)
+    for t in menu.get("trim") or []:
+        if t["mb"] < tcfg["min_mb"]:
+            continue
+        rec = trim_app(t["app"], cfg, procs, menu["helpers"], now, cwds=menu.get("helper_cwd"), in_use=in_use,
+                       trigger=why)
+        if rec["closed"]:
+            done.append(rec)
+    if done:
+        menu["last_auto_trim"] = now
+        menu["trim"] = []
+        text = (("Memory was filling up fast" if why == "early" else "Memory was critically low")
+                + ", so Guardian closed " + ", ".join(f"{r['closed']} idle {r['app']} helpers" for r in done)
+                + f" (about {sum(r['mb'] for r in done) / 1024:.1f} GB). The app itself was not touched. "
+                  "If a tool in a thread stops responding, refresh the app.")
+        menu["last_action"] = {"ts": now, "action": "trim", "text": text, "ok": True}
+        menu["dirty"] = True
+        if not quiet:
+            notify("Guardian", text, cfg)
+    return done
 
 
 def thread_scan(cfg: dict, now: float = None) -> dict:
@@ -2636,7 +2712,8 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
         "settings": {"mode": cfg["mode"], "notify": bool(cfg.get("notify", True)),
                      "notify_level": cfg.get("notify_level", "important"),
                      "refresh": dict(rcfg.get("apps") or {}),
-                     "archive_offer": bool((cfg.get("archive") or {}).get("offer"))},
+                     "archive_offer": bool((cfg.get("archive") or {}).get("offer")),
+                     "trim_auto": bool((cfg.get("trim") or {}).get("auto"))},
     }
 
 
@@ -2697,6 +2774,7 @@ MENU_SETTINGS = {
     "notifications": {"important": {"notify": True, "notify_level": "important"},
                       "all": {"notify": True, "notify_level": "all"}, "none": {"notify": False}},
     "archive_offer": {True: {"archive": {"offer": True}}, False: {"archive": {"offer": False}}},
+    "trim_auto": {True: {"trim": {"auto": True}}, False: {"trim": {"auto": False}}},
 }
 
 
@@ -2769,7 +2847,8 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
             say(f"{app} has no helpers Guardian is allowed to trim.", ok=False)
             return False
         procs = menu["procs"]() if menu.get("procs") else classify(list_processes(), cfg, os.getuid())
-        rec = trim_app(app, cfg, procs, menu.setdefault("helpers", {}), time.time())
+        rec = trim_app(app, cfg, procs, menu.setdefault("helpers", {}), time.time(),
+                       cwds=menu.get("helper_cwd"), in_use=dirs_in_use(menu.get("threads"), cfg))
         menu["trim"] = []
         say(f"Closed {rec['closed']} idle {app} helpers, about {rec['mb'] / 1024:.1f} GB. {app} itself was not touched."
             if rec["closed"] else f"No {app} helper has been idle long enough to trim.")
@@ -3021,7 +3100,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     access = {"ts": time.time(), "ok": [], "blocked": []} if once else access_report(cfg)
     menu = {"dirty": False, "snap": None, "last_action": None, "background": background,
             "archive_state": archive_state, "refresh_state": refresh_state, "access": access,
-            "helpers": {}, "trim": [], "threads": None, "early": None}
+            "helpers": {}, "helper_cwd": {}, "trim": [], "threads": None, "early": None, "last_auto_trim": 0.0}
     menu["homes"] = None
     reminded = max([datetime.fromisoformat(e["ts"]).timestamp() for e in read_events(24 * 30)
                     if e.get("kind") == "archive" and e.get("phase") == "one-copy"] or [0.0])
@@ -3172,7 +3251,6 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 # ---- getting ahead of a bad spell
                 t_now = time.time()
                 helper_track(menu["helpers"], snap["procs"], cfg, t_now)
-                menu["trim"] = trim_summary(snap["procs"], menu["helpers"], cfg, t_now)
                 if menu["threads"] is None or t_now - menu["threads"]["ts"] > 300:
                     menu["threads"] = thread_scan(cfg, t_now)
                     for th in menu["threads"]["big"]:
@@ -3194,6 +3272,9 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                         notify("Guardian", f"{n} archived folder{'s' if n != 1 else ''} "
                                            f"({hm['mb'] / 1024:.1f} GB) exist only on {hm['drive']}. One drive is "
                                            "not a backup. The Guardian shield has a button for a second copy.", cfg)
+                helper_cwds(menu["helper_cwd"], list(menu["helpers"]))
+                menu["trim"] = trim_summary(snap["procs"], menu["helpers"], cfg, t_now, menu["helper_cwd"],
+                                            dirs_in_use(menu["threads"], cfg))
                 ecfg = cfg["early"]
                 swap_hist.append((t_now, snap["sample"].get("swap_used_mb")))
                 rise = swap_climb(list(swap_hist), t_now, ecfg["minutes"] * 60, ecfg["swap_climb_mb"])
@@ -3204,6 +3285,10 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                         last_early_log = t_now
                         log_event("early", rise_mb=rise, free_pct=snap["sample"].get("free_pct"),
                                   swap_used_mb=snap["sample"].get("swap_used_mb"))
+                    if not dry_run:
+                        auto_trim(cfg, menu, snap["procs"], t_now, "early", snap["quiet"])
+                elif snap["sample"].get("pressure_level", 1) >= 4 and not dry_run:
+                    auto_trim(cfg, menu, snap["procs"], t_now, "critical", snap["quiet"])
             menu["snap"] = snap
             write_state(build_state(cfg, snap, menu))
         except Exception as e:
