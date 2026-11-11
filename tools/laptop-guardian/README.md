@@ -147,9 +147,11 @@ python3 guardian.py threads         # agent threads written recently, with the s
   time at all and held 1.2 GB. Trim asks only those to stop: helpers of a listed app, over
   an hour old, idle for half an hour, with no children and not part of a running session.
   The app, its windows and anything working are untouched, and nothing is force-killed.
-  Tested by closing two: Codex did not restart them and carried on. Not yet known: whether
-  an old thread you return to later can still use a tool whose helper was trimmed; if one
-  does not respond, a refresh restores it. Scripting helpers run in their thread's folder,
+  Tested by closing two: Codex did not restart them and carried on. Then the first full trim
+  on the real app closed 61 helpers (10.7 GB to 9.2 GB) and the owner reported Codex's tools
+  still working. How Codex recovers was not observed, because the app was refreshed a few
+  minutes later for other reasons; if a tool ever does not respond, a refresh restores it.
+  Scripting helpers run in their thread's folder,
   so those of a thread written in the last half hour are spared. The tool servers carry
   nothing that names their thread, so one serving the thread in use can be among those
   closed. For that reason trimming on its own is a switch that starts off ("When memory
