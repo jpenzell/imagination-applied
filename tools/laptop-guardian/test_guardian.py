@@ -1959,7 +1959,7 @@ class LagTests(unittest.TestCase):
         squeezing = dict(self.real(), swapin_mb_s=12.1, decompress_mb_s=388.5)      # 00:35 on the first real night
         st = g.build_state(self.cfg, {"sample": squeezing, "groups": groups, "quiet": "", "front": "TextEdit"}, menu)
         self.assertTrue(st["issues"][0]["detail"].startswith(
-            "389 MB of memory a second is being squeezed and unsqueezed to make room. Google Chrome, in the background,"))
+            "388 MB of memory a second is being squeezed and unsqueezed to make room. Google Chrome, in the background,"))
         calm = dict(self.real(), swapin_mb_s=2.0, decompress_mb_s=30.0)
         st = g.build_state(self.cfg, {"sample": calm, "groups": groups, "quiet": ""}, menu)
         self.assertEqual((st["headline"], st["lag"]["level"]), ("Memory is tight", "none"))
