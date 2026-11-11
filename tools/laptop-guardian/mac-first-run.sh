@@ -17,6 +17,7 @@ run() { echo; echo "### $*"; "$@"; echo "### exit $?"; }
 run python3 test_guardian.py
 run python3 test_scratch.py
 run python3 test_archive.py
+run /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc chrome-extension/test_logic_jsc.js
 run python3 guardian.py doctor
 run python3 guardian.py status -n 20
 run python3 guardian.py watch --once --dry-run

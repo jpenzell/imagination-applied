@@ -256,15 +256,25 @@ class BlockedTests(unittest.TestCase):
         self.assertNotIn("Documents", blind["items"])
         self.assertEqual(blind["unreadable"], ["Documents"])
         self.assertIn("the size is not known", scratch.render(list(rows.values())))
-        # comparing a full snapshot with a blind one must not report 3 MB "freed"
+        # a full snapshot and a blind one are not compared at all: neither "3 MB freed" nor,
+        # the other way round, "3 MB grew" (the first real Mac's helper got Full Disk Access at
+        # midday and the next alert said pictures had grown 14 GB; they had only been hidden)
+        self.assertEqual((scratch.entry_access(full), scratch.entry_access(blind)), ("full", "limited"))
         for old, new in ((full, blind), (blind, full)):
             diff = scratch.ledger_diff(old, new)
+            self.assertTrue(diff["incomparable"])
             self.assertEqual(diff["changes"], [])
-            self.assertEqual(diff["unreadable"], ["Documents"])
-            self.assertIn("not compared", scratch.render_ledger_diff(diff)[-1])
+            self.assertIn("not compared", scratch.render_ledger_diff(diff)[0])
+        # two snapshots with the same view are compared on what both measured
         mk(self.home / "Downloads/more.mp4", 5120)
         later = scratch.ledger_entry(scratch.census(self.home), [], 19.9, 1_007_200)
-        self.assertEqual(scratch.ledger_diff(blind, later)["changes"], [("Downloads", 5)])
+        diff = scratch.ledger_diff(blind, later)
+        self.assertEqual((diff["changes"], diff["unreadable"]), ([("Downloads", 5)], ["Documents"]))
+        self.assertIn("not compared", scratch.render_ledger_diff(diff)[-1])
+        # the helper says how much it could see; that wins over guessing
+        seen_all = scratch.ledger_entry(scratch.census(self.home), [], 19.9, 1_010_800, access="full")
+        self.assertFalse(scratch.comparable(later, seen_all))
+        self.assertTrue(scratch.comparable(seen_all, dict(full, access="full")))
 
 
 if __name__ == "__main__":

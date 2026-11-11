@@ -122,7 +122,8 @@ const s2 = await evalInWorker(async ({ A, now, overrides }) => {
 check(s2.stats.slept >= 1, `expected >=1 slept, got ${s2.stats.slept}`);
 check(s2.sleepyDiscarded === true, "the idle tab should be discarded (asleep) but still present");
 check(s2.sleepyUrl.endsWith("/sleepy"), "a discarded tab keeps its URL");
-const today = new Date().toISOString().slice(0, 10);
+const d0 = new Date(), p2 = n => String(n).padStart(2, "0");   // local day, as background.js dayKey()
+const today = `${d0.getFullYear()}-${p2(d0.getMonth() + 1)}-${p2(d0.getDate())}`;
 check(s2.daily && s2.daily[today] && s2.daily[today].parked === 3, "daily counters should record the parks");
 
 // Sweep 3: nothing is idle (now = real now): nothing happens.

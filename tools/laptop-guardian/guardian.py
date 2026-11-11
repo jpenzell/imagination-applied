@@ -17,7 +17,7 @@ Claude Code or Codex ("guardian ask") for a diagnosis in plain English plus a
 suggested config change you review before it is applied.
 
 Subcommands:  status  watch  ask  report  chrome  scratch  disk  refresh  archive
-              autopilot  doctor  install  uninstall  pause  resume  config  test-notify
+              menu  autopilot  doctor  install  uninstall  pause  resume  config  test-notify
 
 Prior art this borrows from, with thanks:
   TomGranot/mac-memory-guard   kernel pressure level as the only trigger
@@ -57,6 +57,9 @@ EVENTS_PATH = LOG_DIR / "events.jsonl"
 SAMPLES_PATH = LOG_DIR / "samples.tsv"
 STDOUT_LOG = LOG_DIR / "guardian.out.log"
 PLIST_PATH = HOME / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+MENU_LABEL = "local.guardian.menu"
+MENU_APP = HOME / "Applications" / "Guardian.app"
+MENU_PLIST = HOME / "Library" / "LaunchAgents" / f"{MENU_LABEL}.plist"
 HOSTNAME = socket.gethostname().split(".")[0]
 
 # --------------------------------------------------------------------------
@@ -67,6 +70,9 @@ DEFAULT_CONFIG = {
     "mode": "nudge",
     "interval_seconds": 30,
     "notify": True,
+    # "important": speak up for a critical spell and for things you can act on. "all": also
+    # every time memory is merely tight, which on a small Mac is most of the day.
+    "notify_level": "important",
     "notify_cooldown_seconds": 600,
     "pressure_warn_level": 2,
     "free_pct_floor": 8,
@@ -187,7 +193,7 @@ TUNABLE = {
     "refresh.min_gb": (3, 20),
     "disk.alert_drop_gb": (1, 20),
     "disk.clear_on_quit_below_gb": (10, 200),
-    "refresh.agent_idle_minutes": (5, 240),
+    "refresh.agent_idle_minutes": (10, 240),
     "refresh.cooldown_hours": (1, 48),
 }
 CONFIG_HISTORY = CONFIG_DIR / "config-history.jsonl"
@@ -860,10 +866,17 @@ class Engine:
             self.episode = None
 
         # ---- pressure notification naming the offenders
-        if under_pressure and self._cooldown_ok("pressure", now):
+        # "warn" is where a small Mac lives (the first real one: most of every day, 43
+        # identical notifications), so by default only a critical spell speaks up; the menu
+        # bar icon carries the steady state.
+        loud = cfg.get("notify_level", "important") == "all"
+        if under_pressure and (critical or loud) and \
+                self._cooldown_ok("pressure-critical" if critical else "pressure", now):
             top = "; ".join(f"{g['key']} {g['rss_mb'] / 1024:.1f}GB" for g in groups[:cfg["top_n"]])
+            hint = " Click the Guardian shield in the menu bar for one-click fixes." \
+                if critical and menu_installed() else ""
             decisions.append(Decision("notify", None,
-                                      f"Memory {pressure_word(level)} (free {free}%). Biggest: {top}",
+                                      f"Memory {pressure_word(level)} (free {free}%). Biggest: {top}.{hint}",
                                       "pressure", "crit" if critical else "warn"))
 
         # ---- per process rules
@@ -1565,7 +1578,9 @@ def write_ledger(rows: list = None) -> dict:
     one ledger entry."""
     import scratch
     rows = scratch.census() if rows is None else rows
-    entry = scratch.ledger_entry(rows, scratch.system_buckets(), sample_system().get("disk_free_gb"), time.time())
+    full = full_access()
+    entry = scratch.ledger_entry(rows, scratch.system_buckets(), sample_system().get("disk_free_gb"), time.time(),
+                                 access=None if full is None else "full" if full else "limited")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     with ledger_path().open("a") as f:
         f.write(json.dumps(entry) + "\n")
@@ -1573,12 +1588,15 @@ def write_ledger(rows: list = None) -> dict:
 
 
 def ledger_baseline(entries: list, hours: float, now: float = None):
-    """The oldest entry inside the window (never the latest one), or None."""
-    if len(entries) < 2:
+    """The oldest entry inside the window that can be compared with the latest one (never the
+    latest itself), or None."""
+    import scratch
+    same = [e for e in entries[:-1] if scratch.comparable(e, entries[-1])] if entries else []
+    if not same:
         return None
     cutoff = datetime.fromtimestamp(now or time.time()) - timedelta(hours=hours)
-    inside = [e for e in entries[:-1] if datetime.fromisoformat(e["ts"]) >= cutoff]
-    return inside[0] if inside else entries[-2]
+    inside = [e for e in same if datetime.fromisoformat(e["ts"]) >= cutoff]
+    return inside[0] if inside else same[-1]
 
 
 def disk_drop(history: list, now: float, window_s: float, drop_gb: float) -> float:
@@ -1595,9 +1613,9 @@ def disk_drop_job(cfg: dict, fell_gb: float, quiet: str = "") -> dict:
     """Free space is falling fast: measure, compare with the previous ledger entry, and say
     which place grew. (The first real Mac lost 8 GB in two hours to leftover temp folders.)"""
     import scratch
-    entries = read_ledger()
-    prev = entries[-1] if entries else None
     new = write_ledger()
+    same = [e for e in read_ledger()[:-1] if scratch.comparable(e, new)]
+    prev = same[-1] if same else None
     minutes = cfg["disk"]["alert_window_minutes"]
     text = f"Disk space fell {fell_gb:.1f}GB in the last {minutes} minutes ({new['free_gb']}GB free)."
     grew = []
@@ -1713,13 +1731,17 @@ def disk_cmd(cfg: dict, args):
     fmt = lambda v: "no data" if v is None else f"{v:+.1f} GB"
     print(f"  last hour {fmt(h1)}    last 24 hours {fmt(h24)}")
     entries = read_ledger()
-    if len(entries) >= 2:
-        for label, base in (("previous snapshot", entries[-2]), ("oldest in 24 hours", ledger_baseline(entries, 24))):
-            if base is None or (label.startswith("oldest") and base is entries[-2]):
+    prevs = [e for e in entries[:-1] if scratch.comparable(e, entries[-1])] if entries else []
+    if prevs:
+        for label, base in (("previous snapshot", prevs[-1]), ("oldest in 24 hours", ledger_baseline(entries, 24))):
+            if base is None or (label.startswith("oldest") and base is prevs[-1]):
                 continue
             print(f"  Where it went, {label}:")
             for line in scratch.render_ledger_diff(scratch.ledger_diff(base, entries[-1])):
                 print("    " + line)
+    elif len(entries) >= 2:
+        print("  Earlier snapshots were taken with less permission to read the disk, so they are not compared; "
+              "the next one will show what changed.")
     elif entries:
         print(f"  One snapshot so far ({entries[-1]['ts'][11:16]}); the next one will show what changed.")
     else:
@@ -1763,6 +1785,14 @@ def disk_cmd(cfg: dict, args):
 # Access: macOS decides per program which of your folders it may read
 # --------------------------------------------------------------------------
 
+def full_access():
+    """True when this process can read the places only Full Disk Access opens; None if this
+    Mac has none of them to try. Tells 'no permission at all' from 'some folders only'."""
+    import scratch
+    probes = [HOME / "Library" / n for n in ("Safari", "Mail", "Messages")]
+    return next((scratch.readable(q) for q in probes if q.is_dir()), None)
+
+
 def access_check(cfg: dict) -> dict:
     """Which of the owner's folders this very process may list. The background agent can be
     refused what the same command typed in Terminal is allowed (the first real Mac's agent
@@ -1789,9 +1819,7 @@ def access_check(cfg: dict) -> dict:
             except OSError as e:
                 errors[name] = f"{type(e).__name__}: errno {e.errno} {e.strerror}"
     program = sh(["ps", "-o", "comm=", "-p", str(os.getpid())]).strip() or sys.executable
-    # Places only Full Disk Access opens: tells "no permission at all" from "folders only".
-    probes = [HOME / "Library" / n for n in ("Safari", "Mail", "Messages")]
-    full = next((scratch.readable(q) for q in probes if q.is_dir()), None)
+    full = full_access()
     return {"ts": time.time(), "ok": ok, "blocked": blocked, "program": program, "errors": errors,
             "full_disk_access": full}
 
@@ -2115,6 +2143,392 @@ def archive_cmd(cfg: dict, args):
 
 
 # --------------------------------------------------------------------------
+# Menu bar: the helper publishes its state for the icon, and takes clicks as requests
+# --------------------------------------------------------------------------
+# The menu bar app is only a face. It reads one small file the helper writes after every
+# sample, and a click becomes a small request file the helper picks up within a second. So
+# everything is still done by the one program that has the permissions, the worker and the
+# diary, and a click is logged like any other action.
+
+def menu_installed() -> bool:
+    return MENU_APP.exists()
+
+
+def state_path() -> Path:
+    return LOG_DIR / "state.json"
+
+
+def requests_dir() -> Path:
+    return CONFIG_DIR / "requests"
+
+
+def pause_until():
+    """None when not paused; 0 for 'until resumed'; else the time the pause ends."""
+    try:
+        text = PAUSE_PATH.read_text()
+    except OSError:
+        return None
+    try:
+        return float(json.loads(text).get("until") or 0)
+    except (ValueError, AttributeError, TypeError):
+        return 0.0
+
+
+def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
+    """What deserves a look right now, each with the one click that helps. 'crit' and 'warn'
+    put a dot on the icon; 'info' is only listed. A warning means there is a problem or a
+    good moment to act, not merely that memory is tight (on a small Mac it always is)."""
+    s, groups = snap["sample"], snap["groups"]
+    level, free = s.get("pressure_level", 1), s.get("free_pct")
+    critical = level >= 4 or (free is not None and free <= max(2, cfg["free_pct_floor"] // 2))
+    tight = under_pressure(s, cfg)
+    rcfg = cfg.get("refresh") or {}
+    age_of = menu.get("activity_age") or (lambda app: MacAppOps().activity_age(app, cfg))
+    out = []
+    listed = [g for g in groups if (rcfg.get("apps") or {}).get(g["key"], "never") != "never"]
+    big = max(listed, key=lambda g: g["rss_mb"]) if listed else None
+
+    def refresh_action(g):
+        age = age_of(g["key"])
+        busy = age is not None and age < rcfg["agent_idle_minutes"] * 60
+        warn = (f"{g['key']}'s agent was working {max(1, int(age // 60))} min ago. Refreshing stops that task."
+                if busy else "")
+        return {"id": "refresh", "label": f"Refresh {g['key']}", "args": {"app": g["key"]}, "busy": busy,
+                "warning": warn}
+
+    top = ", ".join(f"{g['key']} {g['rss_mb'] / 1024:.1f} GB" for g in groups[:3])
+    crit_refresh = None
+    if critical:
+        issue = {"id": "memory-critical", "severity": "crit", "title": "Memory is critically low",
+                 "detail": f"Biggest: {top}"}
+        if big and big["rss_mb"] >= 2048:
+            issue["action"] = refresh_action(big)
+            crit_refresh = big["key"]
+        out.append(issue)
+    if big and tight and big["rss_mb"] >= rcfg["min_gb"] * 1024 and big["key"] != crit_refresh:
+        act = refresh_action(big)
+        out.append({"id": f"grown:{big['key']}", "severity": "info" if act["busy"] else "warn",
+                    "title": f"{big['key']} has grown to {big['rss_mb'] / 1024:.1f} GB",
+                    "detail": ("Its agent is working, so this is not the moment." if act["busy"] else
+                               "Its agent is idle: a good moment to refresh it. Chats and threads are kept."),
+                    "action": act})
+    chrome = next((g for g in groups if g["key"] == "Google Chrome"), None)
+    if chrome and tight and chrome["rss_mb"] >= 4096:
+        out.append({"id": "chrome", "severity": "info",
+                    "title": f"Chrome is using {chrome['rss_mb'] / 1024:.1f} GB in {chrome['n']} processes",
+                    "detail": "Closing duplicate tabs is the quickest win. They stay in History.",
+                    "action": {"id": "close_duplicate_tabs", "label": "Close duplicate tabs", "args": {}}})
+    disk = s.get("disk_free_gb")
+    if disk is not None and disk < cfg["disk_floor_gb"]:
+        out.append({"id": "disk-low", "severity": "warn", "title": f"Only {disk:.0f} GB of disk is free",
+                    "detail": "Free disk is also the room swap can grow into. Clearing rebuildable caches is safe.",
+                    "action": {"id": "reclaim", "label": "Clear caches now", "args": {}}})
+    access = menu.get("access") or {}
+    if access.get("blocked"):
+        out.append({"id": "access", "severity": "warn",
+                    "title": "Guardian is not allowed to read " + ", ".join(access["blocked"]),
+                    "detail": "It measures them as unknown and cannot offer to move old work folders.",
+                    "action": {"id": "doctor", "label": "Show me the steps", "args": {}}})
+    scan = (menu.get("archive_state") or {}).get("scan")
+    plan = scan["plan"] if scan else None
+    if plan and plan.get("volume") and plan["move"] and os.path.ismount(plan["volume"]["path"]):
+        n = len(plan["move"])
+        out.append({"id": "archive", "severity": "info",
+                    "title": f"{plan['mb'] / 1024:.1f} GB of old work folders can move to {plan['volume']['name']}",
+                    "detail": f"{n} folder{'s' if n != 1 else ''} unused for {plan['days']}+ days. "
+                              "Each copy is checked before anything is removed here.",
+                    "action": {"id": "archive", "label": "Review and move", "args": {}}})
+    order = {"crit": 0, "warn": 1, "info": 2}
+    return sorted(out, key=lambda i: order[i["severity"]])
+
+
+def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
+    """Everything the menu bar icon shows, in one small file."""
+    s = snap["sample"]
+    paused = pause_until()
+    issues = [] if paused is not None else build_issues(cfg, snap, menu)
+    worst = issues[0]["severity"] if issues else "none"
+    level = s.get("pressure_level", 1)
+    if paused is not None:
+        headline = "Paused" + (f" until {datetime.fromtimestamp(paused):%-I:%M %p}" if paused else "")
+    elif worst == "crit":
+        headline = "Memory is critically low"
+    elif under_pressure(s, cfg):
+        headline = "Memory is tight"
+    else:
+        headline = "All good"
+    bg = menu.get("background")
+    rcfg = cfg.get("refresh") or {}
+    running = {g["key"] for g in snap["groups"]}
+    return {
+        "ts": time.time(), "time": datetime.now().isoformat(timespec="seconds"), "version": VERSION,
+        "host": HOSTNAME, "mode": cfg["mode"], "paused": paused is not None, "paused_until": paused or 0,
+        "quiet": snap.get("quiet") or "", "level": level, "word": pressure_word(level),
+        "free_pct": s.get("free_pct"), "mem_total_mb": s.get("mem_total_mb"),
+        "swap_used_mb": s.get("swap_used_mb"), "swap_total_mb": s.get("swap_total_mb"),
+        "disk_free_gb": s.get("disk_free_gb"), "disk_floor_gb": cfg["disk_floor_gb"],
+        "attention": worst if worst in ("crit", "warn") else "none", "headline": headline,
+        "top": [{"key": g["key"], "gb": round(g["rss_mb"] / 1024, 1), "n": g["n"]} for g in snap["groups"][:6]],
+        "issues": issues, "busy": (bg.name or "") if bg is not None and bg.busy() else "",
+        "last_action": menu.get("last_action"),
+        "refreshable": [a for a, m in (rcfg.get("apps") or {}).items() if a in running],
+        "chrome_running": "Google Chrome" in running,
+        "settings": {"mode": cfg["mode"], "notify": bool(cfg.get("notify", True)),
+                     "notify_level": cfg.get("notify_level", "important"),
+                     "refresh": dict(rcfg.get("apps") or {}),
+                     "archive_offer": bool((cfg.get("archive") or {}).get("offer"))},
+    }
+
+
+def write_state(state: dict):
+    """Atomically, so the icon never reads half a file."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = state_path().with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, default=str))
+    os.replace(tmp, state_path())
+
+
+def read_requests(max_age: float = 600) -> list:
+    """Clicks waiting from the menu bar, oldest first. Each file is removed as it is read; a
+    request older than ten minutes is dropped (the helper was not running when it was made,
+    and acting on a stale click would be a surprise)."""
+    try:
+        names = sorted(n for n in os.listdir(requests_dir()) if n.endswith(".json") and not n.startswith("."))
+    except OSError:
+        return []
+    out = []
+    for n in names:
+        path = requests_dir() / n
+        try:
+            req = json.loads(path.read_text())
+        except (OSError, ValueError):
+            req = None
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        if isinstance(req, dict) and isinstance(req.get("action"), str) and \
+                time.time() - float(req.get("ts") or 0) <= max_age:
+            out.append(req)
+    return out
+
+
+def _captured(fn) -> str:
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        fn()
+    return buf.getvalue()
+
+
+def _show_text(name: str, text: str):
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    path = LOG_DIR / name
+    path.write_text(text)
+    if IS_MAC:
+        subprocess.run(["open", "-t", str(path)], capture_output=True, text=True, timeout=30)
+    return path
+
+
+MENU_SETTINGS = {
+    "mode": {"act": {"mode": "act", "autopilot": True}, "nudge": {"mode": "nudge", "autopilot": False},
+             "observe": {"mode": "observe", "autopilot": False}},
+    "notifications": {"important": {"notify": True, "notify_level": "important"},
+                      "all": {"notify": True, "notify_level": "all"}, "none": {"notify": False}},
+    "archive_offer": {True: {"archive": {"offer": True}}, False: {"archive": {"offer": False}}},
+}
+
+
+def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
+    """Carry out one click from the menu bar. Only the actions listed here exist; anything
+    else is logged and ignored. Slow work goes to the worker and reports when it is done.
+    Returns True when the config file changed."""
+    action = req.get("action")
+    bg = menu.get("background")
+
+    def say(text: str, ok: bool = True):
+        menu["last_action"] = {"ts": time.time(), "action": action, "text": text, "ok": ok}
+        menu["dirty"] = True
+        log_event("menu", action=action, result=text, ok=ok)
+
+    def later(job, started: str) -> bool:
+        if bg is None or not bg.submit(f"menu:{action}", job):
+            say(f"Busy with another job ({getattr(bg, 'name', '?')}). Try again in a minute.", ok=False)
+            return False
+        say(started)
+        return True
+
+    if action == "pause":
+        minutes = max(1, min(int(req.get("minutes") or 60), 24 * 60))
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        PAUSE_PATH.write_text(json.dumps({"until": time.time() + minutes * 60}))
+        log_event("pause", minutes=minutes)
+        span = (f"{minutes} minute{'s' if minutes != 1 else ''}" if minutes % 60 else
+                f"{minutes // 60} hour{'s' if minutes != 60 else ''}")
+        say(f"Paused for {span}: no notifications, no actions.")
+    elif action == "resume":
+        try:
+            PAUSE_PATH.unlink()
+        except OSError:
+            pass
+        log_event("resume")
+        say("Resumed.")
+    elif action == "set":
+        key, value = req.get("key"), req.get("value")
+        if key == "refresh":
+            app = req.get("app")
+            ok = app in (cfg["refresh"].get("apps") or {}) and value in ("ask", "auto", "never")
+            changes = {"refresh": {"apps": {app: value}}} if ok else None
+        elif isinstance(key, str) and isinstance(value, (str, bool)):
+            changes = MENU_SETTINGS.get(key, {}).get(value)
+        else:
+            changes = None
+        if not changes:
+            say("That setting is not one the menu can change.", ok=False)
+            return False
+        apply_config_change(changes, f"menu bar: {key}={value}")
+        say("Saved.")
+        return True
+    elif action == "refresh":
+        app = req.get("app")
+        if app not in (cfg["refresh"].get("apps") or {}):
+            say(f"{app} is not on the list of apps Guardian may refresh.", ok=False)
+            return False
+
+        def job():
+            rec = refresh_app(app, cfg, menu.get("ops"), force=bool(req.get("force")))
+            if rec.get("phase") == "done":
+                menu.get("refresh_state", {}).setdefault(app, {"last": 0.0, "snooze_until": 0.0, "next_check": 0.0})[
+                    "last"] = time.time()
+            say(f"{app}: {rec['result']}", ok=rec.get("phase") == "done")
+        later(job, f"Refreshing {app}: quitting it, clearing its caches, reopening it...")
+    elif action == "reclaim":
+        def job():
+            import scratch
+            running = running_apps(classify(list_processes(), cfg, os.getuid()))
+            rows = scratch.census()
+            freed = sum(scratch.reclaim(t, dry_run=False, running=running, rows=rows)["freed_mb"]
+                        for t in ("safe", "safe-old"))
+            log_event("scratch", trigger="menu", freed_mb=freed)
+            say(f"Cleared {freed / 1024:.1f} GB of rebuildable caches and old logs." if freed >= 50 else
+                "Nothing more to clear right now. Caches of apps that are open are left alone.")
+        later(job, "Measuring and clearing rebuildable caches (about a minute)...")
+    elif action == "archive":
+        import archive
+        if not archive.volumes():
+            say("Plug in an external drive first, then choose this again.", ok=False)
+            return False
+
+        def job():
+            plan = archive_plan(cfg)
+            st = menu.setdefault("archive_state", {})
+            st["scan"] = {"ts": time.time(), "plan": plan}
+            if plan["problems"] and not plan["move"]:
+                say("Could not look in " + ", ".join(p[0] for p in plan["problems"]), ok=False)
+            elif not plan["move"]:
+                say(f"No work folder has been unused for {plan['days']}+ days.")
+            elif plan["volume"] is None:
+                say(plan["why"].capitalize() + ".", ok=False)
+            else:
+                rec = archive_ask(cfg, st, plan, sample_system().get("disk_free_gb"), menu.get("archive_ops"))
+                say({"accepted": "Moving the folders now. A notification will say when it is done.",
+                     "shown": "The list is open. Choose this again when you have looked.",
+                     "declined": "Nothing moved."}.get(rec.get("phase"), "No answer, so nothing moved."))
+        later(job, "Measuring your work folders...")
+    elif action == "close_duplicate_tabs":
+        def job():
+            lines = [ln for ln in _captured(lambda: chrome_tabs(close_duplicates=True)).splitlines()
+                     if ln.strip() and not ln.startswith("  dup")]
+            say(" ".join(lines)[:220] or "Chrome did not answer.")
+        later(job, "Asking Chrome for its tabs...")
+    elif action == "snapshot":
+        later(lambda: (write_ledger(), say("Disk measured. See: guardian.py disk")), "Measuring the disk...")
+    elif action == "report":
+        _show_text("report-now.md", render_report(24))
+        say("Opened today's report.")
+    elif action == "doctor":
+        later(lambda: (_show_text("doctor-now.txt", _captured(lambda: doctor(cfg, Path(__file__)))),
+                       say("Opened the check-up.")), "Running the check-up...")
+    elif action == "diagnose":
+        def job():
+            outcome = {}
+            ask(cfg, hours=24, quiet=True, outcome=outcome)
+            path = LOG_DIR / outcome["path_name"] if outcome.get("path_name") else None
+            if outcome.get("result") == "ok" and path:
+                subprocess.run(["open", "-t", str(path)], capture_output=True, text=True, timeout=30)
+                say("The diagnosis is open.")
+            else:
+                say(f"No diagnosis: {outcome.get('reason') or outcome.get('result') or 'the AI did not answer'}.", ok=False)
+        later(job, "Asking the AI to read today's diary (a few minutes)...")
+    else:
+        log_event("menu", action=str(action)[:40], result="unknown action; ignored", ok=False)
+    return False
+
+
+def menu_plist_text(app: Path) -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>{MENU_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{app}/Contents/MacOS/Guardian</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key>
+  <dict><key>SuccessfulExit</key><false/></dict>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+</dict>
+</plist>
+"""
+
+
+def menu_cmd(args, script: Path):
+    """install: build the menu bar app from menubar/, put it in ~/Applications, start it now
+    and at every login. uninstall: stop and remove it (the helper keeps running)."""
+    if not IS_MAC:
+        print("menu: macOS only")
+        return
+    src = script.resolve().parent / "menubar"
+    if args.state == "status":
+        loaded = MENU_LABEL in sh(["launchctl", "list"])
+        print(f"menu bar app: {'installed' if MENU_APP.exists() else 'not installed'} at {MENU_APP}; "
+              f"{'running' if loaded else 'not running'}; starts at login: {MENU_PLIST.exists()}")
+        return
+    sh(["launchctl", "bootout", launchctl_domain(), str(MENU_PLIST)])
+    if args.state == "uninstall":
+        for p in (MENU_PLIST,):
+            if p.exists():
+                p.unlink()
+        if MENU_APP.exists():
+            shutil.rmtree(MENU_APP)
+        print("menu bar app removed (the helper keeps running; `guardian.py uninstall` removes that)")
+        return
+    r = subprocess.run(["bash", str(src / "build.sh")], capture_output=True, text=True)
+    built = src / "build" / "Guardian.app"
+    if r.returncode != 0 or not built.exists():
+        print("could not build the menu bar app (it needs Apple's Command Line Tools: xcode-select --install)")
+        print((r.stdout + r.stderr)[-1500:])
+        return
+    MENU_APP.parent.mkdir(parents=True, exist_ok=True)
+    if MENU_APP.exists():
+        shutil.rmtree(MENU_APP)
+    shutil.copytree(built, MENU_APP, symlinks=True)
+    MENU_PLIST.parent.mkdir(parents=True, exist_ok=True)
+    MENU_PLIST.write_text(menu_plist_text(MENU_APP))
+    out = subprocess.run(["launchctl", "bootstrap", launchctl_domain(), str(MENU_PLIST)],
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        print(f"launchctl bootstrap failed: {out.stderr.strip()}")
+        return
+    log_event("menu", action="install", result=str(MENU_APP), ok=True)
+    print(f"installed {MENU_APP}: look for the shield in the menu bar; it starts at every login")
+
+
+# --------------------------------------------------------------------------
 # Snapshot and status
 # --------------------------------------------------------------------------
 
@@ -2205,10 +2619,42 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
             s["disk_free_gb"] * 1024 < s["mem_total_mb"]:
         log_event("health", note=f"disk free {s['disk_free_gb']}GB is below RAM size; swap ceiling is low")
     last_digest_day = None
-    ai = {"day": None, "runs": 0, "retry_after": 0.0, "fail_notified": None}
+    # a restart must not hand out another diagnosis: the first real day had five
+    today0 = datetime.now().date()
+    ai = {"day": today0, "retry_after": 0.0, "fail_notified": None,
+          "runs": sum(1 for e in read_events(24) if e.get("kind") == "ask" and e.get("result") == "ok"
+                      and datetime.fromisoformat(e["ts"]).date() == today0)}
     refresh_state = refresh_state_from_events()
     archive_state = archive_state_from_events()
     access = {"ts": time.time(), "ok": [], "blocked": []} if once else access_report(cfg)
+    menu = {"dirty": False, "snap": None, "last_action": None, "background": background,
+            "archive_state": archive_state, "refresh_state": refresh_state, "access": access}
+
+    def idle():
+        """Wait out the interval, waking once a second for clicks from the menu bar."""
+        nonlocal cfg, cfg_mtime
+        deadline = time.time() + cfg["interval_seconds"]
+        while True:
+            try:
+                changed = False
+                for req in read_requests():
+                    try:
+                        changed = handle_request(req, cfg, menu) or changed
+                    except Exception as e:         # one bad click must not lose the others
+                        log_event("error", error=repr(e), job=f"menu:{str(req.get('action'))[:40]}")
+                if changed:
+                    cfg = load_config()
+                    engine.cfg = cfg
+                    cfg_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else None
+                if menu["dirty"] and menu["snap"] is not None:
+                    menu["dirty"] = False
+                    write_state(build_state(cfg, menu["snap"], menu))
+            except Exception as e:
+                log_event("error", error=repr(e), job="menu")
+            if time.time() >= deadline:
+                return
+            time.sleep(1.0)
+
     disk_hist = deque(maxlen=400)
     ledger = read_ledger(1)
     last_ledger = datetime.fromisoformat(ledger[-1]["ts"]).timestamp() if ledger else 0.0
@@ -2231,10 +2677,17 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 cfg = load_config()
                 engine.cfg = cfg
                 log_event("reload", mode=cfg["mode"], autopilot=cfg.get("autopilot", False))
-            if PAUSE_PATH.exists():
-                time.sleep(cfg["interval_seconds"])
+            until = pause_until()
+            if until and time.time() >= until:
+                PAUSE_PATH.unlink()
+                log_event("resume", why="the pause ran out")
+                until = None
+            if until is not None:
                 if once:
                     break
+                menu["snap"] = snapshot(cfg)             # the icon still shows what is going on
+                write_state(build_state(cfg, menu["snap"], menu))
+                idle()
                 continue
             snap = snapshot(cfg)
             if simulate:
@@ -2258,7 +2711,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                         log_event("access", ok=again["ok"], blocked=again["blocked"], program=again["program"],
                                   notified=False)
                         archive_state["scan"], archive_state["next_check"] = None, 0.0
-                    access = again
+                    access = menu["access"] = again
                 archive_tick(cfg, snap, archive_state, background, time.time(), dry_run=dry_run)
                 # ---- disk: ledger, fast-drop alert, caches of an app that just quit
                 dcfg, t_now = cfg["disk"], time.time()
@@ -2316,9 +2769,11 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 path = write_digest(cfg, 24)
                 if path and not snap["quiet"]:
                     notify("Guardian", digest_oneliner(24), cfg)
+            menu["snap"] = snap
+            write_state(build_state(cfg, snap, menu))
         except Exception as e:
             log_event("error", error=repr(e))
-        time.sleep(cfg["interval_seconds"])
+        idle()
 
 
 # --------------------------------------------------------------------------
@@ -2908,7 +3363,10 @@ AUTOPILOT_TEXT = """Autopilot is ON. Always running (launchd restarts it if it d
   - clears rebuildable caches when the disk gets low, and once a day tidies old logs and trash
   - after a bad day (3+ pressure episodes) asks Claude/Codex for a diagnosis and applies the
     threshold tuning it suggests, within fixed ranges; everything else waits for you
-  - stays quiet while you present or are in a Zoom meeting
+  - stays quiet while you present or are in a Zoom meeting, and does not notify merely because
+    memory is tight: a notification means a critical spell or something you can act on
+  - shows what is going on, with one-click fixes, behind the shield in the menu bar.
+    See: guardian.py menu install
   - keeps a ledger of what the disk is spent on, tells you when free space falls fast and what
     grew, and clears an app's caches when it quits while the disk is tight. See: guardian.py disk
   - when an AI app listed under `refresh` (ChatGPT by default) is bloated and its agent idle,
@@ -3034,6 +3492,8 @@ def main(argv=None):
     p.add_argument("--set", nargs="*", metavar="KEY=VALUE")
     p.add_argument("--apply-suggestion", action="store_true")
     p.add_argument("--undo", action="store_true", help="revert the last config change (tuning or --set)")
+    p = sub.add_parser("menu", help="install | uninstall | status: the shield in the menu bar")
+    p.add_argument("state", nargs="?", choices=["install", "uninstall", "status"], default="status")
     p = sub.add_parser("autopilot", help="on | off | status: always running and optimizing on its own")
     p.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     args = ap.parse_args(argv)
@@ -3076,7 +3536,7 @@ def main(argv=None):
         uninstall()
     elif args.cmd == "pause":
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        PAUSE_PATH.write_text(datetime.now().isoformat())
+        PAUSE_PATH.write_text(json.dumps({"until": 0, "since": datetime.now().isoformat(timespec="seconds")}))
         log_event("pause")
         print("paused: no notifications, no actions until `resume`")
     elif args.cmd == "resume":
@@ -3091,6 +3551,8 @@ def main(argv=None):
         config_cmd(cfg, args)
     elif args.cmd == "autopilot":
         autopilot_cmd(cfg, args, script)
+    elif args.cmd == "menu":
+        menu_cmd(args, script)
 
 
 if __name__ == "__main__":

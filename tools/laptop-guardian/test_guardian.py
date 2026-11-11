@@ -1267,6 +1267,206 @@ class ArchiveTests(unittest.TestCase):
         self.assertFalse(g.load_config(g.CONFIG_PATH)["archive"]["offer"])
 
 
+class MenuTests(unittest.TestCase):
+    """The shield in the menu bar: the helper publishes what is going on and takes clicks as
+    small request files. Found on the first real day: 43 identical 'memory warn' notifications
+    and nothing to click during a three-hour critical spell."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.tmp = g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.saved = (g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH, g.PAUSE_PATH)
+        g.CONFIG_DIR = self.tmp / "cfg"
+        g.CONFIG_PATH = g.CONFIG_DIR / "config.json"
+        g.CONFIG_HISTORY = g.CONFIG_DIR / "config-history.jsonl"
+        g.PAUSE_PATH = g.CONFIG_DIR / "paused"
+        g.LOG_DIR = self.tmp / "logs"
+        g.EVENTS_PATH = g.LOG_DIR / "events.jsonl"
+        self.cfg = g.load_config(g.Path("/nonexistent"))
+        self.cfg["notify"] = False
+
+    def tearDown(self):
+        g.CONFIG_DIR, g.CONFIG_PATH, g.CONFIG_HISTORY, g.LOG_DIR, g.EVENTS_PATH, g.PAUSE_PATH = self.saved
+
+    def snap(self, level=2, free=24, disk=30, chatgpt=10240, chrome=3100):
+        return {"sample": dict(sample(level=level, free=free, disk=disk), swap_used_mb=9200, mem_total_mb=8192),
+                "groups": [{"key": "ChatGPT", "rss_mb": chatgpt, "n": 118, "class": "ai_app"},
+                           {"key": "Google Chrome", "rss_mb": chrome, "n": 29, "class": "browser"},
+                           {"key": "Claude", "rss_mb": 1400, "n": 12, "class": "ai_app"}], "quiet": ""}
+
+    def menu(self, age=60.0, **more):
+        return dict({"dirty": False, "snap": None, "last_action": None, "background": g.Background(),
+                     "archive_state": {}, "refresh_state": {}, "access": {"blocked": []},
+                     "activity_age": lambda app: age}, **more)
+
+    def click(self, req, menu=None, cfg=None):
+        menu = menu or self.menu()
+        changed = g.handle_request(dict(req, ts=g.time.time()), cfg or self.cfg, menu)
+        if menu["background"].thread:
+            menu["background"].thread.join(10)
+        return changed, menu
+
+    def test_tight_memory_is_quiet_and_a_critical_spell_speaks(self):
+        procs = [P(1, "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT", rss_mb=9000)]
+        g.classify(procs, self.cfg, UID)
+        pressure = lambda cfg, **kw: [d for d in g.Engine(cfg).step(sample(**kw), procs)
+                                      if d.action == "notify" and d.cls == "pressure"]
+        self.assertEqual(self.cfg["notify_level"], "important")
+        self.assertEqual(pressure(self.cfg, level=2, free=24), [], "tight is where a small Mac lives")
+        crit = pressure(self.cfg, level=4, free=12)
+        self.assertEqual(len(crit), 1)
+        self.assertIn("Memory critical (free 12%). Biggest: ChatGPT 8.8GB.", crit[0].reason)
+        loud = dict(self.cfg, notify_level="all")
+        self.assertEqual(len(pressure(loud, level=2, free=24)), 1, "the old behaviour is one setting away")
+        auto, review = g.split_tuning({"notify_level": "all", "refresh": {"agent_idle_minutes": 5}})
+        self.assertEqual(auto, {}, "a diagnosis cannot make it louder or cut the idle wait below ten minutes")
+
+    def test_what_needs_a_look_and_what_puts_a_dot_on_the_icon(self):
+        state = lambda snap, menu: g.build_state(self.cfg, snap, menu)
+        busy = state(self.snap(), self.menu(age=60.0))
+        self.assertEqual((busy["headline"], busy["attention"]), ("Memory is tight", "none"))
+        only = busy["issues"][0]
+        self.assertEqual((only["severity"], only["title"]), ("info", "ChatGPT has grown to 10.0 GB"))
+        self.assertTrue(only["action"]["busy"])
+        self.assertIn("agent was working 1 min ago", only["action"]["warning"])
+        idle = state(self.snap(), self.menu(age=3600.0))
+        self.assertEqual((idle["attention"], idle["issues"][0]["severity"]), ("warn", "warn"),
+                         "its agent is idle: a good moment, so the icon says so")
+        self.assertEqual(idle["issues"][0]["action"], {"id": "refresh", "label": "Refresh ChatGPT",
+                                                       "args": {"app": "ChatGPT"}, "busy": False, "warning": ""})
+        crit = state(self.snap(level=4, free=12), self.menu(age=3600.0))
+        self.assertEqual((crit["headline"], crit["attention"]), ("Memory is critically low", "crit"))
+        self.assertEqual([i["id"] for i in crit["issues"]], ["memory-critical"], "one entry, one button")
+        self.assertEqual(crit["issues"][0]["action"]["label"], "Refresh ChatGPT")
+        calm = state(self.snap(level=1, free=60, chatgpt=2000), self.menu())
+        self.assertEqual((calm["headline"], calm["attention"], calm["issues"]), ("All good", "none", []))
+        # disk, permissions, Chrome and the archive each bring their own button
+        plan = {"days": 30, "mb": 5148, "volume": {"name": "My Passport", "path": "/Volumes/My Passport"},
+                "move": [{"name": "a"}, {"name": "b"}, {"name": "c"}]}
+        menu = self.menu(access={"blocked": ["~/Documents"]}, archive_state={"scan": {"ts": 0, "plan": plan}})
+        saved = g.os.path.ismount
+        g.os.path.ismount = lambda p: p == "/Volumes/My Passport"
+        try:
+            many = state(self.snap(disk=17, chrome=5600, chatgpt=1000), menu)
+        finally:
+            g.os.path.ismount = saved
+        self.assertEqual([(i["id"], i["severity"], i["action"]["id"]) for i in many["issues"]],
+                         [("disk-low", "warn", "reclaim"), ("access", "warn", "doctor"),
+                          ("chrome", "info", "close_duplicate_tabs"), ("archive", "info", "archive")])
+        self.assertIn("5.0 GB of old work folders can move to My Passport", many["issues"][3]["title"])
+        self.assertEqual(many["top"][0], {"key": "ChatGPT", "gb": 1.0, "n": 118})
+        self.assertEqual(many["settings"], {"mode": "nudge", "notify": False, "notify_level": "important",
+                                            "refresh": {"ChatGPT": "ask"}, "archive_offer": True})
+        self.assertEqual((many["refreshable"], many["chrome_running"]), (["ChatGPT"], True))
+
+    def test_the_status_file_is_whole_or_absent(self):
+        st = g.build_state(self.cfg, self.snap(), self.menu())
+        g.write_state(st)
+        back = g.json.loads(g.state_path().read_text())
+        self.assertEqual(back["headline"], "Memory is tight")
+        self.assertAlmostEqual(back["ts"], g.time.time(), delta=5)
+        self.assertEqual(sorted(g.os.listdir(g.LOG_DIR)), ["state.json"], "no half-written file left beside it")
+
+    def test_clicks_arrive_in_order_once_and_stale_ones_are_dropped(self):
+        d = g.requests_dir()
+        d.mkdir(parents=True)
+        now = g.time.time()
+        (d / "1000-pause.json").write_text(g.json.dumps({"action": "pause", "minutes": 30, "ts": now}))
+        (d / "1001-resume.json").write_text(g.json.dumps({"action": "resume", "ts": now}))
+        (d / "0999-old.json").write_text(g.json.dumps({"action": "reclaim", "ts": now - 3600}))
+        (d / "1002-broken.json").write_text("{not json")
+        (d / "1003-list.json").write_text("[1, 2]")
+        (d / ".1004-refresh.json.tmp").write_text(g.json.dumps({"action": "refresh", "ts": now}))
+        self.assertEqual([r["action"] for r in g.read_requests()], ["pause", "resume"])
+        self.assertEqual(g.os.listdir(d), [".1004-refresh.json.tmp"], "a file still being written is left alone")
+        self.assertEqual(g.read_requests(), [])
+
+    def test_pause_and_resume(self):
+        self.assertIsNone(g.pause_until())
+        _, menu = self.click({"action": "pause", "minutes": 60})
+        self.assertAlmostEqual(g.pause_until(), g.time.time() + 3600, delta=5)
+        self.assertIn("Paused for 1 hour:", menu["last_action"]["text"])
+        paused = g.build_state(self.cfg, self.snap(level=4, free=10), menu)
+        self.assertTrue(paused["paused"])
+        self.assertTrue(paused["headline"].startswith("Paused until "))
+        self.assertEqual((paused["issues"], paused["attention"]), ([], "none"), "paused means quiet")
+        self.click({"action": "resume"})
+        self.assertIsNone(g.pause_until())
+        g.PAUSE_PATH.write_text("2026-11-10T08:00:00")           # written by an older `guardian.py pause`
+        self.assertEqual(g.pause_until(), 0.0, "paused until resumed")
+
+    def test_settings_from_the_menu_are_a_short_fixed_list(self):
+        changed, _ = self.click({"action": "set", "key": "mode", "value": "act"})
+        self.assertTrue(changed)
+        self.click({"action": "set", "key": "notifications", "value": "none"})
+        self.click({"action": "set", "key": "refresh", "app": "ChatGPT", "value": "auto"})
+        self.click({"action": "set", "key": "archive_offer", "value": False})
+        cfg = g.load_config(g.CONFIG_PATH)
+        self.assertEqual((cfg["mode"], cfg["autopilot"], cfg["notify"], cfg["refresh"]["apps"]["ChatGPT"],
+                          cfg["archive"]["offer"]), ("act", True, False, "auto", False))
+        self.click({"action": "set", "key": "notifications", "value": "all"})
+        cfg = g.load_config(g.CONFIG_PATH)
+        self.assertEqual((cfg["notify"], cfg["notify_level"]), (True, "all"))
+        before = g.CONFIG_PATH.read_text()
+        for bad in ({"key": "refresh", "app": "Finder", "value": "auto"}, {"key": "mode", "value": "root"},
+                    {"key": "protect", "value": []}, {"key": "renderers.kill_under_pressure", "value": True}):
+            changed, menu = self.click(dict({"action": "set"}, **bad))
+            self.assertFalse(changed)
+            self.assertFalse(menu["last_action"]["ok"])
+        self.assertEqual(g.CONFIG_PATH.read_text(), before, "nothing else can be changed by a click")
+        g.undo_config_change()
+        cfg = g.load_config(g.CONFIG_PATH)
+        self.assertEqual((cfg["notify"], cfg["notify_level"]), (False, "important"), "and every click can be undone")
+
+    def test_a_click_refreshes_only_a_listed_app_and_reports_back(self):
+        ops = FakeOps()
+        changed, menu = self.click({"action": "refresh", "app": "ChatGPT", "force": True}, self.menu(ops=ops))
+        self.assertFalse(changed)
+        self.assertEqual([c[0] for c in ops.calls], ["quit", "term", "clear", "reopen"])
+        self.assertTrue(menu["last_action"]["ok"])
+        self.assertIn("ChatGPT: memory", menu["last_action"]["text"])
+        self.assertAlmostEqual(menu["refresh_state"]["ChatGPT"]["last"], g.time.time(), delta=5)
+        self.assertTrue(menu["dirty"], "the icon is told at once")
+        # its agent is working and the click did not say 'anyway': left alone
+        ops = FakeOps(age=30.0)
+        _, menu = self.click({"action": "refresh", "app": "ChatGPT"}, self.menu(ops=ops))
+        self.assertEqual(ops.calls, [])
+        self.assertFalse(menu["last_action"]["ok"])
+        ops = FakeOps()
+        _, menu = self.click({"action": "refresh", "app": "Google Chrome"}, self.menu(ops=ops))
+        self.assertEqual(ops.calls, [])
+        self.assertIn("not on the list", menu["last_action"]["text"])
+
+    def test_other_clicks(self):
+        import archive
+        saved = archive.volumes
+        archive.volumes = lambda: []
+        self.addCleanup(setattr, archive, "volumes", saved)
+        _, menu = self.click({"action": "archive"})
+        self.assertIn("Plug in an external drive first", menu["last_action"]["text"])
+        _, menu = self.click({"action": "rm -rf"})
+        self.assertIsNone(menu["last_action"], "an unknown action does nothing")
+        self.assertEqual([e["result"] for e in g.read_events(1) if e["kind"] == "menu"][-1], "unknown action; ignored")
+        busy = self.menu()
+        gate = g.threading.Event()
+        busy["background"].submit("census", gate.wait)
+        try:
+            g.handle_request({"action": "reclaim", "ts": g.time.time()}, self.cfg, busy)
+            self.assertIn("Busy with another job (census)", busy["last_action"]["text"])
+        finally:
+            gate.set()
+        _, menu = self.click({"action": "report"})
+        self.assertIn("# Guardian report", (g.LOG_DIR / "report-now.md").read_text())
+
+    def test_the_menu_bar_app_starts_at_login_and_stays_quit_when_quit(self):
+        text = g.menu_plist_text(g.Path("/Users/j/Applications/Guardian.app"))
+        self.assertIn("<string>/Users/j/Applications/Guardian.app/Contents/MacOS/Guardian</string>", text)
+        self.assertIn("<key>RunAtLoad</key><true/>", text)
+        self.assertIn("<key>SuccessfulExit</key><false/>", text)
+
+
 class AutopilotTests(unittest.TestCase):
     """Bounded self-tuning, config history/undo, and the hygiene schedule."""
 

@@ -27,10 +27,11 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 82 tests (policy + macOS parsers on output recorded from a real Mac) |
-| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 16 tests |
-| `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 16 tests, plus a round trip through a real USB drive |
-| `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 1 end-to-end run in real Chromium |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 93 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
+| `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
+| `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 17 tests, plus a real move of 5 GB to a USB drive |
+| `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 54 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
 
 The native menu bar app with a basic (dad) mode and an advanced mode is specified in
 [PLAN.md](PLAN.md), with the work order for building it on a Mac.
@@ -40,7 +41,8 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 114 tests, should say OK three times
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 127 tests, should say OK three times
+python3 guardian.py menu install       # the shield in the menu bar (builds a small app; needs Apple's Command Line Tools)
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
 python3 guardian.py install       # launchd agent: starts at login, restarts if it dies
@@ -90,6 +92,44 @@ autopilot: ON   mode=act   agent loaded: True   paused: False
   Last 24h: 1 pressure episodes, under pressure 4% of the time, 3 actions. Usual suspects: Google Chrome, agent:codex.
 ```
 
+## The shield in the menu bar
+
+```bash
+python3 guardian.py menu install     # build it, put it in ~/Applications, start it now and at login
+python3 guardian.py menu status
+python3 guardian.py menu uninstall   # the helper keeps running
+```
+
+One click on the shield shows what is going on and what you can do about it right now.
+
+- **The icon.** A plain shield means nothing needs you. An amber dot means there is a
+  problem with a fix, or a good moment to act (for example, ChatGPT has grown and its agent
+  is idle). A filled shield with a red dot means memory is critically low. Two bars mean
+  paused; a dashed shield means the helper is not running, with a button to start it.
+  Memory being merely tight puts no dot there: on a small Mac it always is.
+- **Needs a look.** Each entry says what is wrong and carries the one button that helps.
+- **Using the most memory.** The five biggest apps, in GB as Activity Monitor counts them.
+- **Fix it now.** Refresh a bloated AI app (it asks first, and warns if its agent was just
+  working), close duplicate Chrome tabs, clear rebuildable caches, move old work folders to
+  a drive. These work at any time, not only when guardian would have offered.
+- **Pause** for 30 minutes, an hour, three hours or until tomorrow; it resumes on its own.
+- **Settings**, the few that matter: how much guardian does on its own, how often it
+  notifies, what happens when ChatGPT grows, whether it offers to move old work folders.
+  Every change goes through the same history as `config --set`, so `config --undo` works.
+- **Today's report, a check-up, an AI diagnosis** open as text.
+
+The app is only a face: about 800 lines of Swift, 16 MB, no permissions. It reads one small
+file the helper writes after every sample (`~/Library/Logs/guardian/state.json`) and turns a
+click into a request file (`~/.config/guardian/requests/`) that the helper picks up within a
+second. So every action is still carried out, and logged, by the one program that has the
+permissions. The helper accepts a short fixed list of actions and settings; anything else in
+that folder is ignored. Requests older than ten minutes are dropped.
+
+Notifications changed with it. The first real day produced 43 notifications that all said
+memory was tight and offered nothing to do. Now a notification means a critical spell or
+something you can act on, and the icon carries the steady state. "Whenever memory is
+tight" in Settings brings the old behaviour back.
+
 ## Disk: what the free space was spent on
 
 Free disk is the ceiling for swap, so on a small Mac it matters as much as memory.
@@ -112,6 +152,11 @@ python3 guardian.py disk --big --in ~/Documents/Codex
 - **Caches cleared at the right moment.** An app's caches cannot be cleared while it runs,
   and AI apps and browsers are always running. In act mode, when one of them quits and less
   than 40 GB is free, its caches are cleared right then.
+- **Snapshots are compared only with their equals.** A snapshot taken without Full Disk
+  Access cannot see Mail, Messages, Photos or other apps' containers. On the first real Mac
+  the helper got that access at midday and the next alert said pictures had grown 14 GB and
+  app containers 8 GB; they had only been hidden. Each snapshot now records how much it
+  could see, and two that differ are not compared.
 - **Yours to decide.** Documents, Downloads, agent session histories and VM images are
   measured and listed, never touched. `disk --big` dates each folder by the newest change
   anywhere inside it, not by the folder's own date. Old work folders can move to an
@@ -294,14 +339,28 @@ already tight. The extension in `chrome-extension/` does the two things that mat
 - **Park** tabs untouched for three days: bookmarked under "Guardian Parked / date", then
   closed. Nothing is lost.
 
-It never touches the active tab, pinned tabs, tabs playing sound, or sites on the
-never-touch list (claude.ai, chatgpt.com, Meet, Zoom, Gmail, Calendar by default, because a
-conversation may be mid-run). Basic mode is one choice (gentle / normal / aggressive);
-advanced mode exposes the minutes and the list. The badge shows the tab count.
+It never touches the active tab, pinned tabs, private (incognito) tabs, tabs playing sound,
+or sites on the never-touch list (claude.ai, chatgpt.com, Meet, Zoom, Gmail, Calendar by
+default, because a conversation may be mid-run). Basic mode is one choice (gentle / normal /
+aggressive); advanced mode exposes the minutes and the list. The badge shows the tab count.
+
+Idle is measured from when you last had the tab in front. Chrome's own number is when you
+last switched *to* a tab, so version 0.1 could put a tab to sleep five minutes after you
+left it, however long you had been reading it; the extension now also remembers when it
+last saw each tab in front. Sleeping a tab reloads it when you come back, so text typed
+into a form and not submitted is lost; pin a tab, or add its site to the list, to keep it.
 
 Load it: chrome://extensions, turn on Developer mode, "Load unpacked", pick the
-`chrome-extension` folder. Test it: `node chrome-extension/test_extension.mjs` (launches a
-throwaway Chrome profile, needs nothing but Node 22 and Chrome).
+`chrome-extension` folder. After the files change (a `git pull`), click the round arrow on
+its card there so Chrome picks them up. Test the logic on any Mac, no install needed:
+
+```bash
+/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc chrome-extension/test_logic_jsc.js
+```
+
+54 checks against a stand-in for Chrome: every never-touch rule, the bookmark saved before
+a tab is closed, the counts. `node chrome-extension/test_extension.mjs` runs it end to end
+in a throwaway Chrome profile (needs Node 22).
 
 ## Claude and ChatGPT on this Mac
 
@@ -333,6 +392,7 @@ guardian.py chrome                 tab census: how many tabs, how many duplicate
 guardian.py chrome --close-duplicates   close duplicate URLs (all stay in History)
 guardian.py doctor                 check install, permissions, swap ceiling, login items
 guardian.py install | uninstall    launchd agent
+guardian.py menu install|uninstall|status   the shield in the menu bar
 guardian.py autopilot on|off|status   always running and optimizing: act mode + daily hygiene + bounded self-tuning
 guardian.py pause | resume
 guardian.py config [--set key=value ...] [--undo]
@@ -348,6 +408,9 @@ guardian.py config [--set key=value ...] [--undo]
 | `~/Library/Logs/guardian/samples.tsv` | one line per 30 s: level, free %, swap, compressor, load, disk, top 5 |
 | `~/Library/Logs/guardian/digest-YYYY-MM-DD.md` | daily report, written at 8 am (`digest_hour`) |
 | `~/Library/Logs/guardian/diagnosis-*.md` | what the AI said |
+| `~/Library/Logs/guardian/state.json` | what the helper last saw, for the menu bar icon |
+| `~/.config/guardian/requests/` | clicks from the menu bar, picked up within a second |
+| `~/Applications/Guardian.app` | the menu bar app |
 | `~/Library/Logs/guardian/disk-ledger.jsonl` | one disk measurement per line |
 | `~/Library/Logs/guardian/archive.jsonl` | every folder moved to a drive or brought back, with where it is |
 | `<drive>/Guardian Archive/<Mac>/...` | the moved folders, one `.tar` each |

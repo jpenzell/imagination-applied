@@ -2,7 +2,8 @@ async function refresh() {
   const tabs = await chrome.tabs.query({});
   document.getElementById("total").textContent = tabs.length;
   document.getElementById("awake").textContent = tabs.filter(t => !t.discarded).length;
-  const day = new Date().toISOString().slice(0, 10);
+  const now = new Date(), p = n => String(n).padStart(2, "0");   // local day, same key as background.js dayKey()
+  const day = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
   const { daily = {}, lastSweep } = await chrome.storage.local.get(["daily", "lastSweep"]);
   const d = daily[day] || { slept: 0, parked: 0 };
   document.getElementById("slept").textContent = d.slept;

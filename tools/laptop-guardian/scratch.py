@@ -285,7 +285,21 @@ def system_buckets(temp_dir: Path = None, vm_dir: Path = Path("/System/Volumes/V
     return out
 
 
-def ledger_entry(rows: list, buckets: list, free_gb, ts: float) -> dict:
+def entry_access(entry: dict) -> str:
+    """'full' or 'limited': how much of the disk this snapshot was allowed to read. A program
+    without Full Disk Access under-reads Mail, Messages, Photos and other apps' containers."""
+    return entry.get("access") or ("limited" if entry.get("unreadable") else "full")
+
+
+def comparable(a: dict, b: dict) -> bool:
+    """Two snapshots can be compared only if both saw the same amount of the disk. The first
+    real Mac's helper got Full Disk Access at midday; the next snapshot 'found' 14 GB of
+    pictures and 8 GB of app containers that had been there all along, and the alert said
+    they had grown."""
+    return entry_access(a) == entry_access(b)
+
+
+def ledger_entry(rows: list, buckets: list, free_gb, ts: float, access: str = None) -> dict:
     """One ledger line. A place that could not be read is listed under 'unreadable' and left
     out of 'items': unknown is not zero."""
     items = {r["name"]: r["mb"] for r in rows if not r.get("unreadable")}
@@ -294,12 +308,17 @@ def ledger_entry(rows: list, buckets: list, free_gb, ts: float) -> dict:
     blind = sorted(r["name"] for r in rows if r.get("unreadable"))
     if blind:
         entry["unreadable"] = blind
+    if access:
+        entry["access"] = access
     return entry
 
 
 def ledger_diff(old: dict, new: dict) -> dict:
     """What changed between two ledger entries. 'unexplained_mb' is the part of the change in
     free space that no measured place accounts for (positive: space went somewhere unseen)."""
+    if not comparable(old, new):
+        return {"from": old["ts"], "to": new["ts"], "used_mb": None, "changes": [], "unexplained_mb": None,
+                "unreadable": [], "incomparable": True}
     names = set(old["items"]) & set(new["items"])      # only what both snapshots really measured
     blind = sorted((set(old["items"]) ^ set(new["items"])) | set(old.get("unreadable", []))
                    | set(new.get("unreadable", [])))
@@ -320,6 +339,9 @@ def render_ledger_diff(diff: dict, min_mb: int = 100, top: int = 8) -> list:
         "free space unknown" if used is None else
         f"free space {'fell' if used > 0 else 'rose'} {abs(used) / 1024:.1f} GB")
     lines = [head]
+    if diff.get("incomparable"):
+        return [f"since {diff['from'][5:16].replace('T', ' ')}: not compared. One of the two snapshots was taken "
+                "without permission to read every folder, so what looks like growth was only hidden before."]
     shown = [c for c in diff["changes"] if abs(c[1]) >= min_mb][:top]
     for name, mb in shown:
         lines.append(f"    {sign(mb):>9}  {name}")

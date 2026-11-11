@@ -8,7 +8,8 @@
 // Never: the active tab in each window, pinned tabs, tabs playing sound, tabs on the
 // never-touch list (claude.ai and chatgpt.com by default: a conversation may be mid-run).
 //
-// Idle = time since Chrome last activated the tab (tab.lastAccessed, Chrome 121+).
+// Idle = time since the tab was last in front: the later of Chrome's tab.lastAccessed (when
+// it was last switched TO, Chrome 121+) and the last sweep that saw it active.
 
 const DEFAULTS = {
   enabled: true,
@@ -37,18 +38,32 @@ function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
+// A never-touch entry as a bare host: "www.Example.com", "https://example.com/page" and
+// "example.com:8080" all mean example.com.
+function siteOf(entry) {
+  return String(entry).trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+    .replace(/[\/?#].*$/, "").replace(/:\d+$/, "").replace(/^(\*\.|www\.)/, "");
+}
+
+// Local calendar day. (toISOString() is UTC: west of Greenwich "today" would end mid-evening.)
+function dayKey(d = new Date()) {
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 function untouchable(tab, settings) {
   if (!tab.url || !/^https?:/.test(tab.url)) return "internal";
   if (tab.active) return "active";
+  if (tab.incognito) return "private";   // a private tab's address must never end up in bookmarks
   if (tab.pinned) return "pinned";
   if (tab.audible) return "audible";
   const h = hostOf(tab.url);
-  if (settings.neverTouch.some(d => h === d || h.endsWith("." + d))) return "never-touch";
+  if (settings.neverTouch.some(e => { const d = siteOf(e); return d && (h === d || h.endsWith("." + d)); })) return "never-touch";
   return null;
 }
 
 async function parkFolder(settings) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dayKey();
   const [root] = await chrome.bookmarks.search({ title: settings.parkFolderName });
   const rootId = root ? root.id : (await chrome.bookmarks.create({ title: settings.parkFolderName })).id;
   const kids = await chrome.bookmarks.getChildren(rootId);
@@ -57,18 +72,37 @@ async function parkFolder(settings) {
 }
 
 // Exposed for tests and the popup: runSweep({now, sleepAfterMin, parkAfterHours}) -> stats
-async function runSweep(overrides = {}) {
+// One sweep at a time: a double click on "Tidy up now", or a click during the timed sweep,
+// must not bookmark the same tab twice or lose a count.
+let sweeping = Promise.resolve();
+function runSweep(overrides = {}) {
+  const run = sweeping.then(() => sweepOnce(overrides));
+  sweeping = run.catch(() => {});
+  return run;
+}
+
+async function sweepOnce(overrides) {
   const settings = { ...(await getSettings()), ...overrides };
   const stats = { looked: 0, slept: 0, parked: 0, skipped: {} };
   if (!settings.enabled) return stats;
   const now = overrides.now || Date.now();
   const tabs = await chrome.tabs.query({});
+  // tab.lastAccessed is when a tab was last switched TO, not when you left it. Remember when
+  // each tab was last seen active, so a tab you just left starts its idle clock from then.
+  // (Session storage survives worker restarts and is dropped, like tab ids, when Chrome quits.)
+  const { seenActive = {} } = await chrome.storage.session.get("seenActive");
+  const seen = {};
+  for (const tab of tabs) {
+    if (tab.active) seen[tab.id] = now;
+    else if (seenActive[tab.id]) seen[tab.id] = seenActive[tab.id];
+  }
+  await chrome.storage.session.set({ seenActive: seen });
   let folderId = null;
   for (const tab of tabs) {
     stats.looked++;
     const why = untouchable(tab, settings);
     if (why) { stats.skipped[why] = (stats.skipped[why] || 0) + 1; continue; }
-    const idleMin = (now - (tab.lastAccessed || now)) / 60000;
+    const idleMin = (now - Math.max(tab.lastAccessed || now, seen[tab.id] || 0)) / 60000;
     if (idleMin >= settings.parkAfterHours * 60) {
       try {
         folderId = folderId || await parkFolder(settings);
@@ -81,12 +115,12 @@ async function runSweep(overrides = {}) {
       catch (e) { stats.skipped.error = (stats.skipped.error || 0) + 1; }
     }
   }
-  const day = new Date().toISOString().slice(0, 10);
+  const day = dayKey();
   const { daily = {} } = await chrome.storage.local.get("daily");
   const d = daily[day] || { slept: 0, parked: 0 };
   d.slept += stats.slept; d.parked += stats.parked;
   daily[day] = d;
-  for (const k of Object.keys(daily)) if (k < new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)) delete daily[k];
+  for (const k of Object.keys(daily)) if (k < dayKey(new Date(Date.now() - 14 * 86400000))) delete daily[k];
   await chrome.storage.local.set({ daily, lastSweep: { at: Date.now(), ...stats } });
   await updateBadge();
   return stats;
