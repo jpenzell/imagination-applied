@@ -176,7 +176,13 @@ DEFAULT_CONFIG = {
     # Lag: how fast memory is being moved between RAM, the compressor and the disk. This is
     # what slowness on a small Mac actually is. The first real one was swapping in 160-190 MB
     # and decompressing 650-1400 MB every second while macOS still said "level 2, 26% free".
-    "lag": {"swapin_mb_s": 30, "decompress_mb_s": 300, "severe_swapin_mb_s": 100, "severe_decompress_mb_s": 800},
+    # Calibrated on the first hour of readings (91 samples of heavy use): with lower bars the
+    # level was "slow" or worse 97% of the time, which says nothing. Reading memory back from
+    # disk is what you feel, so it leads; squeezing alone has to be very heavy to count. These
+    # bars gave 46% fine, 25% slow, 28% very slow over that hour. The level may rise at once
+    # and falls only after `hold_samples` calmer readings in a row.
+    "lag": {"swapin_mb_s": 40, "decompress_mb_s": 900, "severe_swapin_mb_s": 100, "severe_decompress_mb_s": 1400,
+            "hold_samples": 2},
     # A read-only status page on this Mac only (127.0.0.1) that the Chrome extension asks once
     # a minute, so it can put background tabs to sleep while the Mac is struggling.
     "chrome": {"step_aside": True, "port": 47613},
@@ -793,8 +799,34 @@ def vm_rates(prev, cur, dt: float):
     return {VM_COUNTERS[k]: round((cur[k] - prev[k]) / dt, 1) for k in cur}
 
 
+LAG_ORDER = {"none": 0, "slow": 1, "severe": 2}
+
+
+def hold_lag(state: dict, level: str, hold: int = 2) -> str:
+    """Steady the level: it rises the moment things get worse, and comes down only after
+    `hold` calmer readings in a row, so the shield does not flicker every half minute."""
+    cur = state.get("level", "none")
+    if LAG_ORDER[level] >= LAG_ORDER[cur]:
+        state.update(level=level, lower=0)
+    else:
+        state["lower"] = state.get("lower", 0) + 1
+        if state["lower"] >= hold:
+            state.update(level=level, lower=0)
+    return state["level"]
+
+
+def lag_phrase(sample: dict, cfg: dict) -> str:
+    """The cause in plain words, naming whichever of the two is really the trouble."""
+    if (sample.get("swapin_mb_s") or 0) >= cfg["lag"]["swapin_mb_s"]:
+        return f"{sample['swapin_mb_s']:.0f} MB of memory a second is being read back from disk"
+    return f"{sample.get('decompress_mb_s') or 0:.0f} MB of memory a second is being squeezed and unsqueezed to make room"
+
+
 def lag_level(sample: dict, cfg: dict) -> str:
-    """'severe', 'slow' or 'none': is memory being shuffled fast enough to feel?"""
+    """'severe', 'slow' or 'none': is memory being shuffled fast enough to feel? A sample
+    that already carries the steadied level (the helper's own loop sets it) is taken at its word."""
+    if sample.get("lag") in LAG_ORDER:
+        return sample["lag"]
     lc = cfg.get("lag") or {}
     si, de = sample.get("swapin_mb_s"), sample.get("decompress_mb_s")
     if si is None or de is None or not lc:
@@ -821,10 +853,13 @@ def sample_system() -> dict:
         raw = read_mac_raw()
         parse_mac_sample(raw, s)
         cur = vm_counters(raw.get("vm_stat"))
-        dt = s["ts"] - _vm_prev.get("ts", 0.0)
-        if dt >= 5 or not _vm_prev:          # two readings a second apart would only be noise
-            _vm_prev["rates"] = vm_rates(_vm_prev.get("c"), cur, dt)
-            _vm_prev.update(c=cur, ts=s["ts"])
+        hist = _vm_prev.setdefault("hist", [])
+        if not hist or s["ts"] - hist[-1][0] >= 5:      # two readings a second apart would only be noise
+            # measure over about a minute (two samples back) when there is one, else since the last reading
+            base = next((h for h in hist if s["ts"] - h[0] <= 75), hist[-1] if hist else None)
+            _vm_prev["rates"] = vm_rates(base[1], cur, s["ts"] - base[0]) if base else None
+            hist.append((s["ts"], cur))
+            del hist[:-3]
         s.update(_vm_prev.get("rates") or {})
     else:
         mi = {}
@@ -964,7 +999,7 @@ class Engine:
             top = "; ".join(f"{g['key']} {g['rss_mb'] / 1024:.1f}GB" for g in groups[:cfg["top_n"]])
             hint = " Click the Guardian shield in the menu bar for one-click fixes." \
                 if critical and menu_installed() else ""
-            lead = (f"The Mac is slow: {sample['swapin_mb_s']:.0f} MB a second of memory is going to and from disk"
+            lead = (f"The Mac is slow: {lag_phrase(sample, cfg)}"
                     if lag == "severe" and level < 4 else f"Memory {pressure_word(level)}")
             decisions.append(Decision("notify", None, f"{lead} (free {free}%). Biggest: {top}.{hint}",
                                       "pressure", "crit" if critical else "warn"))
@@ -2610,10 +2645,15 @@ def start_status_server(port: int):
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path.split("?")[0] != "/status":
+            path, _, query = self.path.partition("?")
+            if path != "/status":
                 self.send_error(404)
                 return
             LINK["seen"] = time.time()
+            m = re.fullmatch(r"aside=(\d{1,4})&looked=(\d{1,4})", query)
+            if m:                           # the extension saying what it just did; two small numbers
+                LINK["aside_total"] = LINK.get("aside_total", 0) + int(m.group(1))
+                log_event("chrome", stepped_aside=int(m.group(1)), tabs_looked_at=int(m.group(2)))
             body = json.dumps({"v": 1, "lag": LINK["lag"], "ts": LINK["ts"]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -2701,10 +2741,7 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
     early = menu.get("early") or {}
     def why_slow() -> str:
         """In plain words: how much is being shuffled, and who has the RAM."""
-        if s["swapin_mb_s"] >= cfg["lag"]["swapin_mb_s"]:
-            text = f"{s['swapin_mb_s']:.0f} MB of memory a second is being read back from disk."
-        else:
-            text = f"{s['decompress_mb_s']:.0f} MB of memory a second is being squeezed and unsqueezed to make room."
+        text = lag_phrase(s, cfg) + "."
         front = snap.get("front") or ""
         fg = next((g for g in groups if g["key"] == front), None)
         if fg and fg["rss_mb"] >= 500:
@@ -2844,6 +2881,7 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
         "lag": {"level": lag_level(s, cfg), "swapin_mb_s": s.get("swapin_mb_s"),
                 "decompress_mb_s": s.get("decompress_mb_s")},
         "chrome_link_age": (round(time.time() - LINK["seen"]) if LINK["seen"] else None),
+        "chrome_aside": LINK.get("aside_total", 0),
         "issues": issues, "busy": (bg.name or "") if bg is not None and bg.busy() else "",
         "last_action": menu.get("last_action"),
         "refreshable": [a for a, m in (rcfg.get("apps") or {}).items() if a in running],
@@ -3244,6 +3282,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
     if not once and (cfg.get("chrome") or {}).get("step_aside"):
         start_status_server(cfg["chrome"]["port"])
     last_lag_log = 0.0
+    lag_state = {}
     menu["homes"] = None
     reminded = max([datetime.fromisoformat(e["ts"]).timestamp() for e in read_events(24 * 30)
                     if e.get("kind") == "archive" and e.get("phase") == "one-copy"] or [0.0])
@@ -3338,7 +3377,10 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 dcfg, t_now = cfg["disk"], time.time()
                 free_gb = snap["sample"].get("disk_free_gb")
                 if free_gb is not None:
-                    disk_hist.append((t_now, free_gb))
+                    # Swap files live on this disk and breathe by gigabytes (a refresh returned 5 GB,
+                    # the next hour took 3 back, and the alert called that "disk space fell"). Watch
+                    # what would be free without them, so only real data counts as a drop.
+                    disk_hist.append((t_now, free_gb + (snap["sample"].get("swap_total_mb") or 0) / 1024))
                 fell = disk_drop(list(disk_hist), t_now, dcfg["alert_window_minutes"] * 60, dcfg["alert_drop_gb"])
                 if fell and t_now - last_drop_alert > 3 * 3600 and not background.busy():
                     last_drop_alert = last_ledger = t_now
@@ -3392,7 +3434,8 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                     notify("Guardian", digest_oneliner(24), cfg)
             if not simulate:
                 # ---- how slow is it really, and who has the RAM
-                lag_now = lag_level(snap["sample"], cfg)
+                lag_now = hold_lag(lag_state, lag_level(snap["sample"], cfg), cfg["lag"].get("hold_samples", 2))
+                snap["sample"]["lag"] = lag_now
                 LINK.update(lag=lag_now if not snap["quiet"] else "none", ts=time.time())
                 if lag_now != "none":
                     snap["front"] = MacAppOps().front_app() if IS_MAC else ""

@@ -620,7 +620,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(sectionTitle("Using the most memory"))
         for t in s.top.prefix(5) {
             let names = ["agent:claude": "Claude Code", "agent:codex": "Codex (command line)"]
-            menu.addItem(infoItem(names[t.key] ?? t.key.replacingOccurrences(of: "agent:", with: ""),
+            var shown = names[t.key] ?? t.key.replacingOccurrences(of: "agent:", with: "")
+            if shown.hasSuffix(" helpers (MCP servers)") {      // work an AI app started: scripts, tools, servers
+                shown = "Jobs started by " + shown.replacingOccurrences(of: " helpers (MCP servers)", with: "")
+            }
+            menu.addItem(infoItem(shown,
                                   String(format: "%.1f GB", t.gb)))
         }
 

@@ -117,6 +117,9 @@ async function pulse(overrides = {}) {
       await chrome.storage.session.set({ lastAside: now });
       stats = await runSweep({ ...overrides, stepAside: true });
       link.steppedAside = stats.slept;
+      // Tell Guardian what was just done (two small numbers), so its diary shows Chrome stepping aside.
+      try { await fetch(`http://127.0.0.1:${settings.guardianPort}/status?aside=${stats.slept}&looked=${stats.looked}`, { cache: "no-store" }); }
+      catch (e) {}
     }
   }
   await chrome.storage.local.set({ guardian: link });

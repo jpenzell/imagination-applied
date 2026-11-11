@@ -141,7 +141,11 @@ five tabs still working, held more.
 
 - **The lag meter.** Guardian reads how much memory is moved between RAM, the compressor and
   the disk per second (from `vm_stat`, every sample) and uses that as its definition of
-  trouble: `slow` from 30 MB/s swapped in or 300 MB/s decompressed, `severe` from 100 or 800.
+  trouble: `slow` from 40 MB/s swapped in or 900 MB/s decompressed, `severe` from 100 or
+  1,400, measured over about a minute. Those bars come from the first hour of readings: with
+  lower ones the level was slow or worse 97% of the time, which tells you nothing; these gave
+  46% fine, 25% slow, 28% very slow. Reading back from disk is what you feel, so it leads. The
+  level rises at once and comes down only after two calmer readings in a row.
   Severe counts as critical everywhere: the shield, the notification, the automatic trim.
   The rates go into `samples.tsv` as two extra columns, and the thresholds are among the
   settings a diagnosis may tune.
@@ -155,8 +159,9 @@ five tabs still working, held more.
   five minutes, and parks nothing. It is more careful here than in its normal sweep: besides
   the active, pinned, private, sound-playing and never-touch tabs it also leaves any tab in a
   tab group (you or an agent put it there, and an agent may be working in it) and any tab
-  still loading. If the helper is not running the extension behaves exactly as before. It can
-  be switched off on the extension's settings page, or with `chrome.step_aside` in the config.
+  still loading. After stepping aside it tells the helper how many tabs it slept, so the
+  diary shows it (`"kind": "chrome", "stepped_aside": N`). If the helper is not running the
+  extension behaves exactly as before. It can be switched off on the extension's settings page, or with `chrome.step_aside` in the config.
 
 ## Getting ahead of a bad spell
 
@@ -214,7 +219,8 @@ python3 guardian.py disk --big --in ~/Documents/Codex
   explains. The first real Mac lost 8 GB in two hours while every home folder guardian
   watched grew 0.1 GB; it was leftover temp folders, which is why the ledger looks there.
 - **A fast-drop alert.** When free space falls 3 GB within an hour, guardian measures and
-  names what grew.
+  names what grew. Swap files are left out of that sum: they live on the same disk and
+  breathe by gigabytes with memory pressure, and an early version reported that as lost space.
 - **Caches cleared at the right moment.** An app's caches cannot be cleared while it runs,
   and AI apps and browsers are always running. In act mode, when one of them quits and less
   than 40 GB is free, its caches are cleared right then.

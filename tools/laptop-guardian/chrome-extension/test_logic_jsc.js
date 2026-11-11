@@ -503,7 +503,8 @@ test("step aside: the Mac is struggling and you are elsewhere: idle background t
      { front: "untouched", idle: "asleep", fresh: "untouched", ancient: "asleep", pinned: "untouched", sound: "untouched",
        ai: "untouched", grouped: "untouched", loading: "untouched", secret: "untouched" }, "fates");
   eq(c.ops.filter(o => o.op === "bookmarks.create").length, 0, "nothing is parked in a hurry, not even a tab idle for days");
-  eq(c.state.asked, ["http://127.0.0.1:47613/status"], "asked Guardian, and nobody else");
+  eq(c.state.asked, ["http://127.0.0.1:47613/status", "http://127.0.0.1:47613/status?aside=2&looked=10"],
+     "asked Guardian, told it what was done, and talked to nobody else");
   eq([out.stats.slept, out.stats.parked, out.stats.skipped.grouped, out.stats.skipped.loading], [2, 0, 1, 1], "stats");
   eq(c.storage.local.data.daily[today()], { slept: 2, parked: 0, aside: 2 }, "counted for today");
   eq([c.storage.local.data.guardian.ok, c.storage.local.data.guardian.lag, c.storage.local.data.guardian.steppedAside], [true, "severe", 2], "link recorded");

@@ -1910,10 +1910,20 @@ class LagTests(unittest.TestCase):
         lvl = lambda si, de: g.lag_level({"swapin_mb_s": si, "decompress_mb_s": de}, self.cfg)
         self.assertEqual(lvl(161.9, 652.3), "severe", "the first real reading")
         self.assertEqual(lvl(187.7, 1392.3), "severe")
-        self.assertEqual(lvl(12.0, 850.0), "severe", "squeezing alone can be the whole lag")
-        self.assertEqual(lvl(45.0, 120.0), "slow")
-        self.assertEqual(lvl(4.0, 310.0), "slow")
+        self.assertEqual(lvl(12.0, 1450.0), "severe", "squeezing alone counts only when it is very heavy")
+        self.assertEqual(lvl(45.0, 120.0), "slow", "reading back from disk is what you feel, so it leads")
+        self.assertEqual(lvl(4.0, 950.0), "slow")
+        self.assertEqual(lvl(12.1, 388.5), "none", "ordinary for this Mac at work: the first bars called this slow 97% of an hour")
+        self.assertEqual(lvl(18.0, 492.0), "none")
         self.assertEqual(lvl(3.0, 40.0), "none")
+        self.assertEqual(g.lag_level({"lag": "slow", "swapin_mb_s": 500.0, "decompress_mb_s": 5000.0}, self.cfg), "slow",
+                         "a sample that carries the steadied level is taken at its word")
+        # the level rises at once and comes down only after two calmer readings in a row
+        st, seen = {}, []
+        for raw in ["none", "slow", "none", "slow", "severe", "slow", "slow", "none", "severe", "none", "none", "none"]:
+            seen.append(g.hold_lag(st, raw, 2))
+        self.assertEqual(seen, ["none", "slow", "slow", "slow", "severe", "severe", "slow", "slow", "severe", "severe",
+                                "none", "none"])
         self.assertEqual(g.lag_level({"swapin_mb_s": None, "decompress_mb_s": None}, self.cfg), "none", "no reading yet")
         self.assertEqual(g.lag_level({}, self.cfg), "none")
         auto, review = g.split_tuning({"lag": {"swapin_mb_s": 50, "severe_swapin_mb_s": 5}})
@@ -1932,8 +1942,11 @@ class LagTests(unittest.TestCase):
         g.classify(procs, self.cfg, UID)
         said = [d for d in g.Engine(self.cfg).step(self.real(), procs) if d.action == "notify" and d.cls == "pressure"]
         self.assertEqual(len(said), 1, "the default is to speak up only when it is serious; this is")
-        self.assertIn("The Mac is slow: 162 MB a second of memory is going to and from disk (free 26%). Biggest: ChatGPT 5.3GB.",
+        self.assertIn("The Mac is slow: 162 MB of memory a second is being read back from disk (free 26%). Biggest: ChatGPT 5.3GB.",
                       said[0].reason)
+        heavy = dict(self.real(), swapin_mb_s=12.0, decompress_mb_s=1450.0)
+        said = [d for d in g.Engine(self.cfg).step(heavy, procs) if d.action == "notify" and d.cls == "pressure"]
+        self.assertIn("The Mac is slow: 1450 MB of memory a second is being squeezed and unsqueezed to make room", said[0].reason)
         self.assertEqual(said[0].severity, "crit")
 
     def test_the_menu_says_why_it_is_slow_and_who_has_the_ram(self):
@@ -1956,10 +1969,16 @@ class LagTests(unittest.TestCase):
                          ("Slowing down: memory is being shuffled", "warn", "lag", "Things are slowing down"))
         self.assertIn("Claude, in front, has 15% of its memory in RAM. Google Chrome, in the background, is holding 0.8 GB",
                       st["issues"][0]["detail"])
-        squeezing = dict(self.real(), swapin_mb_s=12.1, decompress_mb_s=388.5)      # 00:35 on the first real night
+        squeezing = dict(self.real(), swapin_mb_s=12.1, decompress_mb_s=950.0)
         st = g.build_state(self.cfg, {"sample": squeezing, "groups": groups, "quiet": "", "front": "TextEdit"}, menu)
         self.assertTrue(st["issues"][0]["detail"].startswith(
-            "388 MB of memory a second is being squeezed and unsqueezed to make room. Google Chrome, in the background,"))
+            "950 MB of memory a second is being squeezed and unsqueezed to make room. Google Chrome, in the background,"))
+        ordinary = dict(self.real(), swapin_mb_s=12.1, decompress_mb_s=388.5)       # 00:35 on the first real night
+        st = g.build_state(self.cfg, {"sample": ordinary, "groups": groups, "quiet": "", "front": "TextEdit"}, menu)
+        self.assertEqual((st["headline"], st["lag"]["level"]), ("Memory is tight", "none"))
+        held = dict(ordinary, lag="severe")                                         # the loop is still holding the level
+        st = g.build_state(self.cfg, {"sample": held, "groups": groups, "quiet": "", "front": "ChatGPT"}, menu)
+        self.assertEqual((st["lag"]["level"], st["attention"]), ("severe", "crit"))
         calm = dict(self.real(), swapin_mb_s=2.0, decompress_mb_s=30.0)
         st = g.build_state(self.cfg, {"sample": calm, "groups": groups, "quiet": ""}, menu)
         self.assertEqual((st["headline"], st["lag"]["level"]), ("Memory is tight", "none"))
@@ -2000,6 +2019,12 @@ class LagTests(unittest.TestCase):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5)
         self.assertEqual(cm.exception.code, 404)
         self.assertIsNone(g.start_status_server(port), "a taken port is reported, not fatal")
+        # the extension may add two small numbers saying what it just did; anything else is ignored
+        g.LINK.pop("aside_total", None)
+        for query in ("aside=3&looked=9", "aside=2&looked=7", "aside=99999&looked=1", "aside=1&looked=2&x=rm", "name=josh"):
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/status?{query}", timeout=5).read()
+        said = [(e["stepped_aside"], e["tabs_looked_at"]) for e in g.read_events(1) if e["kind"] == "chrome"]
+        self.assertEqual((said, g.LINK["aside_total"]), ([(3, 9), (2, 7)], 5))
 
 
 class AutopilotTests(unittest.TestCase):
