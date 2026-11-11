@@ -711,6 +711,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(ClosureItem("Agent threads and their size") { [weak self] in
             self?.send("threads", note: "Opening the list of threads...")
         })
+        menu.addItem(ClosureItem("Start a fresh thread from a long one\u{2026}") { [weak self] in
+            self?.send("handoff", note: "Putting a hand-off request on your clipboard...")
+        })
         menu.addItem(ClosureItem("Today's report") { [weak self] in self?.send("report", note: "Opening the report...") })
         menu.addItem(ClosureItem("Run a check-up") { [weak self] in self?.send("doctor", note: "Running the check-up...") })
         menu.addItem(ClosureItem("Ask the AI what is slowing this Mac\u{2026}") { [weak self] in

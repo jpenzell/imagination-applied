@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 111 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 117 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
@@ -152,6 +152,16 @@ five tabs still working, held more.
 - **Why, in plain words.** The menu's first entry says how much is being read back from disk,
   how much of the app in front is actually in RAM, and which background app is holding the
   most. `doctor` prints the live rate.
+- **Who is behind it.** The biggest app is not always the one making the Mac shuffle. Guardian
+  reads each process's page-fault counter (how often it reached for memory that was not in
+  RAM; `proc_pidinfo`, under a millisecond for 500 processes) and adds the growth up per app.
+  Checked against the kernel's own totals on the first real Mac: all processes together
+  faulted about 10,000 times a second while 7,000 pages a second were unsqueezed. When one
+  app is behind a third or more of it, the menu names it and says whether it is in front or
+  in the background. The top three shares go into `samples.tsv` (`busiest`) and into each
+  `lag` line of the diary, which is the evidence for deciding whether pausing background
+  apps during a slow spell would help. Faults also count freshly allocated memory, so an app
+  that is busy allocating shows up too; that is also pressure, but it is not the same thing.
 - **Chrome steps aside.** The helper serves one read-only line of status on this Mac only
   (`http://127.0.0.1:47613/status`: `{"lag": "none" | "slow" | "severe"}`; no names, nothing
   private). The extension asks once a minute. When the Mac is struggling and no Chrome window
@@ -189,17 +199,29 @@ python3 guardian.py threads         # agent threads written recently, with the s
   nothing that names their thread, so one serving the thread in use can be among those
   closed. For that reason trimming on its own is a switch that starts off ("When memory
   fills up fast: Trim idle helpers on its own" in the menu's Settings). Switched on, and in
-  autopilot, guardian trims when the early warning fires or memory is critical, at most
-  once every half hour, and says what it did.
+  autopilot, guardian trims when the early warning fires, when the Mac is already slow, or
+  when memory is critical, at most once every half hour. What it did stays in the menu; a
+  banner each time only if notifications are set to "all" (it ran three times the first
+  afternoon).
 - **Flag heavy threads.** The Codex engine holding a thread with a 1.2 GB history open was
   itself using 1.1 GB. Guardian lists a thread once its history passes 300 MB, says so once
-  in a notification, and counts how many threads are in use at the same time. It cannot
-  start a fresh thread for you; it tells you when one would help.
+  in a notification, and counts how many threads are in use at the same time.
+- **Start fresh from a long thread.** "Start a fresh thread from a long one" in the menu puts
+  a request for a hand-off note on the clipboard and opens four steps: paste it into the
+  long thread, copy the note it writes, paste that into a new thread, carry on there.
+  Guardian does not drive the app or touch the thread; nothing is deleted.
 - **Warn early.** Swap climbing 1 GB within ten minutes came before 19 of that day's 25
   critical spells, usually by 5 to 12 minutes; 9 of its 16 firings were followed by one.
   When it fires, the shield gets its amber dot and the menu offers the gentlest fix first:
   trim if there is something to trim, otherwise a refresh. No notification; the dot is
   enough for a signal that is right a little over half the time.
+  A second day sharpened it. Swap also jumps when macOS has just moved a batch of squeezed
+  memory to disk, which frees RAM: 4 of that day's 11 warnings came with free memory at
+  44 to 52% and none of the four was followed by a slow spell, while 6 of the other 7 were.
+  So the warning now needs free memory below 40% (`early.max_free_pct`).
+- **One spell, one episode.** macOS flips between "normal" and "warn" every half minute on a
+  full Mac, and the diary counted each flip: 46 "episodes" in a day, many 31 seconds long.
+  An episode now ends after four calm readings in a row (`episode_end_samples`).
 
 ## Disk: what the free space was spent on
 
@@ -437,14 +459,17 @@ into a form and not submitted is lost; pin a tab, or add its site to the list, t
 
 Load it: chrome://extensions, turn on Developer mode, "Load unpacked", pick the
 `chrome-extension` folder. After the files change (a `git pull`), click the round arrow on
-its card there so Chrome picks them up. From 0.3.0 the extension may also talk to one
+its card there so Chrome picks them up. From 0.3.2 the extension says which version it is
+when it asks, so when Chrome is still running an older copy than the folder holds, the
+shield's menu says so and has a button that opens that page; `doctor` prints both versions.
+From 0.3.0 the extension may also talk to one
 address, Guardian's status page on this Mac (`127.0.0.1:47613`), and nowhere else. Test the logic on any Mac, no install needed:
 
 ```bash
 /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc chrome-extension/test_logic_jsc.js
 ```
 
-54 checks against a stand-in for Chrome: every never-touch rule, the bookmark saved before
+63 checks against a stand-in for Chrome: every never-touch rule, the bookmark saved before
 a tab is closed, the counts. `node chrome-extension/test_extension.mjs` runs it end to end
 in a throwaway Chrome profile (needs Node 22).
 

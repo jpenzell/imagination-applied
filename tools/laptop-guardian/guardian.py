@@ -73,6 +73,8 @@ DEFAULT_CONFIG = {
     # "important": speak up for a critical spell and for things you can act on. "all": also
     # every time memory is merely tight, which on a small Mac is most of the day.
     "notify_level": "important",
+    # a pressure episode ends after this many calm readings in a row (1 = the first calm one)
+    "episode_end_samples": 4,
     "notify_cooldown_seconds": 600,
     "pressure_warn_level": 2,
     "free_pct_floor": 8,
@@ -172,7 +174,10 @@ DEFAULT_CONFIG = {
               "many_threads": 4},
     # Early warning: swap climbing this fast came before 19 of the first real day's 25
     # critical spells, usually by 5 to 12 minutes.
-    "early": {"swap_climb_mb": 1000, "minutes": 10, "hold_minutes": 10},
+    # max_free_pct: swap also jumps when macOS has just moved a batch of squeezed memory to disk,
+    # which FREES RAM. On the first real day 4 of 11 warnings were that relief (free 44-52%) and
+    # none of the four was followed by a slow spell; 6 of the other 7 were.
+    "early": {"swap_climb_mb": 1000, "minutes": 10, "hold_minutes": 10, "max_free_pct": 40},
     # Lag: how fast memory is being moved between RAM, the compressor and the disk. This is
     # what slowness on a small Mac actually is. The first real one was swapping in 160-190 MB
     # and decompressing 650-1400 MB every second while macOS still said "level 2, 26% free".
@@ -353,7 +358,7 @@ def run_hygiene(cfg: dict, sample: dict, running: set, dry_run: bool = False) ->
 
 class Proc:
     __slots__ = ("pid", "ppid", "pgid", "uid", "cpu", "rss_kb", "res_kb", "etime_s", "cputime_s",
-                 "comm", "args", "app", "cls", "key", "is_gui", "chrome_type")
+                 "comm", "args", "app", "cls", "key", "is_gui", "chrome_type", "faults")
 
     def __init__(self, pid, ppid, pgid, uid, cpu, rss_kb, etime_s, cputime_s, comm, args):
         self.pid = pid
@@ -372,6 +377,7 @@ class Proc:
         self.key = comm
         self.is_gui = False
         self.chrome_type = None
+        self.faults = None          # page faults since it started (who is touching memory)
 
     @property
     def rss_mb(self) -> float:
@@ -503,8 +509,16 @@ class _RusageInfoV2(ctypes.Structure):
         "ri_diskio_bytesread", "ri_diskio_byteswritten")]
 
 
-def phys_footprint_kb(pid: int):
-    """Physical footprint in KB (the number Activity Monitor shows), or None when unreadable."""
+class _TaskInfo(ctypes.Structure):
+    """proc_taskinfo from <sys/proc_info.h>: six 64-bit sizes and times, then twelve 32-bit counters."""
+    _fields_ = [(n, ctypes.c_uint64) for n in ("virtual_size", "resident_size", "total_user", "total_system",
+                                               "threads_user", "threads_system")] + \
+               [(n, ctypes.c_int32) for n in ("policy", "faults", "pageins", "cow_faults", "messages_sent",
+                                              "messages_received", "syscalls_mach", "syscalls_unix", "csw",
+                                              "threadnum", "numrunning", "priority")]
+
+
+def _libproc_handle():
     global _libproc
     if not IS_MAC:
         return None
@@ -513,15 +527,61 @@ def phys_footprint_kb(pid: int):
             lib = ctypes.CDLL("/usr/lib/libproc.dylib")
             lib.proc_pid_rusage.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.POINTER(_RusageInfoV2)]
             lib.proc_pid_rusage.restype = ctypes.c_int
+            lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+            lib.proc_pidinfo.restype = ctypes.c_int
             _libproc = lib
         except (OSError, AttributeError):
             _libproc = False
-    if not _libproc:
+    return _libproc or None
+
+
+def phys_footprint_kb(pid: int):
+    """Physical footprint in KB (the number Activity Monitor shows), or None when unreadable."""
+    lib = _libproc_handle()
+    if not lib:
         return None
     info = _RusageInfoV2()
-    if _libproc.proc_pid_rusage(pid, 2, ctypes.byref(info)) != 0:   # 2 = RUSAGE_INFO_V2
+    if lib.proc_pid_rusage(pid, 2, ctypes.byref(info)) != 0:   # 2 = RUSAGE_INFO_V2
         return None
     return int(info.ri_phys_footprint // 1024)
+
+
+def page_faults(pid: int):
+    """How often this process has reached for memory that was not in RAM, counted since it
+    started (a 32-bit counter that wraps), or None when unreadable. The size of an app says who
+    owns the memory; the growth of this number says who is making the Mac shuffle it. Measured
+    on the first real Mac: all processes together faulted about 10,000 times a second while the
+    kernel unsqueezed 7,000 pages a second, so the two move together."""
+    lib = _libproc_handle()
+    if not lib:
+        return None
+    info = _TaskInfo()
+    if lib.proc_pidinfo(pid, 4, 0, ctypes.byref(info), ctypes.sizeof(info)) != ctypes.sizeof(info):   # 4 = PROC_PIDTASKINFO
+        return None
+    return info.faults & 0xFFFFFFFF
+
+
+def fault_blame(prev: dict, procs: list, dt: float, top: int = 3) -> list:
+    """Which apps did the reaching since the last look: [{"key", "share" (percent), "per_s"}],
+    busiest first. prev is {pid: count} and is brought up to date. A pid seen for the first
+    time proves nothing yet, and a counter that went backwards is a reused pid."""
+    per, counts = {}, {}
+    for p in procs:
+        f = getattr(p, "faults", None)
+        if f is None:
+            continue
+        counts[p.pid] = f
+        if p.pid in prev:
+            d = (f - prev[p.pid]) & 0xFFFFFFFF
+            if 0 < d < 0x40000000:
+                per[p.key] = per.get(p.key, 0) + d
+    prev.clear()
+    prev.update(counts)
+    total = sum(per.values())
+    if total <= 0 or dt <= 0:
+        return []
+    rows = sorted(per.items(), key=lambda kv: -kv[1])[:top]
+    return [{"key": k, "share": round(100 * v / total), "per_s": round(v / dt)} for k, v in rows]
 
 
 def list_processes() -> list:
@@ -533,6 +593,7 @@ def list_processes() -> list:
         fp = phys_footprint_kb(p.pid)
         if fp:
             p.rss_kb = fp
+        p.faults = page_faults(p.pid)
     return procs
 
 
@@ -925,6 +986,7 @@ class Engine:
         self.cfg = cfg
         self.track = {}         # pid -> dict(first_seen, etime0, cputime0, hot_since, idle_since, mem_since)
         self.episode = None     # dict when under pressure
+        self.calm = 0           # calm readings in a row while an episode is open
         self.episodes_today = 0
         self.day = None
         self.last_notify = {}   # key -> ts
@@ -978,10 +1040,17 @@ class Engine:
                                       f"pressure episode started ({pressure_word(level)}, free {free}%)",
                                       "episode", "warn"))
         elif under_pressure and self.episode is not None:
+            self.calm = 0
             self.episode["peak_level"] = max(self.episode["peak_level"], level)
             if free is not None and (self.episode["min_free"] is None or free < self.episode["min_free"]):
                 self.episode["min_free"] = free
+        elif not under_pressure and self.episode is not None and \
+                self.calm + 1 < cfg.get("episode_end_samples", 1):
+            # macOS flips between "normal" and "warn" every half minute on a full Mac. The first
+            # real day logged 46 "episodes", many 31 seconds apart; one spell is one episode.
+            self.calm += 1
         elif not under_pressure and self.episode is not None:
+            self.calm = 0
             dur = int(now - self.episode["start"])
             top = ", ".join(f"{g['key']} {g['rss_mb']}MB" for g in self.episode["top"][:3])
             decisions.append(Decision("log", None,
@@ -1143,13 +1212,14 @@ def log_sample(sample: dict, groups: list):
     with SAMPLES_PATH.open("a") as f:
         if new:
             f.write("ts\tlevel\tfree_pct\tswap_used_mb\tcompressed_mb\tload1\tdisk_free_gb\ttop"
-                    "\tswapin_mb_s\tdecompress_mb_s\n")
+                    "\tswapin_mb_s\tdecompress_mb_s\tbusiest\n")
         top = ";".join(f"{g['key']}={g['rss_mb']}" for g in groups[:5])
         f.write("\t".join(str(x) for x in [
             datetime.fromtimestamp(sample["ts"]).isoformat(timespec="seconds"),
             sample["pressure_level"], sample.get("free_pct"), sample.get("swap_used_mb"),
             sample.get("compressed_mb"), sample.get("load1"), sample.get("disk_free_gb"), top,
-            sample.get("swapin_mb_s", ""), sample.get("decompress_mb_s", "")]) + "\n")
+            sample.get("swapin_mb_s", ""), sample.get("decompress_mb_s", ""),
+            ";".join(f"{b['key']}={b['share']}" for b in sample.get("blame") or [])]) + "\n")
 
 
 def still_same_process(p: Proc) -> bool:
@@ -1748,7 +1818,8 @@ def disk_drop_job(cfg: dict, fell_gb: float, quiet: str = "") -> dict:
     grew = []
     if prev:
         diff = scratch.ledger_diff(prev, new)
-        grew = [(n, mb) for n, mb in diff["changes"] if mb >= 200][:3]
+        # swap is left out of the drop itself, so it must not be named as the cause either
+        grew = [(n, mb) for n, mb in diff["changes"] if mb >= 200 and n != "Swap files"][:3]
         if grew:
             text += f" Grew since {prev['ts'][11:16]}: " + ", ".join(f"{n} +{mb / 1024:.1f}GB" for n, mb in grew) + "."
         else:
@@ -2542,13 +2613,16 @@ def auto_trim(cfg: dict, menu: dict, procs: list, now: float, why: str, quiet: s
     if done:
         menu["last_auto_trim"] = now
         menu["trim"] = []
-        text = (("Memory was filling up fast" if why == "early" else "Memory was critically low")
+        text = ({"early": "Memory was filling up fast", "slow": "The Mac was slowing down"}.get(
+                    why, "Memory was critically low")
                 + ", so Guardian closed " + ", ".join(f"{r['closed']} idle {r['app']} helpers" for r in done)
                 + f" (about {sum(r['mb'] for r in done) / 1024:.1f} GB). The app itself was not touched. "
                   "If a tool in a thread stops responding, refresh the app.")
         menu["last_action"] = {"ts": now, "action": "trim", "text": text, "ok": True}
         menu["dirty"] = True
-        if not quiet:
+        # It ran three times on the first afternoon; the menu keeps the line, and a banner each
+        # time is the kind of noise the "important" level exists to stop.
+        if not quiet and cfg.get("notify_level", "important") == "all":
             notify("Guardian", text, cfg)
     return done
 
@@ -2610,6 +2684,53 @@ def render_threads(scan: dict, cfg: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def filling_fast(rise: float, sample: dict, cfg: dict) -> bool:
+    """Is a swap climb a warning? Only while free memory is still short, and not once the Mac
+    is already critical (then the louder alarm is on)."""
+    free = sample.get("free_pct")
+    return bool(rise) and not is_critical(sample, cfg) and \
+        (free is None or free < (cfg.get("early") or {}).get("max_free_pct", 40))
+
+
+HANDOFF_REQUEST = """Please write a hand-off note so I can continue this work in a brand-new thread that has none of this history. Write it for someone starting cold, in under 400 words. Cover:
+1. The goal, in one or two sentences.
+2. Where things stand: what is finished, and what is in progress.
+3. The decisions we made and why, and what we ruled out.
+4. The files, folders and links that matter, with full paths.
+5. Standing instructions and preferences I gave you that should carry over.
+6. The next three steps.
+Do not start any new work. Only write the note."""
+
+
+def handoff_steps(scan: dict) -> str:
+    """The four steps, shown next to the request that is already on the clipboard."""
+    heavy = (scan.get("big") or [None])[0]
+    which = (f"The long thread: started {heavy['started']}, {heavy['mb'] / 1024:.1f} GB of history, "
+             f"working in {heavy['cwd'] or 'your home folder'}." if heavy else
+             "No thread is long enough to slow the app down right now, but the steps work for any thread.")
+    return "\n".join([
+        "Start a fresh thread without losing your place", "",
+        which, "",
+        "1. A request for a hand-off note is already on your clipboard.",
+        "   Open the long thread, paste (Command-V) and send it.",
+        "2. Copy the note it writes back.",
+        "3. Start a new thread and paste the note as your first message.",
+        "4. Carry on in the new thread.", "",
+        "Nothing is deleted. The old thread stays in your history and you can open it whenever you",
+        "need to look something up. Once you stop working in it, the app no longer has to keep its",
+        "whole history at hand, which is what makes it heavy.", "",
+        "The request that is on your clipboard:", "", HANDOFF_REQUEST, ""])
+
+
+def to_clipboard(text: str) -> bool:
+    if not IS_MAC:
+        return False
+    try:
+        return subprocess.run(["pbcopy"], input=text, text=True, capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def swap_climb(history: list, now: float, window_s: float, climb_mb: float) -> float:
     """How far swap rose inside the window (lowest reading to the latest), or 0.0 if that is
     less than climb_mb. history is [(ts, swap_mb), ...] oldest first. A hole in the readings
@@ -2637,6 +2758,41 @@ def swap_climb(history: list, now: float, window_s: float, climb_mb: float) -> f
 LINK = {"lag": "none", "ts": 0.0, "seen": 0.0, "server": None}
 
 
+def parse_link_query(query: str) -> dict:
+    """What the extension tacked onto its question: its version, and now and then two small
+    counts. Anything that is not exactly a short version or a short number is dropped."""
+    out, parts = {}, dict(kv.split("=", 1) for kv in query.split("&") if "=" in kv)
+    if set(parts) - {"v", "aside", "looked"}:
+        return out
+    if re.fullmatch(r"\d{1,3}(\.\d{1,3}){1,3}", parts.get("v", "")):
+        out["v"] = parts["v"]
+    if re.fullmatch(r"\d{1,4}", parts.get("aside", "")) and re.fullmatch(r"\d{1,4}", parts.get("looked", "")):
+        out["aside"], out["looked"] = int(parts["aside"]), int(parts["looked"])
+    return out
+
+
+def version_tuple(v) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", str(v or "0"))[:4]) or (0,)
+
+
+def bundled_extension_version():
+    """The version of the extension folder that sits next to this script, or None."""
+    try:
+        return json.loads((Path(__file__).resolve().parent / "chrome-extension" / "manifest.json").read_text())["version"]
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def extension_stale(now: float = None):
+    """(running, here) when Chrome is talking to us with an older copy than the one on disk,
+    else None. Chrome only picks up a new copy when its reload arrow is clicked."""
+    here = bundled_extension_version()
+    if not here or not LINK["seen"] or (now or time.time()) - LINK["seen"] > 300:
+        return None
+    running = LINK.get("ext")
+    return (running, here) if version_tuple(running) < version_tuple(here) else None
+
+
 def start_status_server(port: int):
     """Serve {"lag": ...} on 127.0.0.1 only. Read-only, no names, nothing private: it says how
     hard the Mac is struggling and nothing else. Returns the server, or None if the port is
@@ -2650,10 +2806,11 @@ def start_status_server(port: int):
                 self.send_error(404)
                 return
             LINK["seen"] = time.time()
-            m = re.fullmatch(r"aside=(\d{1,4})&looked=(\d{1,4})", query)
-            if m:                           # the extension saying what it just did; two small numbers
-                LINK["aside_total"] = LINK.get("aside_total", 0) + int(m.group(1))
-                log_event("chrome", stepped_aside=int(m.group(1)), tabs_looked_at=int(m.group(2)))
+            said = parse_link_query(query)
+            LINK["ext"] = said.get("v")     # none: a copy from before 0.3.2, which did not say
+            if "aside" in said:             # the extension saying what it just did; two small numbers
+                LINK["aside_total"] = LINK.get("aside_total", 0) + said["aside"]
+                log_event("chrome", stepped_aside=said["aside"], tabs_looked_at=said["looked"], ext=said.get("v"))
             body = json.dumps({"v": 1, "lag": LINK["lag"], "ts": LINK["ts"]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -2743,12 +2900,16 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
         """In plain words: how much is being shuffled, and who has the RAM."""
         text = lag_phrase(s, cfg) + "."
         front = snap.get("front") or ""
+        busiest = next(iter(s.get("blame") or []), None)
+        if busiest and busiest["share"] >= 30:      # one app doing a third of it is worth naming
+            where = "in front" if busiest["key"] == front else "in the background"
+            text += f" {busiest['key']}, {where}, is behind {busiest['share']}% of it."
         fg = next((g for g in groups if g["key"] == front), None)
         if fg and fg["rss_mb"] >= 500:
             text += f" {front}, in front, has {100 * fg['res_mb'] // max(1, fg['rss_mb'])}% of its memory in RAM."
         back = max((g for g in groups if g["key"] != front and g.get("res_mb", 0) >= 400),
                    key=lambda g: g["res_mb"], default=None)
-        if back:
+        if back and not (busiest and busiest["share"] >= 30):
             text += f" {back['key']}, in the background, is holding {back['res_mb'] / 1024:.1f} GB of RAM."
         return text
 
@@ -2804,13 +2965,21 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
             title = f"{th['active']} agent threads are active at once"
             detail = "Each keeps a window and helper programs in memory. Closing the finished ones is free memory."
         out.append({"id": "threads", "severity": "info", "title": title, "detail": detail,
-                    "action": {"id": "threads", "label": "Show the threads", "args": {}}})
+                    "action": ({"id": "handoff", "label": "Start a fresh thread from it", "args": {}} if heavy else
+                               {"id": "threads", "label": "Show the threads", "args": {}})})
     chrome = next((g for g in groups if g["key"] == "Google Chrome"), None)
     if chrome and tight and chrome["rss_mb"] >= 4096:
         out.append({"id": "chrome", "severity": "info",
                     "title": f"Chrome is using {chrome['rss_mb'] / 1024:.1f} GB in {chrome['n']} processes",
                     "detail": "Closing duplicate tabs is the quickest win. They stay in History.",
                     "action": {"id": "close_duplicate_tabs", "label": "Close duplicate tabs", "args": {}}})
+    stale = extension_stale()
+    if stale:
+        out.append({"id": "chrome-ext", "severity": "info", "title": "Guardian's Chrome extension needs a reload",
+                    "detail": f"Chrome is running {'version ' + stale[0] if stale[0] else 'an older copy'}; "
+                              f"version {stale[1]} is on this Mac. On the page that opens, find Guardian for "
+                              "Chrome and click its round arrow.",
+                    "action": {"id": "open_extensions", "label": "Open Chrome's extensions page", "args": {}}})
     disk = s.get("disk_free_gb")
     if disk is not None and disk < cfg["disk_floor_gb"]:
         out.append({"id": "disk-low", "severity": "warn", "title": f"Only {disk:.0f} GB of disk is free",
@@ -2879,8 +3048,9 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
         "attention": worst if worst in ("crit", "warn") else "none", "headline": headline,
         "top": [{"key": g["key"], "gb": round(g["rss_mb"] / 1024, 1), "n": g["n"]} for g in snap["groups"][:6]],
         "lag": {"level": lag_level(s, cfg), "swapin_mb_s": s.get("swapin_mb_s"),
-                "decompress_mb_s": s.get("decompress_mb_s")},
+                "decompress_mb_s": s.get("decompress_mb_s"), "by": s.get("blame") or []},
         "chrome_link_age": (round(time.time() - LINK["seen"]) if LINK["seen"] else None),
+        "chrome_ext": LINK.get("ext"), "chrome_ext_here": bundled_extension_version(),
         "chrome_aside": LINK.get("aside_total", 0),
         "issues": issues, "busy": (bg.name or "") if bg is not None and bg.busy() else "",
         "last_action": menu.get("last_action"),
@@ -3052,6 +3222,20 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
         menu["threads"] = scan
         _show_text("threads-now.txt", render_threads(scan, cfg))
         say("Opened the list of threads.")
+    elif action == "handoff":
+        scan = thread_scan(cfg)
+        menu["threads"] = scan
+        copied = (menu.get("clipboard") or to_clipboard)(HANDOFF_REQUEST)
+        _show_text("fresh-thread.txt", handoff_steps(scan))
+        say("A request for a hand-off note is on your clipboard. Paste it into the long thread." if copied else
+            "Opened the steps. Copy the request from the bottom of that page.", ok=True)
+    elif action == "open_extensions":
+        script = ('tell application "Google Chrome"\nactivate\nif (count of windows) = 0 then make new window\n'
+                  'tell front window to make new tab with properties {URL:"chrome://extensions"}\nend tell')
+        opened = (menu.get("osascript") or (lambda s: subprocess.run(
+            ["osascript", "-e", s], capture_output=True, text=True, timeout=20).returncode == 0))(script)
+        say("Chrome's extensions page is open. Find Guardian for Chrome and click its round arrow." if opened else
+            "Chrome did not open the page. Type chrome://extensions into its address bar.", ok=bool(opened))
     elif action == "reclaim":
         def job():
             import scratch
@@ -3288,6 +3472,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                     if e.get("kind") == "archive" and e.get("phase") == "one-copy"] or [0.0])
     swap_hist = deque(maxlen=80)
     last_early_log = 0.0
+    fault_prev, fault_ts = {}, time.time()
     told_threads = {e.get("thread") for e in read_events(7 * 24) if e.get("kind") == "coach"}
 
     def idle():
@@ -3350,6 +3535,8 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 idle()
                 continue
             snap = snapshot(cfg)
+            snap["sample"]["blame"] = fault_blame(fault_prev, snap["procs"], time.time() - fault_ts)
+            fault_ts = time.time()
             if simulate:
                 snap["sample"].update(simulate)
                 snap["sample"]["simulated"] = True
@@ -3444,7 +3631,8 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                         log_event("lag", level=lag_now, swapin_mb_s=snap["sample"].get("swapin_mb_s"),
                                   decompress_mb_s=snap["sample"].get("decompress_mb_s"),
                                   free_pct=snap["sample"].get("free_pct"), front=snap.get("front"),
-                                  macos_level=snap["sample"].get("pressure_level"))
+                                  macos_level=snap["sample"].get("pressure_level"),
+                                  by=snap["sample"].get("blame") or [])
                 # ---- getting ahead of a bad spell
                 t_now = time.time()
                 helper_track(menu["helpers"], snap["procs"], cfg, t_now)
@@ -3475,7 +3663,7 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                 ecfg = cfg["early"]
                 swap_hist.append((t_now, snap["sample"].get("swap_used_mb")))
                 rise = swap_climb(list(swap_hist), t_now, ecfg["minutes"] * 60, ecfg["swap_climb_mb"])
-                if rise and not is_critical(snap["sample"], cfg):
+                if filling_fast(rise, snap["sample"], cfg):
                     menu["early"] = {"until": t_now + ecfg["hold_minutes"] * 60, "rise_mb": rise,
                                      "minutes": ecfg["minutes"]}
                     if t_now - last_early_log > 20 * 60:
@@ -3486,6 +3674,8 @@ def watch(cfg: dict, once: bool = False, dry_run: bool = False, simulate: dict =
                         auto_trim(cfg, menu, snap["procs"], t_now, "early", snap["quiet"])
                 elif is_critical(snap["sample"], cfg) and not dry_run:
                     auto_trim(cfg, menu, snap["procs"], t_now, "critical", snap["quiet"])
+                elif lag_now == "slow" and not dry_run:        # already slow is a better reason than "soon"
+                    auto_trim(cfg, menu, snap["procs"], t_now, "slow", snap["quiet"])
             menu["snap"] = snap
             write_state(build_state(cfg, snap, menu))
         except Exception as e:
@@ -4033,12 +4223,19 @@ def doctor(cfg: dict, script: Path):
                                                                     "severe": "very slow"}[lvl])
         st_file = state_path()
         try:
-            age = json.loads(st_file.read_text()).get("chrome_link_age")
+            st = json.loads(st_file.read_text())
+            age = st.get("chrome_link_age")
         except (OSError, ValueError):
-            age = None
+            st, age = {}, None
         print(f"{ok(age is not None and age < 300)} Chrome extension link: " + (
             f"it last asked {age}s ago" if age is not None else
             "the extension has not asked since the helper started (reload it on chrome://extensions; needs 0.3.0)"))
+        if age is not None and age < 300 and st.get("chrome_ext_here"):
+            ran, here = st.get("chrome_ext"), st["chrome_ext_here"]
+            same = version_tuple(ran) >= version_tuple(here)
+            print(f"{ok(same)} Chrome extension version: Chrome runs {ran or 'a copy from before 0.3.2'}, "
+                  f"this Mac has {here}" + ("" if same else
+                                            ". Reload it: the Guardian shield has a button for that"))
     import archive
     acfg = cfg["archive"]
     good = [r for r in acfg["roots"] if not archive.root_problem(archive.resolve_root(r))]

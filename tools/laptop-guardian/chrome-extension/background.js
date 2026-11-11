@@ -88,10 +88,14 @@ function runSweep(overrides = {}) {
 
 // Ask Guardian (the helper that watches this Mac) how hard the Mac is struggling. It answers on
 // 127.0.0.1 only. No answer means it is not running: carry on exactly as before.
+const VERSION = (() => { try { return chrome.runtime.getManifest().version; } catch (e) { return "0"; } })();
+
 async function askGuardian(settings) {
   try {
     const signal = (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(2500) : undefined;
-    const r = await fetch(`http://127.0.0.1:${settings.guardianPort}/status`, { signal, cache: "no-store" });
+    // Say which copy of the extension is asking, so Guardian can tell you when Chrome is still
+    // running an old one (Chrome only loads a new copy when its reload arrow is clicked).
+    const r = await fetch(`http://127.0.0.1:${settings.guardianPort}/status?v=${VERSION}`, { signal, cache: "no-store" });
     if (!r.ok) return null;
     const s = await r.json();
     return s && typeof s.lag === "string" ? s : null;
@@ -118,7 +122,7 @@ async function pulse(overrides = {}) {
       stats = await runSweep({ ...overrides, stepAside: true });
       link.steppedAside = stats.slept;
       // Tell Guardian what was just done (two small numbers), so its diary shows Chrome stepping aside.
-      try { await fetch(`http://127.0.0.1:${settings.guardianPort}/status?aside=${stats.slept}&looked=${stats.looked}`, { cache: "no-store" }); }
+      try { await fetch(`http://127.0.0.1:${settings.guardianPort}/status?v=${VERSION}&aside=${stats.slept}&looked=${stats.looked}`, { cache: "no-store" }); }
       catch (e) {}
     }
   }

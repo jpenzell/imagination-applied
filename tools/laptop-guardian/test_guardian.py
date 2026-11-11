@@ -369,8 +369,8 @@ class EngineTests(unittest.TestCase):
 
     def test_episode_start_end_and_notification_names_offender(self):
         e = g.Engine(self.cfg)
-        samples = [sample(level=2, free=10, ts=1e6), sample(level=4, free=4, ts=1e6 + 30),
-                   sample(level=1, free=40, ts=1e6 + 60)]
+        samples = [sample(level=2, free=10, ts=1e6), sample(level=4, free=4, ts=1e6 + 30)] + \
+                  [sample(level=1, free=40, ts=1e6 + 60 + 30 * i) for i in range(4)]
         d = self.run_steps(e, lambda i, now: [P(10, CHROME, rss_mb=6000), P(11, "/bin/zsh")], samples)
         kinds = [(x.action, x.cls) for x in d]
         self.assertIn(("log", "episode"), kinds)
@@ -381,6 +381,22 @@ class EngineTests(unittest.TestCase):
         self.assertIn("Google Chrome 6000MB", ended[0].reason)
         self.assertIn("peak critical", ended[0].reason)
         self.assertEqual(e.episodes_today, 1)
+
+    def test_one_spell_is_one_episode_however_macos_flickers(self):
+        # 08:11 to 08:21 on the first real day: warn, normal, warn, normal... logged as four episodes
+        e = g.Engine(self.cfg)
+        levels = [2, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1, 1, 1]
+        d = self.run_steps(e, lambda i, now: [P(10, CHROME, rss_mb=6000)],
+                           [sample(level=lv, free=30, ts=1e6 + 30 * i) for i, lv in enumerate(levels)])
+        started = [x for x in d if x.cls == "episode" and "started" in x.reason]
+        ended = [x for x in d if x.cls == "episode" and "ended" in x.reason]
+        self.assertEqual((len(started), len(ended), e.episodes_today), (1, 1, 1))
+        self.assertIsNone(e.episode, "four calm readings in a row end it")
+        self.cfg["episode_end_samples"] = 1
+        e = g.Engine(self.cfg)
+        d = self.run_steps(e, lambda i, now: [P(10, CHROME, rss_mb=6000)],
+                           [sample(level=lv, free=30, ts=1e6 + 30 * i) for i, lv in enumerate(levels)])
+        self.assertEqual(e.episodes_today, 4, "the old behaviour is one setting away")
 
     def test_orphaned_automation_chrome_is_killed_after_idle(self):
         e = g.Engine(self.cfg)
@@ -1834,6 +1850,70 @@ class AheadTests(unittest.TestCase):
         g.handle_request({"action": "threads", "ts": g.time.time()}, self.cfg, menu)
         self.assertIn("Agent threads written in the last 2 hours: 0", (g.LOG_DIR / "threads-now.txt").read_text())
 
+    def test_a_swap_jump_that_freed_memory_is_not_a_warning(self):
+        # 2026-11-11: eleven warnings. Four came as macOS moved squeezed memory to disk and free
+        # memory jumped to 44-52%; none of those was followed by a slow spell.
+        s = lambda free, **more: dict(sample(level=2, free=free), **more)
+        self.assertTrue(g.filling_fast(1383, s(26), self.cfg))
+        self.assertTrue(g.filling_fast(1028, s(37), self.cfg))
+        for free in (44, 45, 47, 52):
+            self.assertFalse(g.filling_fast(1200, s(free), self.cfg), free)
+        self.assertFalse(g.filling_fast(0.0, s(20), self.cfg), "no climb, no warning")
+        self.assertFalse(g.filling_fast(1500, s(3), self.cfg), "already critical: the louder alarm is on")
+        self.assertFalse(g.filling_fast(1500, s(25, swapin_mb_s=150.0, decompress_mb_s=900.0), self.cfg))
+        self.assertTrue(g.filling_fast(1500, {"ts": 1.0, "pressure_level": 2}, self.cfg), "free unknown: err on warning")
+
+    def test_trimming_by_itself_when_the_mac_is_already_slow_is_quiet(self):
+        procs, now = self.family(), 1_000_000.0
+        menu = self.menu(trim=[{"app": "ChatGPT", "n": 2, "mb": 70}])
+        g.helper_track(menu["helpers"], procs, self.cfg, now)
+        cfg = g.json.loads(g.json.dumps(self.cfg))
+        cfg.update(mode="act", notify=True)
+        cfg["trim"].update(min_mb=50, auto=True)
+        told, saved = [], g.notify
+        g.notify = lambda title, body, c: told.append(body)
+        self.addCleanup(lambda: setattr(g, "notify", saved))
+        done = g.auto_trim(cfg, menu, procs, now, "slow")
+        self.assertEqual([(r["closed"], r["trigger"]) for r in done], [(2, "slow")])
+        self.assertIn("The Mac was slowing down, so Guardian closed 2 idle ChatGPT helpers", menu["last_action"]["text"])
+        self.assertEqual(told, [], "the menu keeps the line; no banner unless you asked for all of them")
+        menu["trim"] = [{"app": "ChatGPT", "n": 2, "mb": 70}]
+        cfg["notify_level"] = "all"
+        g.auto_trim(cfg, menu, procs, now + 3600, "early")
+        self.assertEqual(len(told), 1)
+
+    def test_a_fresh_thread_starts_with_a_note_from_the_long_one(self):
+        heavy = {"file": "/x/rollout-1.jsonl", "mb": 1302, "started": "2026-09-09", "cwd": "~/Documents/Codex/2026-09-09/i-x20",
+                 "idle_s": 3600}
+        steps = g.handoff_steps({"big": [heavy], "threads": [heavy], "active": 1})
+        self.assertIn("started 2026-09-09, 1.3 GB of history, working in ~/Documents/Codex/2026-09-09/i-x20", steps)
+        self.assertIn("Nothing is deleted.", steps)
+        self.assertIn(g.HANDOFF_REQUEST, steps, "the request is on the page too, in case the clipboard was overwritten")
+        self.assertIn("Do not start any new work.", g.HANDOFF_REQUEST)
+        self.assertIn("No thread is long enough", g.handoff_steps({"big": []}))
+        # the menu offers it on the issue about a long thread, and the click copies the request
+        menu = self.menu(threads={"ts": 0, "active": 1, "threads": [heavy], "big": [heavy]})
+        st = g.build_state(self.cfg, self.snap(), menu)
+        issue = next(i for i in st["issues"] if i["id"] == "threads")
+        self.assertEqual(issue["action"], {"id": "handoff", "label": "Start a fresh thread from it", "args": {}})
+        copied, saved = [], g.IS_MAC
+        g.IS_MAC = False                        # do not open a window while testing
+        try:
+            menu["clipboard"] = lambda text: copied.append(text) or True
+            g.handle_request({"action": "handoff", "ts": g.time.time()}, self.cfg, menu)
+        finally:
+            g.IS_MAC = saved
+        self.assertEqual(copied, [g.HANDOFF_REQUEST])
+        self.assertIn("on your clipboard", menu["last_action"]["text"])
+        self.assertIn("Start a fresh thread without losing your place", (g.LOG_DIR / "fresh-thread.txt").read_text())
+        # opening Chrome's extensions page is one fixed script, nothing from the request goes into it
+        ran = []
+        menu["osascript"] = lambda script: ran.append(script) or True
+        g.handle_request({"action": "open_extensions", "url": "http://evil.example", "ts": g.time.time()}, self.cfg, menu)
+        self.assertEqual(len(ran), 1)
+        self.assertIn('{URL:"chrome://extensions"}', ran[0])
+        self.assertNotIn("evil", ran[0])
+
 
 # vm_stat exactly as the first real Mac printed it while it was thrashing (2026-11-11 00:14)
 VM_STAT = """Mach Virtual Memory Statistics: (page size of 16384 bytes)
@@ -1957,7 +2037,7 @@ class LagTests(unittest.TestCase):
                 "trim": [{"app": "ChatGPT", "n": 40, "mb": 900}], "last_action": None}
         st = g.build_state(self.cfg, {"sample": self.real(), "groups": groups, "quiet": "", "front": "ChatGPT"}, menu)
         self.assertEqual((st["headline"], st["attention"]), ("Very slow: memory is being shuffled to disk", "crit"))
-        self.assertEqual(st["lag"], {"level": "severe", "swapin_mb_s": 161.9, "decompress_mb_s": 652.3})
+        self.assertEqual(st["lag"], {"level": "severe", "swapin_mb_s": 161.9, "decompress_mb_s": 652.3, "by": []})
         top = st["issues"][0]
         self.assertEqual((top["id"], top["title"]), ("memory-critical", "This Mac is very slow right now"))
         self.assertEqual(top["detail"], "162 MB of memory a second is being read back from disk. ChatGPT, in front, has 11% "
@@ -1969,6 +2049,18 @@ class LagTests(unittest.TestCase):
                          ("Slowing down: memory is being shuffled", "warn", "lag", "Things are slowing down"))
         self.assertIn("Claude, in front, has 15% of its memory in RAM. Google Chrome, in the background, is holding 0.8 GB",
                       st["issues"][0]["detail"])
+        # who is behind it is measured, and named when one app is doing a third or more
+        who = [{"key": "Google Chrome", "share": 58, "per_s": 9000}, {"key": "ChatGPT", "share": 22, "per_s": 3400}]
+        st = g.build_state(self.cfg, {"sample": dict(slow, blame=who), "groups": groups, "quiet": "", "front": "Claude"}, menu)
+        self.assertEqual(st["issues"][0]["detail"], "45 MB of memory a second is being read back from disk. Google Chrome, in "
+                                                    "the background, is behind 58% of it. Claude, in front, has 15% of its "
+                                                    "memory in RAM.")
+        self.assertEqual(st["lag"]["by"], who)
+        st = g.build_state(self.cfg, {"sample": dict(slow, blame=who), "groups": groups, "quiet": "", "front": "Google Chrome"}, menu)
+        self.assertIn("Google Chrome, in front, is behind 58% of it.", st["issues"][0]["detail"])
+        spread = [{"key": "ChatGPT", "share": 24, "per_s": 900}, {"key": "Dropbox", "share": 20, "per_s": 800}]
+        st = g.build_state(self.cfg, {"sample": dict(slow, blame=spread), "groups": groups, "quiet": "", "front": "Claude"}, menu)
+        self.assertNotIn("is behind", st["issues"][0]["detail"], "spread thin across apps: nobody to name")
         squeezing = dict(self.real(), swapin_mb_s=12.1, decompress_mb_s=950.0)
         st = g.build_state(self.cfg, {"sample": squeezing, "groups": groups, "quiet": "", "front": "TextEdit"}, menu)
         self.assertTrue(st["issues"][0]["detail"].startswith(
@@ -1996,9 +2088,12 @@ class LagTests(unittest.TestCase):
         g.log_sample(self.real(), [{"key": "ChatGPT", "rss_mb": 5570}])
         g.log_sample(sample(level=1, free=60), [])
         lines = g.SAMPLES_PATH.read_text().splitlines()
-        self.assertTrue(lines[0].endswith("\ttop\tswapin_mb_s\tdecompress_mb_s"))
-        self.assertTrue(lines[1].endswith("\tChatGPT=5570\t161.9\t652.3"))
-        self.assertTrue(lines[2].endswith("\t\t\t"), "no reading is an empty cell, not a zero")
+        self.assertTrue(lines[0].endswith("\ttop\tswapin_mb_s\tdecompress_mb_s\tbusiest"))
+        self.assertTrue(lines[1].endswith("\tChatGPT=5570\t161.9\t652.3\t"))
+        self.assertTrue(lines[2].endswith("\t\t\t\t"), "no reading is an empty cell, not a zero")
+        who = [{"key": "ChatGPT", "share": 62, "per_s": 9000}, {"key": "Dropbox", "share": 9, "per_s": 1300}]
+        g.log_sample(dict(self.real(), blame=who), [{"key": "ChatGPT", "rss_mb": 5570}])
+        self.assertTrue(g.SAMPLES_PATH.read_text().splitlines()[3].endswith("\t161.9\t652.3\tChatGPT=62;Dropbox=9"))
         self.assertEqual(lines[1].split("\t")[6], "28", "older columns stay where every reader expects them")
 
     def test_the_status_page_says_one_thing_to_this_mac_only(self):
@@ -2025,6 +2120,62 @@ class LagTests(unittest.TestCase):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/status?{query}", timeout=5).read()
         said = [(e["stepped_aside"], e["tabs_looked_at"]) for e in g.read_events(1) if e["kind"] == "chrome"]
         self.assertEqual((said, g.LINK["aside_total"]), ([(3, 9), (2, 7)], 5))
+        self.assertIsNone(g.LINK["ext"], "a copy from before 0.3.2 does not say which version it is")
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/status?v=0.3.2", timeout=5).read()
+        self.assertEqual(g.LINK["ext"], "0.3.2")
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/status?v=0.3.2&aside=4&looked=11", timeout=5).read()
+        self.assertEqual(g.LINK["aside_total"], 9)
+
+    def test_an_old_copy_of_the_extension_is_noticed(self):
+        self.assertEqual(g.parse_link_query("v=0.3.2"), {"v": "0.3.2"})
+        self.assertEqual(g.parse_link_query("v=0.3.2&aside=2&looked=10"), {"v": "0.3.2", "aside": 2, "looked": 10})
+        for bad in ("", "v=latest", "v=1.2.3.4.5", "v=0.3.2&cmd=x", "aside=2", "v=0.3.2&aside=-1&looked=3"):
+            self.assertNotIn("aside", g.parse_link_query(bad), bad)
+        self.assertEqual(g.parse_link_query("v=<script>"), {})
+        self.assertLess(g.version_tuple("0.3.1"), g.version_tuple("0.3.2"))
+        self.assertLess(g.version_tuple("0.9.0"), g.version_tuple("0.10.0"), "numbers, not text")
+        self.assertLess(g.version_tuple(None), g.version_tuple("0.0.1"))
+        here = g.bundled_extension_version()
+        self.assertRegex(here, r"^\d+\.\d+\.\d+$")
+        saved = dict(g.LINK)
+        self.addCleanup(lambda: (g.LINK.clear(), g.LINK.update(saved)))
+        now = 1_000_000.0
+        g.LINK.update(seen=0.0, ext=None)
+        self.assertIsNone(g.extension_stale(now), "Chrome is not talking to us: nothing to say")
+        g.LINK.update(seen=now - 40, ext=None)
+        self.assertEqual(g.extension_stale(now), (None, here))
+        g.LINK.update(ext="0.0.9")
+        self.assertEqual(g.extension_stale(now), ("0.0.9", here))
+        g.LINK.update(ext=here)
+        self.assertIsNone(g.extension_stale(now))
+        g.LINK.update(seen=now - 4000, ext=None)
+        self.assertIsNone(g.extension_stale(now), "Chrome was closed an hour ago")
+
+    def test_who_is_reaching_for_memory(self):
+        cfg = g.load_config(g.Path("/nonexistent"))
+        def procs(counts):
+            ps = [P(1, "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"),
+                  P(2, "/Applications/ChatGPT.app/Contents/Frameworks/ChatGPT Helper (Renderer).app/Contents/MacOS/"
+                       "ChatGPT Helper (Renderer)", ppid=1),
+                  P(3, "/Applications/Dropbox.app/Contents/MacOS/Dropbox"), P(4, "/bin/zsh"), P(5, "/usr/bin/ssh")]
+            g.classify(ps, cfg, UID)
+            for p in ps:
+                p.faults = counts.get(p.pid)
+            return ps
+        prev = {}
+        self.assertEqual(g.fault_blame(prev, procs({1: 1000, 2: 5000, 3: 100, 4: 7}), 30), [], "the first look proves nothing")
+        self.assertEqual(prev, {1: 1000, 2: 5000, 3: 100, 4: 7})
+        got = g.fault_blame(prev, procs({1: 4000, 2: 20000, 3: 2100, 4: 7, 5: 999999}), 30)
+        self.assertEqual(got, [{"key": "ChatGPT", "share": 90, "per_s": 600}, {"key": "Dropbox", "share": 10, "per_s": 67}],
+                         "an app's processes are counted together; a process seen for the first time is not counted")
+        # the counter is 32 bits and wraps; a pid that came back with a smaller number is a new process
+        prev = {1: 0xFFFFFF00, 3: 500000}
+        got = g.fault_blame(prev, procs({1: 0x100, 3: 20}), 10)
+        self.assertEqual(got, [{"key": "ChatGPT", "share": 100, "per_s": 51}])
+        self.assertEqual(g.fault_blame({1: 5}, procs({1: 5}), 30), [], "nobody moved")
+        if g.IS_MAC:
+            self.assertGreater(g.page_faults(g.os.getpid()), 0)
+            self.assertIsNone(g.page_faults(0x7FFFFFF0))
 
 
 class AutopilotTests(unittest.TestCase):
