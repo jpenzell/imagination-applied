@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 125 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 127 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
@@ -206,11 +206,21 @@ python3 guardian.py threads         # agent threads written recently, with the s
 - **Flag heavy threads.** The Codex engine holding a thread with a 1.2 GB history open was
   itself using 1.1 GB. Guardian lists a thread once its history passes 300 MB, says so once
   in a notification, and counts how many threads are in use at the same time.
-- **Start fresh from a long thread.** "Start a fresh thread from a long one" in the menu opens
-  a small dialog: four steps, the request for a hand-off note in a box, and a *Copy the
-  request* button. Copy it, paste it into the long thread, copy the note it writes, paste
-  that into a new thread, carry on there. Nothing reaches the clipboard until the button is
-  clicked. Guardian does not drive the app or touch the thread; nothing is deleted.
+- **Start fresh from a long thread, in one click.** "Start a fresh thread from a long one" in
+  the menu opens a dialog that lists the threads used in the last two days, biggest first.
+  *Write the note* has Guardian read the conversation straight from the thread's file (your
+  messages and the agent's replies; in a 109 MB thread that is under 1 MB, the rest is tool
+  output), has Claude write a hand-off note from it, and shows the note. *Open a new thread
+  with it* then opens the ChatGPT app's Codex with the note already in the message box
+  (`codex://threads/new?prompt=...&path=...`, the app's own documented link); you read it
+  and press Send. No copying, no pasting, and the heavy thread is never woken. What leaves
+  the Mac is said in the dialog before the click: the text of that one conversation goes to
+  Claude. It is cut to 150,000 characters (the first three of your messages, then as much of
+  the end as fits), tool output and injected context are left out, the diary records counts
+  only, and if Claude's command-line tool is missing or signed out the dialog says so
+  rather than using another AI. *Do it by hand instead* keeps the old way: the request in a
+  box with a *Copy the request* button, to paste into the long thread yourself. Nothing
+  reaches the clipboard, Claude or the app until a button is clicked; nothing is deleted.
 - **Pages come to the front.** The thread list, the fresh-thread steps, the check-up, the
   report and the diagnosis used to be opened by the helper, a background program, and so
   landed behind whatever was in front: two clicks, two pages in a text editor that was

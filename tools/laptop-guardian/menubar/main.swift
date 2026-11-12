@@ -403,9 +403,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pageShownTS = Date().timeIntervalSince1970     // pages from before this launch are old news
     private var pageWindow: NSWindow?
     private var dialogWindow: NSWindow?
-    private var dialogCopyText = ""
-    private var dialogCopiedNote = ""
     private var dialogStatus: NSTextField?
+    private var dialogPopup: NSPopUpButton?
+    private var dialogChoiceIDs: [String] = []
+    private var dialogButtons: [[String: Any]] = []
+    private var dialogButtonViews: [NSButton] = []
 
     func applicationDidFinishLaunching(_ note: Notification) {
         let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -441,10 +443,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             lines.append("page: none shown since this app started")
         }
         if let w = dialogWindow {
-            let buttons = (w.contentView?.subviews.flatMap { $0.subviews } ?? []).compactMap { ($0 as? NSButton)?.title }
+            let buttons = dialogButtonViews.map { $0.title + ($0.isEnabled ? "" : " (off)") }
             lines.append("dialog: visible: \(w.isVisible) | on screen: \(w.occlusionState.contains(.visible)) | "
                          + "\(Int(w.frame.width))x\(Int(w.frame.height)) | buttons: \(buttons.joined(separator: ", ")) | "
-                         + "status: \(dialogStatus?.stringValue ?? "")")
+                         + "picker: \(dialogPopup?.numberOfItems ?? 0) items | status: \(dialogStatus?.stringValue ?? "")")
         } else {
             lines.append("dialog: none shown since this app started")
         }
@@ -480,10 +482,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// A page the helper has just written (the list of threads, the fresh-thread steps, the
     /// check-up...). The helper runs in the background and cannot put a window in front, so
     /// this app shows it. Only files in Guardian's own log folder are read.
-    /// A page that is a small dialog rather than a text: a heading, numbered steps, a box with
-    /// text to copy and a Copy button. Nothing reaches the clipboard until that button is clicked.
+    /// A page that is a small dialog rather than a text: a heading, numbered steps, an optional
+    /// picker, a box of text, and buttons. A button can close, copy text, send a request to the
+    /// helper (with the picked item), or open a codex:// link. Nothing reaches the clipboard,
+    /// the helper or another app until a button is clicked.
     func showDialog(_ spec: [String: Any], title: String) {
-        let width: CGFloat = 560
+        let width: CGFloat = 580
         func label(_ s: String, size: CGFloat, bold: Bool = false, dim: Bool = false) -> NSTextField {
             let l = NSTextField(wrappingLabelWithString: s)
             l.font = bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size)
@@ -506,9 +510,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (i, step) in (spec["steps"] as? [String] ?? []).enumerated() {
             stack.addArrangedSubview(label("\(i + 1).  \(step)", size: 13))
         }
-        dialogCopyText = spec["copy_text"] as? String ?? ""
-        dialogCopiedNote = spec["copied"] as? String ?? "Copied."
-        if !dialogCopyText.isEmpty {
+        dialogPopup = nil
+        dialogChoiceIDs = []
+        if let choices = spec["choices"] as? [String: Any], let items = choices["items"] as? [[String: Any]], !items.isEmpty {
+            stack.setCustomSpacing(16, after: stack.arrangedSubviews.last ?? stack)
+            if let name = choices["label"] as? String, !name.isEmpty {
+                stack.addArrangedSubview(label(name, size: 12, bold: true))
+            }
+            let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+            for item in items {
+                popup.addItem(withTitle: item["label"] as? String ?? "?")
+                dialogChoiceIDs.append(item["id"] as? String ?? "")
+            }
+            popup.translatesAutoresizingMaskIntoConstraints = false
+            popup.widthAnchor.constraint(equalToConstant: width).isActive = true
+            dialogPopup = popup
+            stack.addArrangedSubview(popup)
+        }
+        if let boxText = spec["box_text"] as? String, !boxText.isEmpty {
             if let boxTitle = spec["box_title"] as? String, !boxTitle.isEmpty {
                 stack.setCustomSpacing(16, after: stack.arrangedSubviews.last ?? stack)
                 stack.addArrangedSubview(label(boxTitle, size: 12, bold: true))
@@ -517,69 +536,115 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             scroll.borderType = .bezelBorder
             scroll.translatesAutoresizingMaskIntoConstraints = false
             scroll.widthAnchor.constraint(equalToConstant: width).isActive = true
-            scroll.heightAnchor.constraint(equalToConstant: 150).isActive = true
+            scroll.heightAnchor.constraint(equalToConstant: CGFloat(num(spec["box_height"]) ?? 150)).isActive = true
             if let view = scroll.documentView as? NSTextView {
                 view.isEditable = false
                 view.isSelectable = true
                 view.font = NSFont.systemFont(ofSize: 12)
                 view.textContainerInset = NSSize(width: 8, height: 8)
-                view.string = dialogCopyText
+                view.string = boxText
             }
             stack.addArrangedSubview(scroll)
         }
         if let footer = spec["footer"] as? String, !footer.isEmpty {
             stack.addArrangedSubview(label(footer, size: 11.5, dim: true))
         }
-        let status = NSTextField(labelWithString: "")
-        status.font = NSFont.systemFont(ofSize: 12)
+        let status = label("", size: 12)
         status.textColor = .systemGreen
-        status.lineBreakMode = .byTruncatingTail
-        status.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        status.isHidden = true
         dialogStatus = status
-        let close = NSButton(title: "Close", target: self, action: #selector(closeDialog(_:)))
-        close.keyEquivalent = "\u{1b}"
-        let row = NSStackView(views: [status, close])
-        if !dialogCopyText.isEmpty {
-            let copy = NSButton(title: spec["copy_label"] as? String ?? "Copy", target: self,
-                                action: #selector(copyDialogText(_:)))
-            copy.keyEquivalent = "\r"
-            row.addArrangedSubview(copy)
+        stack.addArrangedSubview(status)
+
+        dialogButtons = spec["buttons"] as? [[String: Any]] ?? [["label": "Close", "do": "close"]]
+        dialogButtonViews = []
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let row = NSStackView(views: [spacer])
+        for (i, b) in dialogButtons.enumerated() {
+            let button = NSButton(title: b["label"] as? String ?? "OK", target: self,
+                                  action: #selector(dialogButtonClicked(_:)))
+            button.tag = i
+            if (b["primary"] as? Bool) ?? false { button.keyEquivalent = "\r" }
+            if (b["do"] as? String) == "close" { button.keyEquivalent = "\u{1b}" }
+            dialogButtonViews.append(button)
+            row.addArrangedSubview(button)
         }
         row.orientation = .horizontal
-        row.distribution = .fill            // the status line takes the room, the buttons sit on the right
+        row.distribution = .fill            // the spacer takes the room, the buttons sit on the right
         row.spacing = 10
         row.translatesAutoresizingMaskIntoConstraints = false
         row.widthAnchor.constraint(equalToConstant: width).isActive = true
-        stack.setCustomSpacing(16, after: stack.arrangedSubviews.last ?? stack)
+        stack.setCustomSpacing(16, after: status)
         stack.addArrangedSubview(row)
 
-        dialogWindow?.close()
+        let old = dialogWindow
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width + 48, height: 300),
                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         w.title = "Guardian"
         w.contentView = stack
         w.setContentSize(stack.fittingSize)
-        w.center()
+        if let o = old, o.isVisible {           // a dialog that replaces another stays where it was
+            w.setFrameTopLeftPoint(NSPoint(x: o.frame.minX, y: o.frame.maxY))
+        } else {
+            w.center()
+        }
         dialogWindow = w
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
         w.orderFrontRegardless()
+        old?.close()
     }
 
-    @objc func copyDialogText(_ sender: NSButton) {
-        guard !dialogCopyText.isEmpty else { return }
-        let board = NSPasteboard.general
-        board.clearContents()
-        let ok = board.setString(dialogCopyText, forType: .string)
-        dialogStatus?.textColor = ok ? .systemGreen : .systemRed
-        dialogStatus?.stringValue = ok ? dialogCopiedNote : "Could not copy. Select the text in the box and press Command-C."
-        if ok { sender.title = "Copied \u{2713}" }
+    func dialogSay(_ text: String, ok: Bool = true) {
+        guard let status = dialogStatus, let w = dialogWindow, let content = w.contentView else { return }
+        status.textColor = ok ? .systemGreen : .systemRed
+        status.stringValue = text
+        status.isHidden = text.isEmpty
+        let top = NSPoint(x: w.frame.minX, y: w.frame.maxY)
+        w.setContentSize(content.fittingSize)
+        w.setFrameTopLeftPoint(top)
     }
 
-    @objc func closeDialog(_ sender: Any?) {
-        dialogWindow?.close()
+    @objc func dialogButtonClicked(_ sender: NSButton) {
+        guard sender.tag >= 0, sender.tag < dialogButtons.count else { return }
+        let b = dialogButtons[sender.tag]
+        switch b["do"] as? String ?? "close" {
+        case "copy":
+            let board = NSPasteboard.general
+            board.clearContents()
+            if board.setString(b["text"] as? String ?? "", forType: .string) {
+                sender.title = "Copied \u{2713}"
+                dialogSay(b["done"] as? String ?? "Copied.")
+            } else {
+                dialogSay("Could not copy. Select the text in the box and press Command-C.", ok: false)
+            }
+        case "open":
+            // only links into the ChatGPT app's Codex, which is what this dialog is for
+            if let s = b["url"] as? String, let url = URL(string: s), url.scheme == "codex",
+               NSWorkspace.shared.open(url) {
+                dialogSay(b["done"] as? String ?? "Opened.")
+            } else {
+                dialogSay("That link could not be opened. Use the Copy button and paste instead.", ok: false)
+            }
+        case "send":
+            guard let action = b["action"] as? String else { return }
+            var args: [String: Any] = [:]
+            if let popup = dialogPopup, popup.indexOfSelectedItem >= 0,
+               popup.indexOfSelectedItem < dialogChoiceIDs.count {
+                args["thread"] = dialogChoiceIDs[popup.indexOfSelectedItem]
+            }
+            let working = b["working"] as? String ?? ""
+            send(action, args, note: working.isEmpty ? "Working..." : working)
+            if !working.isEmpty {
+                dialogSay(working)
+                for (i, view) in dialogButtonViews.enumerated()
+                where (dialogButtons[i]["do"] as? String) != "close" { view.isEnabled = false }
+                dialogPopup?.isEnabled = false
+            }
+        default:
+            dialogWindow?.close()
+        }
     }
 
     func showPage(path: String, title: String) {
