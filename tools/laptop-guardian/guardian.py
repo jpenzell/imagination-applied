@@ -135,6 +135,9 @@ DEFAULT_CONFIG = {
         "user_idle_minutes": 3,
         "cooldown_hours": 6,
         "snooze_minutes": 120,
+        # A refresh the owner asked for while the app's agent was working is remembered this
+        # long and done at the first quiet moment (agent quiet, app not in front).
+        "wait_minutes": 120,
         "only_under_pressure": True,
         # The moment an app is worth refreshing (its agent idle, the Mac calm) is rarely a moment
         # of pressure: on the first real day there were 16 slow spells and 2 offers, and at
@@ -1651,7 +1654,7 @@ def refresh_app(app: str, cfg: dict, ops=None, dry_run: bool = False, force: boo
         return done("aborted", "not running")
     age = ops.activity_age(app, cfg)
     if not force and age is not None and age < rcfg["agent_idle_minutes"] * 60:
-        return done("aborted", f"its agent was working {int(age)}s ago; left alone")
+        return done("aborted", f"its agent was working {int(age)}s ago; left alone", agent_busy=True)
     bundle = bundle_path(main.comm)
     if dry_run:
         return done("dry-run", "would quit, clear caches and reopen", would_clear_mb=ops.cache_mb(app))
@@ -1685,6 +1688,58 @@ def refresh_app(app: str, cfg: dict, ops=None, dry_run: bool = False, force: boo
     return out
 
 
+def refresh_queue(app: str, st: dict, cfg: dict, source: str, now: float = None) -> float:
+    """The owner asked for a refresh while the app's agent was working. Remember it and do it
+    at the first quiet moment, so they do not have to ask again. Returns when the wait ends."""
+    now = now or time.time()
+    minutes = int(cfg["refresh"].get("wait_minutes", 120))
+    st.update(wanted=now, wanted_until=now + minutes * 60, next_check=0.0)
+    log_event("refresh", app=app, phase="queued", wait_minutes=minutes, source=source)
+    return st["wanted_until"]
+
+
+def refresh_unqueue(app: str, st: dict, phase: str, why: str = "") -> bool:
+    """Stop waiting: 'cancelled' or 'expired'. False when nothing was waiting."""
+    if not st.get("wanted"):
+        return False
+    st.update(wanted=0.0, wanted_until=0.0)
+    log_event("refresh", app=app, phase=phase, **({"why": why} if why else {}))
+    return True
+
+
+def refresh_waiting(st: dict, now: float = None) -> bool:
+    return bool(st and st.get("wanted")) and (now or time.time()) < st.get("wanted_until", 0)
+
+
+def refresh_wanted_tick(app: str, st: dict, cfg: dict, snap: dict, background, now: float, ops=None,
+                        dry_run: bool = False) -> bool:
+    """A refresh the owner asked for is waiting. It runs once the app's agent has been quiet for
+    agent_idle_minutes and the app is not the one in front, so nothing half-typed in it is lost.
+    The owner need not be away and is not asked again: they already said yes. True when the
+    job was started."""
+    if now >= st.get("wanted_until", 0):
+        refresh_unqueue(app, st, "expired", "no quiet moment came")
+        return False
+    if now < st.get("next_check", 0):
+        return False
+    st["next_check"] = now + 20
+    if not any(grp["key"] == app for grp in snap["groups"]):
+        refresh_unqueue(app, st, "cancelled", "it is no longer running")
+        return False
+    ops = ops or MacAppOps()
+    age = ops.activity_age(app, cfg)
+    if (age is not None and age < cfg["refresh"]["agent_idle_minutes"] * 60) or ops.front_app() == app:
+        return False
+
+    def job():
+        rec = refresh_app(app, cfg, ops, dry_run=dry_run)
+        if rec.get("phase") == "done":
+            st.update(last=time.time(), wanted=0.0, wanted_until=0.0)
+        elif not rec.get("agent_busy"):        # it would not quit: say so once, do not keep trying
+            refresh_unqueue(app, st, "cancelled", rec.get("result", ""))
+    return bool(background.submit(f"refresh:{app}", job))
+
+
 REFRESH_BUTTONS = ["Not now", "Always when idle", "Refresh now"]
 
 
@@ -1704,6 +1759,8 @@ def refresh_ask(app: str, cfg: dict, st: dict, gb: float, age_s, ops=None) -> di
         rec = refresh_app(app, cfg, ops)
         if rec.get("phase") == "done":
             st["last"] = time.time()
+        elif rec.get("agent_busy"):            # the agent woke up between the question and the yes
+            refresh_queue(app, st, cfg, "dialog")
         else:
             st["snooze_until"] = now + 30 * 60
         return rec
@@ -1721,6 +1778,10 @@ def refresh_state_from_events(hours: float = 48) -> dict:
             continue
         st = state.setdefault(e["app"], {"last": 0.0, "snooze_until": 0.0, "next_check": 0.0})
         ts = datetime.fromisoformat(e["ts"]).timestamp()
+        if e.get("phase") == "queued":
+            st["wanted"], st["wanted_until"] = ts, ts + e.get("wait_minutes", 120) * 60
+        elif e.get("phase") in ("cancelled", "expired") or (e.get("phase") == "done" and not e.get("dry_run")):
+            st["wanted"] = st["wanted_until"] = 0.0
         if e.get("phase") == "done" and not e.get("dry_run"):
             st["last"] = max(st["last"], ts)
         elif e.get("phase") in ("declined", "unanswered"):
@@ -1733,11 +1794,15 @@ def refresh_tick(cfg: dict, snap: dict, state: dict, background, now: float, ops
     """Called once per sample. Cheap checks first; the dialog and the refresh run on the worker.
     Returns the app a job was started for, or None."""
     rcfg = cfg.get("refresh") or {}
-    if cfg["mode"] == "observe" or snap.get("quiet") or background is None or background.busy():
+    if snap.get("quiet") or background is None or background.busy():
         return None
     for app, mode in (rcfg.get("apps") or {}).items():
         st = state.setdefault(app, {"last": 0.0, "snooze_until": 0.0, "next_check": 0.0})
-        if now < st["next_check"]:
+        if st.get("wanted"):                   # the owner asked: only the moment is still open
+            if refresh_wanted_tick(app, st, cfg, snap, background, now, ops, dry_run):
+                return app
+            continue
+        if cfg["mode"] == "observe" or now < st["next_check"]:
             continue
         grp = next((g for g in snap["groups"] if g["key"] == app), None)
         if refresh_due(mode, grp, snap["sample"], cfg, st, now, last_slow):
@@ -1787,6 +1852,25 @@ def refresh_cmd(cfg: dict, args):
             return
         rec = refresh_app(args.app, cfg, ops, force=args.force)
         print(f"{args.app}: {rec['phase']}: {rec['result']}")
+        if rec.get("agent_busy"):
+            print(f"To have it done at the next quiet moment: guardian.py refresh {args.app} --when-quiet")
+        return
+    if args.when_quiet or args.cancel:
+        if args.app not in (rcfg.get("apps") or {}):
+            print("name an app Guardian may refresh: " + ", ".join(rcfg.get("apps") or {}))
+            return
+        if helper_age() is None or helper_age() > 150:
+            print("the helper is not running, so nothing was queued (start it: guardian.py install)")
+            return
+        if args.cancel:
+            write_request("refresh_cancel", app=args.app)
+            print(f"{args.app}: asked the helper to stop waiting")
+        else:
+            write_request("refresh", app=args.app, when_quiet=True, source="cli")
+            print(f"{args.app}: the helper will refresh it at the next quiet moment: once its agent has been "
+                  f"quiet for {rcfg['agent_idle_minutes']} minutes and {args.app} is not in front. It stops "
+                  f"waiting after {int(rcfg.get('wait_minutes', 120))} minutes. "
+                  f"Cancel: guardian.py refresh {args.app} --cancel")
         return
     snap = snapshot(cfg)
     state = refresh_state_from_events()
@@ -1798,7 +1882,11 @@ def refresh_cmd(cfg: dict, args):
         grp = next((g for g in snap["groups"] if g["key"] == app), None)
         size = f"{grp['rss_mb'] / 1024:.1f}GB in {grp['n']} processes" if grp else "not running"
         why = refresh_due(mode, grp, snap["sample"], cfg, state.get(app, {}), now, last_slow_from_events())
-        if not why:
+        if refresh_waiting(state.get(app), now):
+            st = state[app]
+            why = (f"waiting for a quiet moment (you asked at {datetime.fromtimestamp(st['wanted']):%-I:%M %p}; "
+                   f"it stops waiting at {datetime.fromtimestamp(st['wanted_until']):%-I:%M %p})")
+        elif not why:
             age = ops.activity_age(app, cfg)
             verdict, reason = refresh_decide(mode, rcfg, age, ops.front_app() == app, ops.user_idle())
             why = {"wait": "waiting: ", "ask": "would ask you now: ", "refresh": "would refresh now: "}[verdict] + reason
@@ -1806,6 +1894,7 @@ def refresh_cmd(cfg: dict, args):
             why = "nothing to do: " + why
         print(f"  {app:14} mode={mode:5}  {size:28}  {why}")
     print("Do it now: guardian.py refresh APP --now      Change consent: guardian.py refresh APP --mode ask|auto|never")
+    print("At the next quiet moment: guardian.py refresh APP --when-quiet      Stop waiting: guardian.py refresh APP --cancel")
 
 
 # --------------------------------------------------------------------------
@@ -2920,6 +3009,39 @@ def requests_dir() -> Path:
     return CONFIG_DIR / "requests"
 
 
+def write_request(action: str, **args) -> Path:
+    """Hand the running helper a request the way the menu bar app does: a whole file or none."""
+    d = requests_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    name = f"{int(time.time() * 1000)}-{action}.json"
+    tmp = d / f".{name}.tmp"
+    tmp.write_text(json.dumps(dict(args, action=action, ts=time.time())))
+    os.replace(tmp, d / name)
+    return d / name
+
+
+def helper_age():
+    """Seconds since the running helper last wrote its state; None when it never has."""
+    try:
+        return time.time() - state_path().stat().st_mtime
+    except OSError:
+        return None
+
+
+def agent_age(menu: dict, cfg: dict, app: str):
+    """Seconds since the app's agent last wrote, measured once per screen refresh."""
+    hook = menu.get("activity_age")
+    if hook:
+        return hook(app)
+    cache = menu.setdefault("age_cache", {})
+    hit = cache.get(app)
+    if hit and time.time() - hit[0] < 5:
+        return hit[1]
+    age = MacAppOps().activity_age(app, cfg)
+    cache[app] = (time.time(), age)
+    return age
+
+
 def pause_until():
     """None when not paused; 0 for 'until resumed'; else the time the pause ends."""
     try:
@@ -2941,7 +3063,8 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
     lag = lag_level(s, cfg)
     tight = under_pressure(s, cfg)
     rcfg = cfg.get("refresh") or {}
-    age_of = menu.get("activity_age") or (lambda app: MacAppOps().activity_age(app, cfg))
+    age_of = lambda app: agent_age(menu, cfg, app)     # noqa: E731
+    rstate = menu.get("refresh_state") or {}
     out = []
     listed = [g for g in groups if (rcfg.get("apps") or {}).get(g["key"], "never") != "never"]
     big = max(listed, key=lambda g: g["rss_mb"]) if listed else None
@@ -3014,7 +3137,17 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
             offered_trim = act["id"] == "trim"
         out.append(issue)
     after_slow = outgrown_after_slow(big, s, cfg, menu.get("last_slow") or 0.0, time.time())
-    if big and (tight or after_slow) and big["rss_mb"] >= rcfg["min_gb"] * 1024 and big["key"] != crit_refresh:
+    for app, st in sorted(rstate.items()):
+        if refresh_waiting(st):
+            out.append({"id": f"waiting:{app}", "severity": "info",
+                        "title": f"{app} will be refreshed at its next quiet moment",
+                        "detail": f"You asked at {datetime.fromtimestamp(st['wanted']):%-I:%M %p}. Guardian waits until "
+                                  f"its agent has been quiet for {rcfg['agent_idle_minutes']} minutes and {app} is not "
+                                  f"in front. It stops waiting at {datetime.fromtimestamp(st['wanted_until']):%-I:%M %p}.",
+                        "action": {"id": "refresh_cancel", "label": "Cancel the waiting refresh",
+                                   "args": {"app": app}, "busy": False, "warning": ""}})
+    if big and (tight or after_slow) and big["rss_mb"] >= rcfg["min_gb"] * 1024 and big["key"] != crit_refresh \
+            and not refresh_waiting(rstate.get(big["key"])):
         act = refresh_action(big)
         total = s.get("mem_total_mb") or 0
         more = (f" That is more than this Mac's {total / 1024:.0f} GB of memory, so part of it always lives on disk."
@@ -3134,6 +3267,11 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
         "issues": issues, "busy": (bg.name or "") if bg is not None and bg.busy() else "",
         "last_action": menu.get("last_action"),
         "refreshable": [a for a, m in (rcfg.get("apps") or {}).items() if a in running],
+        "refresh_busy": {a: max(1, int(age // 60)) for a, age in
+                         ((a, agent_age(menu, cfg, a)) for a in (rcfg.get("apps") or {}) if a in running)
+                         if age is not None and age < rcfg["agent_idle_minutes"] * 60},
+        "refresh_waiting": [{"app": a, "since": st["wanted"], "until": st["wanted_until"]}
+                            for a, st in sorted((menu.get("refresh_state") or {}).items()) if refresh_waiting(st)],
         "trim": menu.get("trim") or [],
         "chrome_running": "Google Chrome" in running,
         "settings": {"mode": cfg["mode"], "notify": bool(cfg.get("notify", True)),
@@ -3261,13 +3399,30 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
             say(f"{app} is not on the list of apps Guardian may refresh.", ok=False)
             return False
 
+        st = menu.setdefault("refresh_state", {}).setdefault(
+            app, {"last": 0.0, "snooze_until": 0.0, "next_check": 0.0})
+        if req.get("when_quiet") and not req.get("force"):
+            until = refresh_queue(app, st, cfg, "command line" if req.get("source") == "cli" else "menu")
+            say(f"{app} will be refreshed at its next quiet moment: once its agent has been quiet for "
+                f"{cfg['refresh']['agent_idle_minutes']} minutes and {app} is not in front. Guardian stops "
+                f"waiting at {datetime.fromtimestamp(until):%-I:%M %p}.")
+            return False
+
         def job():
             rec = refresh_app(app, cfg, menu.get("ops"), force=bool(req.get("force")))
-            if rec.get("phase") == "done":
-                menu.get("refresh_state", {}).setdefault(app, {"last": 0.0, "snooze_until": 0.0, "next_check": 0.0})[
-                    "last"] = time.time()
+            if rec.get("phase") == "done":         # this also settles a refresh that was waiting
+                st.update(last=time.time(), wanted=0.0, wanted_until=0.0)
             say(f"{app}: {rec['result']}", ok=rec.get("phase") == "done")
         later(job, f"Refreshing {app}: quitting it, clearing its caches, reopening it...")
+    elif action == "refresh_cancel":
+        app = req.get("app")
+        if app not in (cfg["refresh"].get("apps") or {}):
+            say(f"{app} is not on the list of apps Guardian may refresh.", ok=False)
+            return False
+        if refresh_unqueue(app, (menu.get("refresh_state") or {}).get(app) or {}, "cancelled", "you cancelled it"):
+            say(f"Cancelled. {app} will not be refreshed by this request.")
+        else:
+            say(f"No refresh of {app} was waiting.", ok=False)
     elif action == "trim":
         app = req.get("app")
         if app not in ((cfg.get("trim") or {}).get("apps") or {}):
@@ -3837,12 +3992,13 @@ def render_report(hours: float) -> str:
         lines += ["- " + ln.strip() for ln in scratch.render_ledger_diff(scratch.ledger_diff(base, entries[-1]))]
         lines.append("")
     refreshes = [e for e in read_events(hours) if e.get("kind") == "refresh"
-                 and e.get("phase") in ("done", "aborted", "declined")]
+                 and e.get("phase") in ("done", "aborted", "declined", "queued", "cancelled", "expired")]
     if refreshes:
         lines.append("## Refreshes (quit cleanly, clear caches, reopen)")
         for e in refreshes[-10:]:
             lines.append(f"- {e['ts']}: {e.get('app')}: {e.get('phase')}"
-                         + (f": {e['result']}" if e.get("result") else ""))
+                         + (f": {e['result']}" if e.get("result") else "")
+                         + (f": {e['why']}" if e.get("why") else ""))
         lines.append("")
     moves = [e for e in read_events(hours) if e.get("kind") == "archive"
              and e.get("phase") in ("done", "restored", "declined")]
@@ -4487,6 +4643,9 @@ def main(argv=None):
     p.add_argument("app", nargs="?")
     p.add_argument("--now", action="store_true", help="do it now, unless its agent is working")
     p.add_argument("--force", action="store_true", help="with --now: even if its agent looks busy")
+    p.add_argument("--when-quiet", action="store_true",
+                   help="have the helper do it at the next quiet moment (agent quiet, app not in front)")
+    p.add_argument("--cancel", action="store_true", help="stop waiting for that quiet moment")
     p.add_argument("--mode", choices=["ask", "auto", "never"], help="set the consent for this app")
     p = sub.add_parser("disk", help="free space, where it went, what guardian gets back, what is yours to decide")
     p.add_argument("--snapshot", action="store_true", help="measure everything now (a minute or two) and compare")

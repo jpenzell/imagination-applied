@@ -66,6 +66,8 @@ struct GState {
     var lastTS: Double = 0
     var lastOK = true
     var refreshable: [String] = []
+    var refreshBusy: [String: Int] = [:]
+    var refreshWaiting: [String] = []
     var trim: [(app: String, n: Int, mb: Double)] = []
     var chromeRunning = false
     var notify = true
@@ -128,6 +130,12 @@ func loadState(_ url: URL) -> GState? {
         s.decompressMBs = num(lag["decompress_mb_s"])
     }
     s.refreshable = d["refreshable"] as? [String] ?? []
+    for (app, minutes) in d["refresh_busy"] as? [String: Any] ?? [:] {
+        s.refreshBusy[app] = Int(num(minutes) ?? 1)
+    }
+    for w in d["refresh_waiting"] as? [[String: Any]] ?? [] {
+        if let app = w["app"] as? String { s.refreshWaiting.append(app) }
+    }
     for t in d["trim"] as? [[String: Any]] ?? [] {
         s.trim.append((app: t["app"] as? String ?? "?", n: Int(num(t["n"]) ?? 0), mb: num(t["mb"]) ?? 0))
     }
@@ -483,13 +491,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func refreshApp(_ app: String) {
-        let warning = state?.issues.compactMap { $0.action }
-            .first { $0.id == "refresh" && ($0.args["app"] as? String) == app }?.warning ?? ""
         var text = "Guardian quits \(app) cleanly, clears its caches and reopens it. It takes about two minutes. "
             + "Chats and threads are kept; open windows may need reopening."
-        if !warning.isEmpty { text += "\n\n" + warning }
-        if confirm("Refresh \(app)?", text, button: "Refresh") {
+        guard let minutes = state?.refreshBusy[app] else {
+            if confirm("Refresh \(app)?", text, button: "Refresh") {
+                send("refresh", ["app": app, "force": true], note: "Refreshing \(app)...")
+            }
+            return
+        }
+        // Its agent is working: offer to wait for a quiet moment instead of stopping the task.
+        text += "\n\n\(app)'s agent was working \(minutes) min ago. Refreshing now stops that task. "
+            + "Guardian can wait instead and refresh it at the next quiet moment, without asking again."
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Refresh \(app)?"
+        alert.informativeText = text
+        alert.addButton(withTitle: "At the next quiet moment")
+        alert.addButton(withTitle: "Refresh now anyway")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            send("refresh", ["app": app, "when_quiet": true], note: "\(app) will be refreshed at its next quiet moment.")
+        case .alertSecondButtonReturn:
             send("refresh", ["app": app, "force": true], note: "Refreshing \(app)...")
+        default:
+            break
         }
     }
 

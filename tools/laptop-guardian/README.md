@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 120 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 125 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
@@ -334,6 +334,8 @@ almost nothing, and 3.8 GB of its caches could never be cleared because it never
 ```bash
 python3 guardian.py refresh                       # what it sees and what it would do, read-only
 python3 guardian.py refresh ChatGPT --now         # do it now (refuses while Codex is working)
+python3 guardian.py refresh ChatGPT --when-quiet  # the helper does it at the next quiet moment
+python3 guardian.py refresh ChatGPT --cancel      # stop waiting for that moment
 python3 guardian.py refresh ChatGPT --mode auto   # ask | auto | never
 ```
 
@@ -361,6 +363,20 @@ Consent is per app:
 - **auto**: no dialog; it acts when the agent is idle and you have been away from the
   keyboard for three minutes. Act mode only. Needs an activity signal for the app.
 - **never**: left alone. Any app not listed is never touched.
+
+**At the next quiet moment.** A refresh you ask for while the app's agent is working used to
+be refused and forgotten: on the first evening "Refresh now" met a Codex thread that had
+written 77 seconds earlier, and getting it done took a waiter written by hand. Now the
+request is remembered. In the menu, *Refresh* on an app whose agent is working offers *At
+the next quiet moment* (the default), *Refresh now anyway* and *Cancel*; a *Refresh now* in
+the dialog that meets an agent which just woke up is kept the same way; from a terminal it
+is `refresh APP --when-quiet`. Guardian then refreshes the app once its agent has been
+quiet for `agent_idle_minutes` and the app is not the one in front, so nothing half-typed
+in it is lost. You are not asked again and need not be away, and the size, pressure and
+"not now" rules do not apply: you asked. It waits `wait_minutes` (120), through a restart
+of the helper, and never during a meeting or presentation. While it waits the menu lists
+it under "Needs a look" with a button to cancel. If the app is quit by hand, will not
+quit, or no quiet moment comes, it stops and the diary says which.
 
 It is never forced. If the app does not quit within 45 seconds it is left running, and
 nothing is cleared or relaunched. The AI diagnosis may tune the thresholds but can never
@@ -513,7 +529,7 @@ guardian.py ask                    Claude Code / Codex diagnoses the diary (need
 guardian.py config --apply-suggestion   apply the config change `ask` proposed
 guardian.py scratch                disk census by tier; --reclaim safe|safe-old|all [--yes]
 guardian.py disk                   free space, where it went, what comes back on its own; --snapshot, --big
-guardian.py refresh [APP]          quit, clean and reopen a bloated AI app while idle; --now, --mode ask|auto|never
+guardian.py refresh [APP]          quit, clean and reopen a bloated AI app while idle; --now, --when-quiet, --cancel, --mode ask|auto|never
 guardian.py archive                old work folders to an external drive (dry run); --yes, --list, --restore NAME
 guardian.py chrome                 tab census: how many tabs, how many duplicates
 guardian.py chrome --close-duplicates   close duplicate URLs (all stay in History)

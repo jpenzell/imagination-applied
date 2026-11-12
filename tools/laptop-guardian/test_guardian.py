@@ -824,6 +824,86 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(tick(paused, state, g.time.time() - 600), "ChatGPT")
         self.assertEqual([c[0] for c in paused.calls], ["ask"])
 
+    def test_a_refresh_asked_for_while_the_agent_works_waits_for_a_quiet_moment(self):
+        # 2026-11-11: "Refresh now" met a Codex thread that had written 77 s earlier. Guardian
+        # refused and forgot, and the refresh took a hand-made waiter.
+        snap = {"groups": [{"key": "ChatGPT", "rss_mb": 2000, "n": 20}],
+                "sample": dict(sample(level=1, free=60), mem_total_mb=8192), "quiet": ""}
+
+        def tick(ops, state, cfg=None, snap=snap):
+            bg = g.Background()
+            app = g.refresh_tick(cfg or self.cfg, snap, state, bg, g.time.time(), ops=ops)
+            if bg.thread:
+                bg.thread.join(5)
+            return app
+
+        st = {"last": 0.0, "snooze_until": g.time.time() + 7200, "next_check": 0.0}
+        state = {"ChatGPT": st}
+        until = g.refresh_queue("ChatGPT", st, self.cfg, "menu")
+        self.assertAlmostEqual(until, g.time.time() + 120 * 60, delta=5)
+        self.assertTrue(g.refresh_waiting(st))
+        working = FakeOps(age=77.0)
+        self.assertIsNone(tick(working, state), "its agent is working")
+        st["next_check"] = 0.0
+        in_front = FakeOps(front="ChatGPT")
+        self.assertIsNone(tick(in_front, state), "something may be half-typed in it")
+        st["next_check"] = 0.0
+        self.assertIsNone(tick(FakeOps(), state, snap=dict(snap, quiet="Zoom meeting")), "not during a meeting")
+        self.assertEqual(working.calls + in_front.calls, [])
+        self.assertTrue(g.refresh_waiting(st), "still waiting")
+        st["next_check"] = 0.0
+        # Quiet and not in front. The Mac is calm, the app is small, 'not now' has two hours
+        # left, the owner is typing elsewhere and the mode is observe: none of it matters,
+        # because they asked.
+        quiet = FakeOps(idle=1.0)
+        self.assertEqual(tick(quiet, state, cfg=dict(self.cfg, mode="observe")), "ChatGPT")
+        self.assertEqual([c[0] for c in quiet.calls], ["quit", "term", "clear", "reopen"],
+                         "no dialog: they already said yes")
+        self.assertFalse(g.refresh_waiting(st))
+        self.assertAlmostEqual(st["last"], g.time.time(), delta=5)
+        self.assertEqual([p for p, _ in self.phases()], ["queued", "started", "done"])
+        self.assertFalse(g.refresh_waiting(g.refresh_state_from_events().get("ChatGPT")), "a restart does not redo it")
+
+    def test_a_waiting_refresh_survives_a_restart_and_gives_up_politely(self):
+        snap = {"groups": [{"key": "ChatGPT", "rss_mb": 9000, "n": 90}],
+                "sample": dict(sample(level=1, free=60), mem_total_mb=8192), "quiet": ""}
+        st = {}
+        g.refresh_queue("ChatGPT", st, self.cfg, "command line")
+        again = g.refresh_state_from_events()["ChatGPT"]
+        self.assertTrue(g.refresh_waiting(again), "a restart of the helper keeps the request")
+        self.assertAlmostEqual(again["wanted_until"], st["wanted_until"], delta=2)
+        # two hours on and no quiet moment came: it stops, and the diary says so
+        late = g.time.time() + 121 * 60
+        self.assertIsNone(g.refresh_tick(self.cfg, snap, {"ChatGPT": again}, g.Background(), late, ops=FakeOps(age=10.0)))
+        self.assertFalse(again.get("wanted"))
+        self.assertEqual(self.phases()[-1], ("expired", "ChatGPT"))
+        self.assertFalse(g.refresh_waiting(g.refresh_state_from_events().get("ChatGPT")))
+        # the app was quit by hand meanwhile: nothing is left to refresh
+        st = {}
+        g.refresh_queue("ChatGPT", st, self.cfg, "menu")
+        gone = dict(snap, groups=[])
+        self.assertIsNone(g.refresh_tick(self.cfg, gone, {"ChatGPT": st}, g.Background(), g.time.time(), ops=FakeOps()))
+        self.assertEqual(self.phases()[-1], ("cancelled", "ChatGPT"))
+        # it would not quit: said once, not tried again every half minute
+        st = {}
+        g.refresh_queue("ChatGPT", st, self.cfg, "menu")
+        stuck, bg = FakeOps(quits=False), g.Background()
+        self.assertEqual(g.refresh_tick(self.cfg, snap, {"ChatGPT": st}, bg, g.time.time(), ops=stuck), "ChatGPT")
+        bg.thread.join(10)
+        self.assertFalse(g.refresh_waiting(st))
+        self.assertEqual([p for p, _ in self.phases()][-3:], ["started", "aborted", "cancelled"])
+        self.assertIn("ChatGPT: cancelled: it did not quit", g.render_report(1))
+        self.assertIn("ChatGPT: expired: no quiet moment came", g.render_report(1))
+
+    def test_a_yes_in_the_dialog_that_meets_a_working_agent_is_remembered(self):
+        st, ops = {}, FakeOps(age=30.0, answer="Refresh now")
+        rec = g.refresh_ask("ChatGPT", self.cfg, st, 10.1, 1500, ops)
+        self.assertEqual(rec["phase"], "aborted")
+        self.assertTrue(rec["agent_busy"])
+        self.assertTrue(g.refresh_waiting(st), "the yes is kept for the next quiet moment")
+        self.assertNotIn("snooze_until", st, "and it is not turned into a 'not now'")
+        self.assertEqual([p for p, _ in self.phases()], ["asked", "aborted", "queued"])
+
     def test_refresh_quits_cleans_reopens_and_records_before_and_after(self):
         ops = FakeOps()
         rec = g.refresh_app("ChatGPT", self.cfg, ops)
@@ -1606,6 +1686,68 @@ class MenuTests(unittest.TestCase):
         _, menu = self.click({"action": "refresh", "app": "Google Chrome"}, self.menu(ops=ops))
         self.assertEqual(ops.calls, [])
         self.assertIn("not on the list", menu["last_action"]["text"])
+
+    def test_a_click_can_ask_for_the_next_quiet_moment_and_take_it_back(self):
+        ops = FakeOps(age=77.0)
+        changed, menu = self.click({"action": "refresh", "app": "ChatGPT", "when_quiet": True},
+                                   self.menu(age=77.0, ops=ops))
+        self.assertFalse(changed)
+        self.assertEqual(ops.calls, [], "nothing is done to the app yet")
+        self.assertTrue(menu["last_action"]["ok"])
+        self.assertIn("next quiet moment", menu["last_action"]["text"])
+        self.assertTrue(g.refresh_waiting(menu["refresh_state"]["ChatGPT"]))
+        st = g.build_state(self.cfg, self.snap(), menu)
+        self.assertEqual([w["app"] for w in st["refresh_waiting"]], ["ChatGPT"])
+        self.assertEqual(st["refresh_busy"], {"ChatGPT": 1}, "the menu knows its agent is working")
+        ids = [i["id"] for i in st["issues"]]
+        self.assertIn("waiting:ChatGPT", ids)
+        self.assertNotIn("grown:ChatGPT", ids, "one entry about it, not two")
+        waiting = next(i for i in st["issues"] if i["id"] == "waiting:ChatGPT")
+        self.assertIn("is not in front", waiting["detail"])
+        self.assertEqual((waiting["action"]["id"], waiting["action"]["args"]), ("refresh_cancel", {"app": "ChatGPT"}))
+        # the entry's own button takes it back
+        _, menu = self.click(dict(waiting["action"]["args"], action=waiting["action"]["id"]), menu)
+        self.assertIn("Cancelled", menu["last_action"]["text"])
+        self.assertFalse(g.refresh_waiting(menu["refresh_state"]["ChatGPT"]))
+        st = g.build_state(self.cfg, self.snap(), menu)
+        self.assertEqual(st["refresh_waiting"], [])
+        self.assertIn("grown:ChatGPT", [i["id"] for i in st["issues"]])
+        _, menu = self.click({"action": "refresh_cancel", "app": "ChatGPT"}, menu)
+        self.assertFalse(menu["last_action"]["ok"], "nothing was waiting")
+        _, menu = self.click({"action": "refresh_cancel", "app": "Google Chrome"}, menu)
+        self.assertIn("not on the list", menu["last_action"]["text"])
+        # 'refresh now anyway' while one is waiting settles both
+        self.click({"action": "refresh", "app": "ChatGPT", "when_quiet": True}, menu)
+        menu["ops"] = FakeOps(age=77.0)
+        _, menu = self.click({"action": "refresh", "app": "ChatGPT", "force": True}, menu)
+        self.assertEqual([c[0] for c in menu["ops"].calls], ["quit", "term", "clear", "reopen"])
+        self.assertFalse(g.refresh_waiting(menu["refresh_state"]["ChatGPT"]))
+        idle = g.build_state(self.cfg, self.snap(), self.menu(age=3600.0))
+        self.assertEqual(idle["refresh_busy"], {}, "an idle agent: the plain question, no third button")
+
+    def test_the_command_line_asks_the_helper_the_way_the_menu_does(self):
+        import argparse
+        args = argparse.Namespace(app="ChatGPT", mode=None, now=False, force=False, when_quiet=True, cancel=False)
+        out = g._captured(lambda: g.refresh_cmd(self.cfg, args))
+        self.assertIn("not running", out, "no helper: say so instead of leaving a request nobody reads")
+        self.assertEqual(g.read_requests(), [])
+        g.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        g.state_path().write_text("{}")
+        out = g._captured(lambda: g.refresh_cmd(self.cfg, args))
+        self.assertIn("next quiet moment", out)
+        self.assertEqual(len(g.os.listdir(g.requests_dir())), 1, "one whole file, no half-written one")
+        reqs = g.read_requests()
+        self.assertEqual((reqs[0]["action"], reqs[0]["app"], reqs[0]["when_quiet"]), ("refresh", "ChatGPT", True))
+        menu = self.menu(ops=FakeOps(age=77.0))
+        g.handle_request(reqs[0], self.cfg, menu)
+        self.assertEqual([e["source"] for e in g.read_events(1) if e.get("phase") == "queued"], ["command line"])
+        listing = g._captured(lambda: g.refresh_cmd(self.cfg, argparse.Namespace(
+            app="Codex", mode=None, now=False, force=False, when_quiet=False, cancel=True)))
+        self.assertIn("name an app Guardian may refresh", listing)
+        args.when_quiet, args.cancel = False, True
+        self.assertIn("stop waiting", g._captured(lambda: g.refresh_cmd(self.cfg, args)))
+        g.handle_request(g.read_requests()[0], self.cfg, menu)
+        self.assertFalse(g.refresh_waiting(menu["refresh_state"]["ChatGPT"]))
 
     def test_other_clicks(self):
         import archive
