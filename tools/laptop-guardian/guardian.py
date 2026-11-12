@@ -2851,24 +2851,43 @@ HANDOFF_REQUEST = """Please write a hand-off note so I can continue this work in
 Do not start any new work. Only write the note."""
 
 
-def handoff_steps(scan: dict) -> str:
-    """The four steps, shown next to the request that is already on the clipboard."""
+def handoff_dialog(scan: dict) -> dict:
+    """The fresh-thread helper as a dialog the menu bar app draws: a heading, four steps, the
+    request in a box and a Copy button. Nothing goes on the clipboard until that button is
+    clicked (it used to be put there unasked, by a click that then showed nothing)."""
     heavy = (scan.get("big") or [None])[0]
     which = (f"The long thread: started {heavy['started']}, {heavy['mb'] / 1024:.1f} GB of history, "
              f"working in {heavy['cwd'] or 'your home folder'}." if heavy else
              "No thread is long enough to slow the app down right now, but the steps work for any thread.")
-    return "\n".join([
-        "Start a fresh thread without losing your place", "",
-        which, "",
-        "1. A request for a hand-off note is already on your clipboard.",
-        "   Open the long thread, paste (Command-V) and send it.",
-        "2. Copy the note it writes back.",
-        "3. Start a new thread and paste the note as your first message.",
-        "4. Carry on in the new thread.", "",
-        "Nothing is deleted. The old thread stays in your history and you can open it whenever you",
-        "need to look something up. Once you stop working in it, the app no longer has to keep its",
-        "whole history at hand, which is what makes it heavy.", "",
-        "The request that is on your clipboard:", "", HANDOFF_REQUEST, ""])
+    return {
+        "heading": "Start a fresh thread without losing your place",
+        "intro": which,
+        "steps": ["Click \"Copy the request\" below.",
+                  "Open the long thread, paste it (Command-V) and send it.",
+                  "Copy the note it writes back.",
+                  "Start a new thread and paste the note as your first message. Carry on there."],
+        "box_title": "The request",
+        "copy_text": HANDOFF_REQUEST,
+        "copy_label": "Copy the request",
+        "copied": "Copied. Now paste it into the long thread (Command-V) and send it.",
+        "footer": ("Nothing is deleted. The old thread stays in your history and you can open it whenever you "
+                   "need to look something up. Once you stop working in it, the app no longer keeps its whole "
+                   "history at hand, which is what makes it heavy."),
+    }
+
+
+def chrome_tabs_phrase(counts) -> str:
+    """'11 of its 13 tabs are already asleep; awake: 1 in front, 1 in a tab group.' from the
+    extension's counts. '' when it has not said."""
+    if not counts or not counts.get("tabs"):
+        return ""
+    held = [("active", "in front"), ("grouped", "in a tab group"), ("never-touch", "on the never-touch list"),
+            ("pinned", "pinned"), ("audible", "playing sound"), ("loading", "loading"),
+            ("recent", "used in the last few minutes"), ("ready", "idle and about to sleep"),
+            ("private", "private"), ("internal", "Chrome's own pages")]
+    awake = [f"{counts[k]} {label}" for k, label in held if counts.get(k)]
+    return (f"{counts.get('asleep', 0)} of its {counts['tabs']} tabs are already asleep"
+            + (f"; awake: {', '.join(awake)}." if awake else "."))
 
 
 def to_clipboard(text: str) -> bool:
@@ -2911,8 +2930,11 @@ def parse_link_query(query: str) -> dict:
     """What the extension tacked onto its question: its version, and now and then two small
     counts. Anything that is not exactly a short version or a short number is dropped."""
     out, parts = {}, dict(kv.split("=", 1) for kv in query.split("&") if "=" in kv)
-    if set(parts) - {"v", "aside", "looked"}:
+    if set(parts) - {"v", "aside", "looked", "why"}:
         return out
+    # "why": what stepping aside would find, as counts by reason ("active.1_grouped.4_tabs.13")
+    if re.fullmatch(r"[a-z-]{1,14}\.\d{1,4}(_[a-z-]{1,14}\.\d{1,4}){0,15}", parts.get("why", "")):
+        out["why"] = {k: int(n) for k, n in (kv.rsplit(".", 1) for kv in parts["why"].split("_"))}
     if re.fullmatch(r"\d{1,3}(\.\d{1,3}){1,3}", parts.get("v", "")):
         out["v"] = parts["v"]
     if re.fullmatch(r"\d{1,4}", parts.get("aside", "")) and re.fullmatch(r"\d{1,4}", parts.get("looked", "")):
@@ -2969,9 +2991,12 @@ def start_status_server(port: int):
             LINK["seen"] = time.time()
             said = parse_link_query(query)
             LINK["ext"] = said.get("v")     # none: a copy from before 0.3.2, which did not say
+            if "why" in said:
+                LINK["tabs"] = said["why"]
             if "aside" in said:             # the extension saying what it just did; two small numbers
                 LINK["aside_total"] = LINK.get("aside_total", 0) + said["aside"]
-                log_event("chrome", stepped_aside=said["aside"], tabs_looked_at=said["looked"], ext=said.get("v"))
+                log_event("chrome", stepped_aside=said["aside"], tabs_looked_at=said["looked"], ext=said.get("v"),
+                          **({"why": said["why"]} if "why" in said else {}))
             # "ext": the version of the extension folder on this Mac, so a running copy that is
             # older can reload itself instead of waiting for someone to click an arrow.
             body = json.dumps({"v": 1, "lag": LINK["lag"], "ts": LINK["ts"],
@@ -3052,6 +3077,19 @@ def pause_until():
         return float(json.loads(text).get("until") or 0)
     except (ValueError, AttributeError, TypeError):
         return 0.0
+
+
+def chrome_detail(counts) -> str:
+    """What to say under 'Chrome is using N GB'. Seven slow spells in a row the extension
+    reported '0 tabs put to sleep', which read as a fault; 11 of the 13 tabs were asleep
+    already. With few tabs awake, closing tabs gives little back, and the entry says so."""
+    phrase = chrome_tabs_phrase(counts)
+    if not phrase:
+        return "Closing duplicate tabs is the quickest win. They stay in History."
+    if counts["tabs"] - counts.get("asleep", 0) <= 3:
+        return (phrase[0].upper() + phrase[1:] + " What is left is the tabs you are using and Chrome itself, so "
+                "closing tabs gives little back. Quitting and reopening Chrome gives back the most.")
+    return phrase[0].upper() + phrase[1:] + " Closing duplicate tabs is the quickest win. They stay in History."
 
 
 def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
@@ -3183,7 +3221,7 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
     if chrome and tight and chrome["rss_mb"] >= 4096:
         out.append({"id": "chrome", "severity": "info",
                     "title": f"Chrome is using {chrome['rss_mb'] / 1024:.1f} GB in {chrome['n']} processes",
-                    "detail": "Closing duplicate tabs is the quickest win. They stay in History.",
+                    "detail": chrome_detail(LINK.get("tabs") if time.time() - LINK["seen"] < 300 else None),
                     "action": {"id": "close_duplicate_tabs", "label": "Close duplicate tabs", "args": {}}})
     stale = extension_stale()
     if stale:
@@ -3263,7 +3301,7 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
                 "decompress_mb_s": s.get("decompress_mb_s"), "by": s.get("blame") or []},
         "chrome_link_age": (round(time.time() - LINK["seen"]) if LINK["seen"] else None),
         "chrome_ext": LINK.get("ext"), "chrome_ext_here": bundled_extension_version(),
-        "chrome_aside": LINK.get("aside_total", 0),
+        "chrome_aside": LINK.get("aside_total", 0), "chrome_tabs": LINK.get("tabs"),
         "issues": issues, "busy": (bg.name or "") if bg is not None and bg.busy() else "",
         "last_action": menu.get("last_action"),
         "page": dict(PAGE) if PAGE["path"] else None,
@@ -3472,10 +3510,11 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
     elif action == "handoff":
         scan = thread_scan(cfg)
         menu["threads"] = scan
-        copied = (menu.get("clipboard") or to_clipboard)(HANDOFF_REQUEST)
-        _show_text("fresh-thread.txt", handoff_steps(scan), "Start a fresh thread")
-        say("A request for a hand-off note is on your clipboard. Paste it into the long thread." if copied else
-            "Opened the steps. Copy the request from the bottom of that page.", ok=True)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        path = LOG_DIR / "fresh-thread.json"
+        path.write_text(json.dumps(handoff_dialog(scan), indent=1))
+        show_page(path, "Start a fresh thread")
+        say("The steps for a fresh thread are open. Nothing is copied until you click Copy.")
     elif action == "open_extensions":
         script = ('tell application "Google Chrome"\nactivate\nif (count of windows) = 0 then make new window\n'
                   'tell front window to make new tab with properties {URL:"chrome://extensions"}\nend tell')

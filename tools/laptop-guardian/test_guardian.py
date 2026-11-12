@@ -2084,12 +2084,14 @@ class AheadTests(unittest.TestCase):
     def test_a_fresh_thread_starts_with_a_note_from_the_long_one(self):
         heavy = {"file": "/x/rollout-1.jsonl", "mb": 1302, "started": "2026-09-09", "cwd": "~/Documents/Codex/2026-09-09/i-x20",
                  "idle_s": 3600}
-        steps = g.handoff_steps({"big": [heavy], "threads": [heavy], "active": 1})
-        self.assertIn("started 2026-09-09, 1.3 GB of history, working in ~/Documents/Codex/2026-09-09/i-x20", steps)
-        self.assertIn("Nothing is deleted.", steps)
-        self.assertIn(g.HANDOFF_REQUEST, steps, "the request is on the page too, in case the clipboard was overwritten")
+        spec = g.handoff_dialog({"big": [heavy], "threads": [heavy], "active": 1})
+        self.assertIn("started 2026-09-09, 1.3 GB of history, working in ~/Documents/Codex/2026-09-09/i-x20", spec["intro"])
+        self.assertIn("Nothing is deleted.", spec["footer"])
+        self.assertEqual((spec["copy_text"], spec["copy_label"]), (g.HANDOFF_REQUEST, "Copy the request"))
+        self.assertEqual(len(spec["steps"]), 4)
+        self.assertIn("Copy the request", spec["steps"][0], "the first step is the button, not a silent copy")
         self.assertIn("Do not start any new work.", g.HANDOFF_REQUEST)
-        self.assertIn("No thread is long enough", g.handoff_steps({"big": []}))
+        self.assertIn("No thread is long enough", g.handoff_dialog({"big": []})["intro"])
         # the menu offers it on the issue about a long thread, and the click copies the request
         menu = self.menu(threads={"ts": 0, "active": 1, "threads": [heavy], "big": [heavy]})
         st = g.build_state(self.cfg, self.snap(), menu)
@@ -2102,10 +2104,21 @@ class AheadTests(unittest.TestCase):
             g.handle_request({"action": "handoff", "ts": g.time.time()}, self.cfg, menu)
         finally:
             g.IS_MAC = saved
-        self.assertEqual(copied, [g.HANDOFF_REQUEST])
-        self.assertIn("on your clipboard", menu["last_action"]["text"])
-        self.assertIn("Start a fresh thread without losing your place", (g.LOG_DIR / "fresh-thread.txt").read_text())
-        self.assertEqual((g.PAGE["path"], g.PAGE["title"]), (str(g.LOG_DIR / "fresh-thread.txt"), "Start a fresh thread"))
+        self.assertEqual(copied, [], "the helper no longer touches the clipboard: the dialog's button does, when clicked")
+        self.assertIn("Nothing is copied until you click Copy", menu["last_action"]["text"])
+        drawn = g.json.loads((g.LOG_DIR / "fresh-thread.json").read_text())
+        self.assertEqual(drawn["heading"], "Start a fresh thread without losing your place")
+        self.assertEqual(drawn["copy_text"], g.HANDOFF_REQUEST)
+        self.assertEqual((g.PAGE["path"], g.PAGE["title"]), (str(g.LOG_DIR / "fresh-thread.json"), "Start a fresh thread"))
+        # what the extension counted goes into the entry about Chrome, in words
+        counts = {"active": 1, "asleep": 11, "grouped": 1, "tabs": 13}
+        self.assertEqual(g.chrome_tabs_phrase(counts),
+                         "11 of its 13 tabs are already asleep; awake: 1 in front, 1 in a tab group.")
+        self.assertIn("closing tabs gives little back", g.chrome_detail(counts))
+        busy = {"active": 2, "asleep": 3, "recent": 6, "ready": 4, "tabs": 15}
+        self.assertIn("Closing duplicate tabs is the quickest win", g.chrome_detail(busy))
+        self.assertTrue(g.chrome_detail(busy).startswith("3 of its 15 tabs are already asleep; awake: 2 in front"))
+        self.assertEqual(g.chrome_detail(None), "Closing duplicate tabs is the quickest win. They stay in History.")
         # opening Chrome's extensions page is one fixed script, nothing from the request goes into it
         ran = []
         menu["osascript"] = lambda script: ran.append(script) or True
@@ -2351,6 +2364,13 @@ class LagTests(unittest.TestCase):
         for bad in ("", "v=latest", "v=1.2.3.4.5", "v=0.3.2&cmd=x", "aside=2", "v=0.3.2&aside=-1&looked=3"):
             self.assertNotIn("aside", g.parse_link_query(bad), bad)
         self.assertEqual(g.parse_link_query("v=<script>"), {})
+        # from 0.3.4: why tabs were left alone, as counts by reason and nothing else
+        said = g.parse_link_query("v=0.3.4&aside=0&looked=13&why=active.1_grouped.9_never-touch.1_tabs.13")
+        self.assertEqual(said["why"], {"active": 1, "grouped": 9, "never-touch": 1, "tabs": 13})
+        self.assertEqual((said["v"], said["aside"]), ("0.3.4", 0))
+        for bad in ("v=0.3.4&why=https://a.example", "v=0.3.4&why=active.x", "v=0.3.4&why=a.1_" + "b.1_" * 20 + "c.1",
+                    "v=0.3.4&why=ACTIVE.1", "v=0.3.4&why="):
+            self.assertNotIn("why", g.parse_link_query(bad), bad)
         self.assertLess(g.version_tuple("0.3.1"), g.version_tuple("0.3.2"))
         self.assertLess(g.version_tuple("0.9.0"), g.version_tuple("0.10.0"), "numbers, not text")
         self.assertLess(g.version_tuple(None), g.version_tuple("0.0.1"))

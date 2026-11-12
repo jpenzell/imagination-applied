@@ -505,8 +505,10 @@ test("step aside: the Mac is struggling and you are elsewhere: idle background t
      { front: "untouched", idle: "asleep", fresh: "untouched", ancient: "asleep", pinned: "untouched", sound: "untouched",
        ai: "untouched", grouped: "untouched", loading: "untouched", secret: "untouched" }, "fates");
   eq(c.ops.filter(o => o.op === "bookmarks.create").length, 0, "nothing is parked in a hurry, not even a tab idle for days");
-  eq(c.state.asked, ["http://127.0.0.1:47613/status?v=9.8.7", "http://127.0.0.1:47613/status?v=9.8.7&aside=2&looked=10"],
-     "asked Guardian, told it what was done, and talked to nobody else");
+  const WHY = "&why=active.1_audible.1_grouped.1_loading.1_never-touch.1_pinned.1_private.1_ready.2_recent.1_tabs.10";
+  eq(c.state.asked, ["http://127.0.0.1:47613/status?v=9.8.7" + WHY, "http://127.0.0.1:47613/status?v=9.8.7&aside=2&looked=10" + WHY],
+     "asked Guardian, told it what was done and why the rest was left alone (counts only), and talked to nobody else");
+  eq(c.state.asked.filter(u => /example|claude|https:/.test(u.split("?")[1])).length, 0, "no address or site name leaves Chrome");
   eq([out.stats.slept, out.stats.parked, out.stats.skipped.grouped, out.stats.skipped.loading], [2, 0, 1, 1], "stats");
   eq(c.storage.local.data.daily[today()], { slept: 2, parked: 0, aside: 2 }, "counted for today");
   eq([c.storage.local.data.guardian.ok, c.storage.local.data.guardian.lag, c.storage.local.data.guardian.steppedAside], [true, "severe", 2], "link recorded");

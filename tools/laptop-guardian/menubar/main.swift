@@ -402,6 +402,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var sentAt: Double = 0
     private var pageShownTS = Date().timeIntervalSince1970     // pages from before this launch are old news
     private var pageWindow: NSWindow?
+    private var dialogWindow: NSWindow?
+    private var dialogCopyText = ""
+    private var dialogCopiedNote = ""
+    private var dialogStatus: NSTextField?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -436,8 +440,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             lines.append("page: none shown since this app started")
         }
+        if let w = dialogWindow {
+            let buttons = (w.contentView?.subviews.flatMap { $0.subviews } ?? []).compactMap { ($0 as? NSButton)?.title }
+            lines.append("dialog: visible: \(w.isVisible) | on screen: \(w.occlusionState.contains(.visible)) | "
+                         + "\(Int(w.frame.width))x\(Int(w.frame.height)) | buttons: \(buttons.joined(separator: ", ")) | "
+                         + "status: \(dialogStatus?.stringValue ?? "")")
+        } else {
+            lines.append("dialog: none shown since this app started")
+        }
+        // The app's own drawing of its windows, so an install can be looked at without a view of the screen.
+        savePicture(of: dialogWindow, to: "menubar-dialog.png")
+        savePicture(of: pageWindow, to: "menubar-page.png")
         try? lines.joined(separator: "\n").write(to: logsURL.appendingPathComponent("menubar-check.txt"),
                                                   atomically: true, encoding: .utf8)
+    }
+
+    func savePicture(of window: NSWindow?, to name: String) {
+        guard let w = window, w.isVisible, let v = w.contentView,
+              let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
+        v.cacheDisplay(in: v.bounds, to: rep)
+        if let data = rep.representation(using: .png, properties: [:]) {
+            try? data.write(to: logsURL.appendingPathComponent(name))
+        }
     }
 
     // MARK: icon
@@ -456,9 +480,118 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// A page the helper has just written (the list of threads, the fresh-thread steps, the
     /// check-up...). The helper runs in the background and cannot put a window in front, so
     /// this app shows it. Only files in Guardian's own log folder are read.
+    /// A page that is a small dialog rather than a text: a heading, numbered steps, a box with
+    /// text to copy and a Copy button. Nothing reaches the clipboard until that button is clicked.
+    func showDialog(_ spec: [String: Any], title: String) {
+        let width: CGFloat = 560
+        func label(_ s: String, size: CGFloat, bold: Bool = false, dim: Bool = false) -> NSTextField {
+            let l = NSTextField(wrappingLabelWithString: s)
+            l.font = bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size)
+            if dim { l.textColor = .secondaryLabelColor }
+            l.isSelectable = false
+            l.preferredMaxLayoutWidth = width
+            l.translatesAutoresizingMaskIntoConstraints = false
+            l.widthAnchor.constraint(equalToConstant: width).isActive = true
+            return l
+        }
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.edgeInsets = NSEdgeInsets(top: 22, left: 24, bottom: 20, right: 24)
+        stack.addArrangedSubview(label(spec["heading"] as? String ?? title, size: 17, bold: true))
+        if let intro = spec["intro"] as? String, !intro.isEmpty {
+            stack.addArrangedSubview(label(intro, size: 13, dim: true))
+        }
+        for (i, step) in (spec["steps"] as? [String] ?? []).enumerated() {
+            stack.addArrangedSubview(label("\(i + 1).  \(step)", size: 13))
+        }
+        dialogCopyText = spec["copy_text"] as? String ?? ""
+        dialogCopiedNote = spec["copied"] as? String ?? "Copied."
+        if !dialogCopyText.isEmpty {
+            if let boxTitle = spec["box_title"] as? String, !boxTitle.isEmpty {
+                stack.setCustomSpacing(16, after: stack.arrangedSubviews.last ?? stack)
+                stack.addArrangedSubview(label(boxTitle, size: 12, bold: true))
+            }
+            let scroll = NSTextView.scrollableTextView()
+            scroll.borderType = .bezelBorder
+            scroll.translatesAutoresizingMaskIntoConstraints = false
+            scroll.widthAnchor.constraint(equalToConstant: width).isActive = true
+            scroll.heightAnchor.constraint(equalToConstant: 150).isActive = true
+            if let view = scroll.documentView as? NSTextView {
+                view.isEditable = false
+                view.isSelectable = true
+                view.font = NSFont.systemFont(ofSize: 12)
+                view.textContainerInset = NSSize(width: 8, height: 8)
+                view.string = dialogCopyText
+            }
+            stack.addArrangedSubview(scroll)
+        }
+        if let footer = spec["footer"] as? String, !footer.isEmpty {
+            stack.addArrangedSubview(label(footer, size: 11.5, dim: true))
+        }
+        let status = NSTextField(labelWithString: "")
+        status.font = NSFont.systemFont(ofSize: 12)
+        status.textColor = .systemGreen
+        status.lineBreakMode = .byTruncatingTail
+        status.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        dialogStatus = status
+        let close = NSButton(title: "Close", target: self, action: #selector(closeDialog(_:)))
+        close.keyEquivalent = "\u{1b}"
+        let row = NSStackView(views: [status, close])
+        if !dialogCopyText.isEmpty {
+            let copy = NSButton(title: spec["copy_label"] as? String ?? "Copy", target: self,
+                                action: #selector(copyDialogText(_:)))
+            copy.keyEquivalent = "\r"
+            row.addArrangedSubview(copy)
+        }
+        row.orientation = .horizontal
+        row.distribution = .fill            // the status line takes the room, the buttons sit on the right
+        row.spacing = 10
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.widthAnchor.constraint(equalToConstant: width).isActive = true
+        stack.setCustomSpacing(16, after: stack.arrangedSubviews.last ?? stack)
+        stack.addArrangedSubview(row)
+
+        dialogWindow?.close()
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width + 48, height: 300),
+                         styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        w.title = "Guardian"
+        w.contentView = stack
+        w.setContentSize(stack.fittingSize)
+        w.center()
+        dialogWindow = w
+        NSApp.activate(ignoringOtherApps: true)
+        w.makeKeyAndOrderFront(nil)
+        w.orderFrontRegardless()
+    }
+
+    @objc func copyDialogText(_ sender: NSButton) {
+        guard !dialogCopyText.isEmpty else { return }
+        let board = NSPasteboard.general
+        board.clearContents()
+        let ok = board.setString(dialogCopyText, forType: .string)
+        dialogStatus?.textColor = ok ? .systemGreen : .systemRed
+        dialogStatus?.stringValue = ok ? dialogCopiedNote : "Could not copy. Select the text in the box and press Command-C."
+        if ok { sender.title = "Copied \u{2713}" }
+    }
+
+    @objc func closeDialog(_ sender: Any?) {
+        dialogWindow?.close()
+    }
+
     func showPage(path: String, title: String) {
         guard path.hasPrefix(logsURL.path + "/"), !path.contains("/../"),
               let text = try? String(contentsOfFile: path, encoding: .utf8) else { return }
+        if path.hasSuffix(".json") {
+            if let data = text.data(using: .utf8),
+               let spec = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+                showDialog(spec, title: title)
+            }
+            return
+        }
         let w: NSWindow
         if let existing = pageWindow {
             w = existing
@@ -791,7 +924,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.send("threads", note: "Opening the list of threads...")
         })
         menu.addItem(ClosureItem("Start a fresh thread from a long one\u{2026}") { [weak self] in
-            self?.send("handoff", note: "Putting a hand-off request on your clipboard...")
+            self?.send("handoff", note: "Opening the steps for a fresh thread...")
         })
         menu.addItem(ClosureItem("Today's report") { [weak self] in self?.send("report", note: "Opening the report...") })
         menu.addItem(ClosureItem("Run a check-up") { [weak self] in self?.send("doctor", note: "Running the check-up...") })

@@ -206,15 +206,25 @@ python3 guardian.py threads         # agent threads written recently, with the s
 - **Flag heavy threads.** The Codex engine holding a thread with a 1.2 GB history open was
   itself using 1.1 GB. Guardian lists a thread once its history passes 300 MB, says so once
   in a notification, and counts how many threads are in use at the same time.
-- **Start fresh from a long thread.** "Start a fresh thread from a long one" in the menu puts
-  a request for a hand-off note on the clipboard and opens four steps: paste it into the
-  long thread, copy the note it writes, paste that into a new thread, carry on there.
-  Guardian does not drive the app or touch the thread; nothing is deleted.
+- **Start fresh from a long thread.** "Start a fresh thread from a long one" in the menu opens
+  a small dialog: four steps, the request for a hand-off note in a box, and a *Copy the
+  request* button. Copy it, paste it into the long thread, copy the note it writes, paste
+  that into a new thread, carry on there. Nothing reaches the clipboard until the button is
+  clicked. Guardian does not drive the app or touch the thread; nothing is deleted.
 - **Pages come to the front.** The thread list, the fresh-thread steps, the check-up, the
   report and the diagnosis used to be opened by the helper, a background program, and so
   landed behind whatever was in front: two clicks, two pages in a text editor that was
   already open, nothing seen. The helper now only names the page in the state file, and
   the menu bar app shows it in a window of its own, in front.
+- **Chrome says why it left tabs alone.** Seven slow spells in a row ended "0 tabs put to
+  sleep", which read as a fault. From 0.3.4 the extension adds counts by reason to what it
+  tells Guardian (asleep, in front, in a tab group, never-touch, pinned, playing sound,
+  loading, recently used, ready): numbers only, no address or title. The answer that evening
+  was 11 of 13 tabs asleep already, one in front and one in a group; what Chrome still held
+  was those two tabs, its graphics process and itself. The diary keeps the counts with every
+  step-aside report, and the menu's entry about Chrome says them in words.
+  `kill -USR1` on the menu bar app also saves a picture of its own dialog and page windows
+  to the log folder, so an install can be looked at without a view of the screen.
 - **Warn early.** Swap climbing 1 GB within ten minutes came before 19 of that day's 25
   critical spells, usually by 5 to 12 minutes; 9 of its 16 firings were followed by one.
   When it fires, the shield gets its amber dot and the menu offers the gentlest fix first:

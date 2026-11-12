@@ -90,12 +90,38 @@ function runSweep(overrides = {}) {
 // 127.0.0.1 only. No answer means it is not running: carry on exactly as before.
 const VERSION = (() => { try { return chrome.runtime.getManifest().version; } catch (e) { return "0"; } })();
 
-async function askGuardian(settings) {
+// What stepping aside would find if it ran this minute, as counts and nothing else: no address
+// or title ever leaves Chrome. On the first evening seven slow spells in a row ended "0 tabs put
+// to sleep" and there was no way to tell why; now Guardian's diary says how many tabs were
+// asleep already, in a group, on the never-touch list, too recently used, and so on.
+async function census(settings, now) {
+  const tabs = await chrome.tabs.query({});
+  const { seenActive = {} } = await chrome.storage.session.get("seenActive");
+  const c = { tabs: tabs.length };
+  for (const tab of tabs) {
+    let why = tab.discarded ? "asleep" : untouchable(tab, settings);
+    if (!why && tab.groupId !== undefined && tab.groupId !== -1) why = "grouped";
+    if (!why && tab.status === "loading") why = "loading";
+    if (!why) {
+      const idleMin = (now - Math.max(tab.lastAccessed || now, seenActive[tab.id] || 0)) / 60000;
+      why = idleMin >= settings.stepAsideIdleMin ? "ready" : "recent";
+    }
+    c[why] = (c[why] || 0) + 1;
+  }
+  return c;
+}
+
+// "active.1_grouped.4_tabs.13": letters, digits, dots, dashes and underscores only.
+function censusText(c) {
+  return Object.keys(c).sort().map(k => `${k}.${c[k]}`).join("_");
+}
+
+async function askGuardian(settings, why = "") {
   try {
     const signal = (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(2500) : undefined;
     // Say which copy of the extension is asking, so Guardian can tell you when Chrome is still
     // running an old one (Chrome only loads a new copy when its reload arrow is clicked).
-    const r = await fetch(`http://127.0.0.1:${settings.guardianPort}/status?v=${VERSION}`, { signal, cache: "no-store" });
+    const r = await fetch(`http://127.0.0.1:${settings.guardianPort}/status?v=${VERSION}${why ? "&why=" + why : ""}`, { signal, cache: "no-store" });
     if (!r.ok) return null;
     const s = await r.json();
     return s && typeof s.lag === "string" ? s : null;
@@ -136,7 +162,11 @@ async function chromeInFront() {
 async function pulse(overrides = {}) {
   const settings = { ...(await getSettings()), ...overrides };
   const now = overrides.now || Date.now();
-  const status = settings.enabled && settings.stepAside ? await askGuardian(settings) : null;
+  let why = "";
+  if (settings.enabled && settings.stepAside) {
+    try { why = censusText(await census(settings, now)); } catch (e) { why = ""; }
+  }
+  const status = settings.enabled && settings.stepAside ? await askGuardian(settings, why) : null;
   const link = { at: now, ok: !!status, lag: status ? status.lag : null };
   let stats = null;
   if (await reloadIfNewerHere(status)) {
@@ -150,7 +180,7 @@ async function pulse(overrides = {}) {
       stats = await runSweep({ ...overrides, stepAside: true });
       link.steppedAside = stats.slept;
       // Tell Guardian what was just done (two small numbers), so its diary shows Chrome stepping aside.
-      try { await fetch(`http://127.0.0.1:${settings.guardianPort}/status?v=${VERSION}&aside=${stats.slept}&looked=${stats.looked}`, { cache: "no-store" }); }
+      try { await fetch(`http://127.0.0.1:${settings.guardianPort}/status?v=${VERSION}&aside=${stats.slept}&looked=${stats.looked}${why ? "&why=" + why : ""}`, { cache: "no-store" }); }
       catch (e) {}
     }
   }
