@@ -2419,7 +2419,7 @@ class ArchiveOps:
             [f"Guardian, {datetime.now():%Y-%m-%d %H:%M}: what could move to an external drive", ""]
             + archive_lines(plan) + ["", "Nothing has been copied or removed. Guardian will ask again shortly.",
                                      f"Or do it yourself: python3 {Path(__file__).resolve()} archive --yes"]) + "\n")
-        subprocess.run(["open", "-t", str(path)], capture_output=True, text=True, timeout=30)
+        show_page(path, "Old work folders that could move to a drive")
 
     def start(self, cfg: dict):
         """The copy runs in its own low-priority process: it can take half an hour, and the
@@ -3266,6 +3266,7 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
         "chrome_aside": LINK.get("aside_total", 0),
         "issues": issues, "busy": (bg.name or "") if bg is not None and bg.busy() else "",
         "last_action": menu.get("last_action"),
+        "page": dict(PAGE) if PAGE["path"] else None,
         "refreshable": [a for a, m in (rcfg.get("apps") or {}).items() if a in running],
         "refresh_busy": {a: max(1, int(age // 60)) for a, age in
                          ((a, agent_age(menu, cfg, a)) for a in (rcfg.get("apps") or {}) if a in running)
@@ -3324,12 +3325,23 @@ def _captured(fn) -> str:
     return buf.getvalue()
 
 
-def _show_text(name: str, text: str):
+PAGE = {"ts": 0.0, "path": "", "title": ""}
+
+
+def show_page(path, title: str):
+    """Put a page in front of the owner. The helper is a background program, and a page it opens
+    itself stays behind whatever is in front: on 2026-11-11 two clicks opened two pages in a
+    text editor that was already running, and nothing was seen. So the page is named in the
+    state file and the menu bar app, which the owner has just used, shows it in a window of
+    its own."""
+    PAGE.update(ts=time.time(), path=str(path), title=title)
+
+
+def _show_text(name: str, text: str, title: str = "Guardian"):
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     path = LOG_DIR / name
     path.write_text(text)
-    if IS_MAC:
-        subprocess.run(["open", "-t", str(path)], capture_output=True, text=True, timeout=30)
+    show_page(path, title)
     return path
 
 
@@ -3441,7 +3453,8 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
         if not homes["single"]:
             say("Every archived folder already has a second copy.")
         elif not to or not homes["reachable"] or not homes["other"] or to != homes["other"]["path"]:
-            _show_text("second-copy.txt", SECOND_COPY_HELP.format(script=Path(__file__).resolve()))
+            _show_text("second-copy.txt", SECOND_COPY_HELP.format(script=Path(__file__).resolve()),
+                       "A second copy of your archives")
             say("Opened the steps for a second copy." if homes["reachable"] else
                 f"Connect {homes['drive']} as well: the archives have to be read from it.", ok=bool(homes["reachable"]))
         else:
@@ -3454,13 +3467,13 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
     elif action == "threads":
         scan = thread_scan(cfg)
         menu["threads"] = scan
-        _show_text("threads-now.txt", render_threads(scan, cfg))
+        _show_text("threads-now.txt", render_threads(scan, cfg), "Agent threads")
         say("Opened the list of threads.")
     elif action == "handoff":
         scan = thread_scan(cfg)
         menu["threads"] = scan
         copied = (menu.get("clipboard") or to_clipboard)(HANDOFF_REQUEST)
-        _show_text("fresh-thread.txt", handoff_steps(scan))
+        _show_text("fresh-thread.txt", handoff_steps(scan), "Start a fresh thread")
         say("A request for a hand-off note is on your clipboard. Paste it into the long thread." if copied else
             "Opened the steps. Copy the request from the bottom of that page.", ok=True)
     elif action == "open_extensions":
@@ -3512,10 +3525,10 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
     elif action == "snapshot":
         later(lambda: (write_ledger(), say("Disk measured. See: guardian.py disk")), "Measuring the disk...")
     elif action == "report":
-        _show_text("report-now.md", render_report(24))
+        _show_text("report-now.md", render_report(24), "Today's report")
         say("Opened today's report.")
     elif action == "doctor":
-        later(lambda: (_show_text("doctor-now.txt", _captured(lambda: doctor(cfg, Path(__file__)))),
+        later(lambda: (_show_text("doctor-now.txt", _captured(lambda: doctor(cfg, Path(__file__))), "Check-up"),
                        say("Opened the check-up.")), "Running the check-up...")
     elif action == "diagnose":
         def job():
@@ -3523,7 +3536,7 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
             ask(cfg, hours=24, quiet=True, outcome=outcome)
             path = LOG_DIR / outcome["path_name"] if outcome.get("path_name") else None
             if outcome.get("result") == "ok" and path:
-                subprocess.run(["open", "-t", str(path)], capture_output=True, text=True, timeout=30)
+                show_page(path, "Diagnosis")
                 say("The diagnosis is open.")
             else:
                 say(f"No diagnosis: {outcome.get('reason') or outcome.get('result') or 'the AI did not answer'}.", ok=False)

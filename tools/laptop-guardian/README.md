@@ -210,6 +210,11 @@ python3 guardian.py threads         # agent threads written recently, with the s
   a request for a hand-off note on the clipboard and opens four steps: paste it into the
   long thread, copy the note it writes, paste that into a new thread, carry on there.
   Guardian does not drive the app or touch the thread; nothing is deleted.
+- **Pages come to the front.** The thread list, the fresh-thread steps, the check-up, the
+  report and the diagnosis used to be opened by the helper, a background program, and so
+  landed behind whatever was in front: two clicks, two pages in a text editor that was
+  already open, nothing seen. The helper now only names the page in the state file, and
+  the menu bar app shows it in a window of its own, in front.
 - **Warn early.** Swap climbing 1 GB within ten minutes came before 19 of that day's 25
   critical spells, usually by 5 to 12 minutes; 9 of its 16 firings were followed by one.
   When it fires, the shield gets its amber dot and the menu offers the gentlest fix first:

@@ -2042,6 +2042,12 @@ class AheadTests(unittest.TestCase):
         self.assertFalse(menu["last_action"]["ok"])
         g.handle_request({"action": "threads", "ts": g.time.time()}, self.cfg, menu)
         self.assertIn("Agent threads written in the last 2 hours: 0", (g.LOG_DIR / "threads-now.txt").read_text())
+        # 2026-11-11: the page opened behind the app in front and nothing was seen. The helper
+        # no longer opens it; it names it, and the menu bar app shows it in front.
+        self.assertEqual((g.PAGE["path"], g.PAGE["title"]), (str(g.LOG_DIR / "threads-now.txt"), "Agent threads"))
+        self.assertAlmostEqual(g.PAGE["ts"], g.time.time(), delta=5)
+        snap = {"sample": dict(sample(level=1, free=60), mem_total_mb=8192), "groups": [], "quiet": ""}
+        self.assertEqual(g.build_state(self.cfg, snap, menu)["page"]["title"], "Agent threads")
 
     def test_a_swap_jump_that_freed_memory_is_not_a_warning(self):
         # 2026-11-11: eleven warnings. Four came as macOS moved squeezed memory to disk and free
@@ -2099,6 +2105,7 @@ class AheadTests(unittest.TestCase):
         self.assertEqual(copied, [g.HANDOFF_REQUEST])
         self.assertIn("on your clipboard", menu["last_action"]["text"])
         self.assertIn("Start a fresh thread without losing your place", (g.LOG_DIR / "fresh-thread.txt").read_text())
+        self.assertEqual((g.PAGE["path"], g.PAGE["title"]), (str(g.LOG_DIR / "fresh-thread.txt"), "Start a fresh thread"))
         # opening Chrome's extensions page is one fixed script, nothing from the request goes into it
         ran = []
         menu["osascript"] = lambda script: ran.append(script) or True

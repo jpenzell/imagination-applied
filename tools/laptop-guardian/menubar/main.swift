@@ -67,6 +67,9 @@ struct GState {
     var lastOK = true
     var refreshable: [String] = []
     var refreshBusy: [String: Int] = [:]
+    var pageTS: Double = 0
+    var pagePath = ""
+    var pageTitle = ""
     var refreshWaiting: [String] = []
     var trim: [(app: String, n: Int, mb: Double)] = []
     var chromeRunning = false
@@ -123,6 +126,11 @@ func loadState(_ url: URL) -> GState? {
         s.lastText = l["text"] as? String ?? ""
         s.lastTS = num(l["ts"]) ?? 0
         s.lastOK = (l["ok"] as? Bool) ?? true
+    }
+    if let p = d["page"] as? [String: Any] {
+        s.pageTS = num(p["ts"]) ?? 0
+        s.pagePath = p["path"] as? String ?? ""
+        s.pageTitle = p["title"] as? String ?? ""
     }
     if let lag = d["lag"] as? [String: Any] {
         s.lagLevel = lag["level"] as? String ?? "none"
@@ -392,6 +400,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var shown = ""
     private var sentNote = ""
     private var sentAt: Double = 0
+    private var pageShownTS = Date().timeIntervalSince1970     // pages from before this launch are old news
+    private var pageWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -420,6 +430,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         lines.append("tooltip: \(button.toolTip ?? "")")
         lines.append("dot: \(button.attributedTitle.string.isEmpty ? "none" : "shown")")
+        if let w = pageWindow {
+            lines.append("page: \(w.title) | visible: \(w.isVisible) | on screen: "
+                         + "\(w.occlusionState.contains(.visible)) | \(Int(w.frame.width))x\(Int(w.frame.height))")
+        } else {
+            lines.append("page: none shown since this app started")
+        }
         try? lines.joined(separator: "\n").write(to: logsURL.appendingPathComponent("menubar-check.txt"),
                                                   atomically: true, encoding: .utf8)
     }
@@ -437,8 +453,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return (.normal, nil, "Guardian: \(s.headline)")
     }
 
+    /// A page the helper has just written (the list of threads, the fresh-thread steps, the
+    /// check-up...). The helper runs in the background and cannot put a window in front, so
+    /// this app shows it. Only files in Guardian's own log folder are read.
+    func showPage(path: String, title: String) {
+        guard path.hasPrefix(logsURL.path + "/"), !path.contains("/../"),
+              let text = try? String(contentsOfFile: path, encoding: .utf8) else { return }
+        let w: NSWindow
+        if let existing = pageWindow {
+            w = existing
+        } else {
+            w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 620),
+                         styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                         backing: .buffered, defer: false)
+            w.isReleasedWhenClosed = false
+            w.center()
+            pageWindow = w
+        }
+        w.title = "Guardian: \(title.isEmpty ? "page" : title)"
+        let scroll = NSTextView.scrollableTextView()
+        if let view = scroll.documentView as? NSTextView {
+            view.isEditable = false
+            view.isSelectable = true
+            view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+            view.textContainerInset = NSSize(width: 16, height: 16)
+            view.string = text
+        }
+        w.contentView = scroll
+        NSApp.activate(ignoringOtherApps: true)
+        w.makeKeyAndOrderFront(nil)
+        w.orderFrontRegardless()
+    }
+
     func reload() {
         state = loadState(stateURL)
+        if let s = state, !s.pagePath.isEmpty, s.pageTS > pageShownTS,
+           Date().timeIntervalSince1970 - s.pageTS < 120 {
+            pageShownTS = s.pageTS
+            showPage(path: s.pagePath, title: s.pageTitle)
+        }
         let l = look(state)
         let signature = "\(l.glyph)|\(l.dot?.description ?? "")|\(l.tip)"
         guard signature != shown, let button = item?.button else { return }
