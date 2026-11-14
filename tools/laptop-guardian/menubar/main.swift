@@ -629,7 +629,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         case "send":
             guard let action = b["action"] as? String else { return }
-            var args: [String: Any] = [:]
+            var args: [String: Any] = b["args"] as? [String: Any] ?? [:]     // e.g. which AI writes the note
             if let popup = dialogPopup, popup.indexOfSelectedItem >= 0,
                popup.indexOfSelectedItem < dialogChoiceIDs.count {
                 args["thread"] = dialogChoiceIDs[popup.indexOfSelectedItem]

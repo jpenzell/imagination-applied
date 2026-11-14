@@ -210,15 +210,22 @@ python3 guardian.py threads         # agent threads written recently, with the s
   the menu opens a dialog that lists the threads used in the last two days, biggest first.
   *Write the note* has Guardian read the conversation straight from the thread's file (your
   messages and the agent's replies; in a 109 MB thread that is under 1 MB, the rest is tool
-  output), has Claude write a hand-off note from it, and shows the note. *Open a new thread
+  output), has an AI write a hand-off note from it, and shows the note. *Open a new thread
   with it* then opens the ChatGPT app's Codex with the note already in the message box
   (`codex://threads/new?prompt=...&path=...`, the app's own documented link); you read it
   and press Send. No copying, no pasting, and the heavy thread is never woken. What leaves
   the Mac is said in the dialog before the click: the text of that one conversation goes to
-  Claude. It is cut to 150,000 characters (the first three of your messages, then as much of
-  the end as fits), tool output and injected context are left out, the diary records counts
-  only, and if Claude's command-line tool is missing or signed out the dialog says so
-  rather than using another AI. *Do it by hand instead* keeps the old way: the request in a
+  whichever service writes the note. It is cut to 150,000 characters (the first three of
+  your messages, then as much of the end as fits), tool output and injected context are
+  left out, and the diary records counts only.
+  The writer is ChatGPT's own Codex engine by default: it ships inside the ChatGPT app
+  (`Contents/Resources/codex-cli/bin/codex`), is signed in whenever the app is, and the
+  thread already lives with OpenAI. It is run with no saved session, no user config, a
+  read-only sandbox in an empty folder, and the conversation on standard input. *Use Claude
+  instead* sends it to the `claude` command-line tool. The first real click, on 2026-11-13,
+  failed because Claude was then the only writer and its sign-in had expired; a failure now
+  says so in plain words and offers the other writer for the same thread in one click. A
+  writer asked for by name is never swapped for the other. *Do it by hand* keeps the old way: the request in a
   box with a *Copy the request* button, to paste into the long thread yourself. Nothing
   reaches the clipboard, Claude or the app until a button is clicked; nothing is deleted.
 - **Pages come to the front.** The thread list, the fresh-thread steps, the check-up, the
