@@ -2639,19 +2639,57 @@ class AutopilotTests(unittest.TestCase):
         cli.chmod(0o755)
         return str(cli)
 
-    def _ask_with(self, body: str):
+    def _ask_with(self, body: str, others=(), command="auto"):
         cfg = g.load_config(g.Path("/nonexistent"))
         cfg["notify"] = False
         cfg["ai"]["timeout_seconds"] = 20
+        cfg["ai"]["command"] = command
         exe = self._fake_cli(body)
-        saved = g.find_ai_command, g.snapshot
+        saved = g.find_ai_command, g.snapshot, g.note_writers
         g.find_ai_command = lambda cfg: ("claude", exe)
         g.snapshot = lambda cfg: {"sample": {"ts": 0}, "groups": [], "classes": {}}
+        g.note_writers = lambda cfg: [("claude", exe)] + list(others)     # never the real ChatGPT app in a test
         try:
             outcome = {}
             return g.ask(cfg, hours=1, quiet=True, outcome=outcome), outcome
         finally:
-            g.find_ai_command, g.snapshot = saved
+            g.find_ai_command, g.snapshot, g.note_writers = saved
+
+    def _fake_codex(self, text: str = "", code: int = 0) -> str:
+        """Stands in for ChatGPT's engine: writes its last message where -o says."""
+        cli = self.tmp / "codex"
+        cli.write_text("#!/bin/sh\nout=''\nwhile [ $# -gt 0 ]; do [ \"$1\" = '-o' ] && out=\"$2\"; shift; done\n"
+                       "cat > /dev/null\n" + (f"printf '%s' '{text}' > \"$out\"\n" if text else "echo 'ERROR: 401 Unauthorized' >&2\n")
+                       + f"exit {code}\n")
+        cli.chmod(0o755)
+        return str(cli)
+
+    def test_a_signed_out_claude_hands_the_diagnosis_to_chatgpts_engine(self):
+        # 2026-11-13: "OAuth session expired and could not be refreshed", twice in one day
+        expired = 'echo "Failed to authenticate: OAuth session expired and could not be refreshed"; exit 1'
+        answer = "## What is slowing this Mac down\n- ChatGPT holds more than the Mac has."
+        path, outcome = self._ask_with(expired, others=[("codex", self._fake_codex(answer.replace("\n", " ")))])
+        self.assertEqual((outcome["result"], outcome["via"], outcome["signed_out"]), ("ok", "codex", ["claude"]))
+        text = path.read_text()
+        self.assertTrue(text.startswith("# Guardian diagnosis via codex"))
+        self.assertIn("(claude was not signed in on this Mac, so codex wrote this.)", text)
+        self.assertIn("ChatGPT holds more than the Mac has", text)
+        ev = [e for e in g.read_events(1) if e["kind"] == "ask"]
+        self.assertEqual([(e["result"], e["via"], e.get("signed_out")) for e in ev], [("ok", "codex", ["claude"])])
+        # neither is signed in: one failure, and the notification says how to fix either
+        path, outcome = self._ask_with(expired, others=[("codex", self._fake_codex(code=1))])
+        self.assertIsNone(path)
+        self.assertEqual((outcome["result"], outcome["via"], outcome["reason"], outcome["signed_out"]),
+                         ("failed", "codex", "not logged in", ["claude", "codex"]))
+        ai = {"day": "d", "runs": 0, "retry_after": 0.0, "fail_notified": None}
+        self.assertIn("Open the ChatGPT app and sign in", g.record_ask_outcome(ai, outcome, 1000.0, "d"))
+        # only a sign-in problem hands the diary on: any other failure stays a failure
+        path, outcome = self._ask_with('echo "error: unknown option"; exit 2', others=[("codex", self._fake_codex(answer))])
+        self.assertEqual((outcome["result"], outcome["via"]), ("failed", "claude"))
+        self.assertNotIn("signed_out", outcome)
+        # and an AI named in the config is never swapped for another
+        path, outcome = self._ask_with(expired, others=[("codex", self._fake_codex(answer))], command="claude")
+        self.assertEqual((outcome["result"], outcome["via"], outcome["reason"]), ("failed", "claude", "not logged in"))
 
     def test_ask_failure_recognises_what_is_not_a_diagnosis(self):
         self.assertEqual(g.ask_failure(1, "Not logged in \u00b7 Please run /login"), "not logged in")

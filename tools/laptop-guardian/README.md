@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 127 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 128 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
@@ -228,6 +228,13 @@ python3 guardian.py threads         # agent threads written recently, with the s
   writer asked for by name is never swapped for the other. *Do it by hand* keeps the old way: the request in a
   box with a *Copy the request* button, to paste into the long thread yourself. Nothing
   reaches the clipboard, Claude or the app until a button is clicked; nothing is deleted.
+- **A signed-out AI does not stop the diagnosis.** On 2026-11-13 the `claude` tool's sign-in
+  expired ("OAuth session expired and could not be refreshed") and the daily diagnosis
+  failed twice. When the first AI is not signed in, and only then, the other one this Mac
+  has is asked: in practice the Codex engine inside the ChatGPT app, run with no saved
+  session, no user config and a read-only sandbox. The diagnosis file says which one wrote
+  it and why. Any other failure stays a failure, and an AI named in `ai.command` is never
+  swapped for another.
 - **Pages come to the front.** The thread list, the fresh-thread steps, the check-up, the
   report and the diagnosis used to be opened by the helper, a background program, and so
   landed behind whatever was in front: two clicks, two pages in a text editor that was
@@ -557,7 +564,7 @@ guardian.py status                 pressure, swap, compressor, thermal, disk, to
 guardian.py watch --once --dry-run one cycle, print decisions, exit
 guardian.py watch --once --dry-run --simulate level=4,free=3   exercise the policy on fake readings
 guardian.py report --hours 24      episodes, usual suspects, actions
-guardian.py ask                    Claude Code / Codex diagnoses the diary (needs `claude` or `codex` on PATH)
+guardian.py ask                    Claude Code / Codex diagnoses the diary (`claude` on PATH, or the engine inside the ChatGPT app)
 guardian.py config --apply-suggestion   apply the config change `ask` proposed
 guardian.py scratch                disk census by tier; --reclaim safe|safe-old|all [--yes]
 guardian.py disk                   free space, where it went, what comes back on its own; --snapshot, --big

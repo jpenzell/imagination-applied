@@ -2981,11 +2981,28 @@ def note_writers(cfg: dict) -> list:
     return out
 
 
+def codex_answer(exe: str, prompt: str, timeout: float, run=None):
+    """Ask ChatGPT's Codex engine one thing and get its last message: (answer, finished process).
+    No saved session (it must not show up as a thread), no user config (no plug-ins or tool
+    servers to start), a read-only sandbox in an empty folder, the prompt on standard input."""
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="guardian-ai-") as tmp:
+        work, last = Path(tmp) / "work", Path(tmp) / "answer.txt"
+        work.mkdir()
+        cmd = [exe, "exec", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
+               "-s", "read-only", "--color", "never", "-C", str(work), "-o", str(last), "-"]
+        out = (run or subprocess.run)(cmd, input=prompt, capture_output=True, text=True,
+                                      timeout=timeout, env=ai_env(), cwd=str(work))
+        answer = (last.read_text().strip() if last.is_file() else "") or out.stdout.strip()
+        if out.returncode != 0 or not answer:       # its stderr echoes the prompt: keep only the last line
+            answer = ([ln for ln in out.stderr.splitlines() if ln.strip()] or [""])[-1][:200]
+    return answer, out
+
+
 def handoff_note(thread: dict, cfg: dict, run=None, writer: str = None) -> dict:
     """Have an AI write the hand-off note for this thread. {"ok", "note", "why", "via", counts}.
     `writer` is "codex" (ChatGPT's engine) or "claude"; None means the first one this Mac has.
     A writer that was asked for by name is never swapped for the other one."""
-    import tempfile
     t0 = time.time()
     try:
         msgs = thread_messages(thread["file"])
@@ -3011,18 +3028,7 @@ def handoff_note(thread: dict, cfg: dict, run=None, writer: str = None) -> dict:
                                           timeout=timeout, env=ai_env(), cwd=str(HOME))
             answer = out.stdout.strip() or out.stderr.strip()
         else:
-            # No saved session (it must not appear as a thread), no user config (no plug-ins or
-            # tool servers to start), a read-only sandbox in an empty folder, prompt on stdin.
-            with tempfile.TemporaryDirectory(prefix="guardian-note-") as tmp:
-                work, note_file = Path(tmp) / "work", Path(tmp) / "note.txt"
-                work.mkdir()
-                cmd = [exe, "exec", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
-                       "-s", "read-only", "--color", "never", "-C", str(work), "-o", str(note_file), "-"]
-                out = (run or subprocess.run)(cmd, input=prompt, capture_output=True, text=True,
-                                              timeout=timeout, env=ai_env(), cwd=str(work))
-                answer = (note_file.read_text().strip() if note_file.is_file() else "") or out.stdout.strip()
-                if out.returncode != 0 or not answer:       # its stderr echoes the prompt: keep only the last line
-                    answer = ([ln for ln in out.stderr.splitlines() if ln.strip()] or [""])[-1][:200]
+            answer, out = codex_answer(exe, prompt, timeout, run)
         why = ask_failure(out.returncode, answer)
     except subprocess.TimeoutExpired:
         answer, why = "", f"{who} did not answer within {timeout} seconds"
@@ -4476,6 +4482,8 @@ def record_ask_outcome(ai: dict, outcome: dict, now: float, today) -> str:
     ai["fail_notified"] = today
     via, reason = outcome.get("via") or "claude/codex", outcome.get("reason") or "no CLI found"
     if reason == "not logged in":
+        if via == "codex":
+            return "Could not get a diagnosis: no AI on this Mac is signed in. Open the ChatGPT app and sign in, or run `claude` in Terminal."
         return f"Could not get a diagnosis: the {via} command-line tool is not logged in. Run `{via}` in Terminal and sign in."
     return f"Could not get a diagnosis ({via}: {reason})."
 
@@ -4519,30 +4527,43 @@ def ask(cfg: dict, hours: float = 24, quiet: bool = False, outcome: dict = None)
         log_event("ask", result="no-cli", packet=str(packet))
         outcome.update(result="no-cli", via=None, reason="no claude or codex CLI found")
         return None
-    if name == "claude":
-        cmd = [exe, "-p", prompt, "--output-format", "text"]
-    else:
-        cmd = [exe, "exec", "--skip-git-repo-check", prompt]
-    try:
-        out = subprocess.run(cmd, capture_output=True, text=True,
-                             timeout=cfg["ai"]["timeout_seconds"], env=ai_env(), cwd=str(HOME))
-        answer = out.stdout.strip() or out.stderr.strip()
-        why = ask_failure(out.returncode, answer)
-    except subprocess.TimeoutExpired:
-        answer, why = "", f"timed out after {cfg['ai']['timeout_seconds']}s"
-    except OSError as e:
-        answer, why = "", f"could not run: {e}"
+    # 2026-11-13: the claude tool's sign-in expired and the daily diagnosis failed twice. When
+    # the first AI is not signed in (and only then), the other one this Mac has is asked; the
+    # owner agreed to that. An AI named in the config is never swapped for another.
+    candidates = [(name, exe)]
+    if cfg["ai"].get("command", "auto") in ("auto", "", None):
+        candidates += [(k, p) for k, p in note_writers(cfg) if k != name]
+    signed_out, answer, why = [], "", ""
+    for name, exe in candidates:
+        try:
+            if name == "claude":
+                out = subprocess.run([exe, "-p", prompt, "--output-format", "text"], capture_output=True, text=True,
+                                     timeout=cfg["ai"]["timeout_seconds"], env=ai_env(), cwd=str(HOME))
+                answer = out.stdout.strip() or out.stderr.strip()
+            else:
+                answer, out = codex_answer(exe, prompt, cfg["ai"]["timeout_seconds"])
+            why = ask_failure(out.returncode, answer)
+        except subprocess.TimeoutExpired:
+            answer, why = "", f"timed out after {cfg['ai']['timeout_seconds']}s"
+        except OSError as e:
+            answer, why = "", f"could not run: {e}"
+        if why != "not logged in":
+            break
+        signed_out.append(name)
+    also = {"signed_out": signed_out} if signed_out and (signed_out != [name] or not why) else {}
     if why:
-        log_event("ask", result="failed", via=name, reason=why, packet=str(packet))
-        outcome.update(result="failed", via=name, reason=why)
+        log_event("ask", result="failed", via=name, reason=why, packet=str(packet), **also)
+        outcome.update(result="failed", via=name, reason=why, **also)
         if not quiet:
             print(f"No diagnosis: {name} {why}.")
             if why == "not logged in":
-                print(f"Run `{name}` in Terminal and sign in, then run this again.")
+                print("Sign in (run `claude` in Terminal, or open the ChatGPT app), then run this again.")
             print(f"The packet it would have read is at {packet}; you can paste it into any assistant.")
         return None
     path = LOG_DIR / f"diagnosis-{datetime.now():%Y-%m-%d-%H%M}.md"
-    path.write_text(f"# Guardian diagnosis via {name} ({datetime.now():%Y-%m-%d %H:%M})\n\n{answer}\n")
+    stood_in = (f"({' and '.join(signed_out)} was not signed in on this Mac, so {name} wrote this.)\n\n"
+                if signed_out else "")
+    path.write_text(f"# Guardian diagnosis via {name} ({datetime.now():%Y-%m-%d %H:%M})\n\n{stood_in}{answer}\n")
     suggestion = None
     m = re.search(r"```json guardian-suggestion\s*(\{.*?\})\s*```", answer, re.S)
     if m:
@@ -4562,8 +4583,8 @@ def ask(cfg: dict, hours: float = 24, quiet: bool = False, outcome: dict = None)
                 (CONFIG_DIR / "suggested-config.json").write_text(json.dumps(suggestion_for_review, indent=2) + "\n")
         except json.JSONDecodeError:
             suggestion = None
-    log_event("ask", result="ok", via=name, path=str(path), suggestion=suggestion)
-    outcome.update(result="ok", via=name, path_name=path.name)
+    log_event("ask", result="ok", via=name, path=str(path), suggestion=suggestion, **also)
+    outcome.update(result="ok", via=name, path_name=path.name, **also)
     if not quiet:
         print(answer)
         print(f"\n[saved to {path}]")
