@@ -73,18 +73,18 @@ export const PUBLICATIONS = [
   {
     slug: 'adoption-without-confidence',
     title: 'Adoption Without Confidence',
-    subtitle: 'AI use, attitude and trust in the 2025 and 2026 Stack Overflow surveys',
+    subtitle: 'AI use, attitudes and trust across four annual Stack Overflow Developer Surveys, 2023 to 2026',
     description:
-      'Among current AI users in the 2026 analysis, 54% of very unfavorable users reported daily use, compared with 93% of very favorable users. The survey redesign limits comparisons with 2025.',
-    ogTitle: 'Daily AI use can coexist with an unfavorable view of the tools',
+      'Frequent use alone does not establish enthusiasm, dependable reliance or better work. From 2023 to 2025, use became more common while favorable attitudes and trust in accuracy fell among users. In 2026, the figures again combine widespread use with less favorable views, under redesigned questions.',
+    ogTitle: 'Using AI every day tells us only part of the story',
     ogDescription:
-      'The 2026 Stack Overflow analysis separates use, attitude and conditions for trust. Read the findings, methods and limits.',
+      'Four annual Stack Overflow Developer Surveys, 2023 to 2026: AI use, attitudes and trust. Read the executive brief, full whitepaper, methods and limits.',
     formalTitle:
       'Adoption Without Confidence? Favorable Stance, Trust, and Reported AI-Use Frequency in the 2025 and 2026 Stack Overflow Surveys',
     author: 'Josh Penzell',
     version: '3.2.0',
     datePublished: '2026-08-12',
-    dateModified: '2026-11-07',
+    dateModified: '2026-11-16',
     series: 'Open Research Series',
     license: 'MIT',
     licenseUrl: 'https://opensource.org/licenses/MIT',

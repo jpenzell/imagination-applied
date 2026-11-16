@@ -15,6 +15,7 @@ const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const repoRoot = path.resolve(siteRoot, '..');
 const pkg = path.join(repoRoot, 'publications', 'adoption-without-confidence');
 const currentPkg = path.join(repoRoot, 'publications', 'adoption-without-confidence-2026');
+const fourYearPkg = path.join(repoRoot, 'publications', 'adoption-without-confidence-four-year');
 
 const SLUG = 'adoption-without-confidence';
 const publicDir = path.join(siteRoot, 'public', 'publications', SLUG);
@@ -68,6 +69,22 @@ async function main() {
   };
   for (const [dest, src] of Object.entries(currentDownloads)) {
     await cp(path.join(currentPkg, src), path.join(publicDir, dest));
+  }
+
+  // Four-year edition (November 2026). Staged under its own filenames so the
+  // reading editions' relative links between brief, whitepaper and HTML resolve.
+  const fourYearDownloads = {
+    'adoption-without-confidence-executive-brief.pdf': 'adoption-without-confidence-executive-brief.pdf',
+    'adoption-without-confidence-full-whitepaper.pdf': 'adoption-without-confidence-full-whitepaper.pdf',
+    'executive-brief-reading-edition.html': 'executive-brief-reading-edition.html',
+    'report-reading-edition.html': 'report-reading-edition.html',
+    'report-reading-edition.md': 'report-reading-edition.md',
+    'MANIFEST-four-year.sha256': 'MANIFEST.sha256',
+  };
+  for (const [dest, src] of Object.entries(fourYearDownloads)) {
+    const from = path.join(fourYearPkg, src);
+    if (!existsSync(from)) throw new Error(`Missing four-year file: ${src}`);
+    await cp(from, path.join(publicDir, dest));
   }
 
   // Figures, referenced relatively by the blog markdown.

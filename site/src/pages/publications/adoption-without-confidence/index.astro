@@ -9,9 +9,17 @@ const base = `/publications/${pub.slug}`;
 const pageUrl = new URL(`${base}/`, SITE.origin).href;
 
 const DOWNLOADS = [
-  { href: `${base}/executive-brief-2026.pdf`, label: '2026 executive brief (PDF)' },
-  { href: `${base}/executive-brief-2026.docx`, label: '2026 executive brief (Word)' },
-  { href: `${base}/carousel-2026.pdf`, label: '2026 slide summary (PDF)' },
+  { href: `${base}/adoption-without-confidence-executive-brief.pdf`, label: 'Executive brief, 4 pages (PDF)' },
+  { href: `${base}/adoption-without-confidence-full-whitepaper.pdf`, label: 'Full whitepaper, 22 pages (PDF)' },
+  { href: `${base}/executive-brief-reading-edition.html`, label: 'Executive brief reading edition (HTML)' },
+  { href: `${base}/report-reading-edition.html`, label: 'Full whitepaper reading edition (HTML)' },
+  { href: `${base}/report-reading-edition.md`, label: 'Full whitepaper reading edition (Markdown)' },
+];
+const NOV7_DOWNLOADS = [
+  { href: `${base}/executive-brief-2026.pdf`, label: 'November 7 executive brief (PDF)' },
+  { href: `${base}/executive-brief-2026.docx`, label: 'November 7 executive brief (Word)' },
+  { href: `${base}/carousel-2026.pdf`, label: 'November 7 slide summary (PDF)' },
+  { href: `${base}/MANIFEST-2026.sha256`, label: 'November 7 file manifest (SHA-256)' },
 ];
 const ARCHIVE_DOWNLOADS = [
   { href: `${base}/paper.html`, label: '2025 article (HTML)' },
@@ -82,7 +90,8 @@ const jsonLd = {
         }
       </time>
     </p>
-    <p class="muted">This revision adds the 2026 survey. The original 2025 release was published August 12, 2026 and remains available below.</p>
+    <p><strong>Using AI every day tells us only part of the story.</strong> Frequent use alone does not establish enthusiasm, dependable reliance or better work. From 2023 to 2025, use became more common while favorable attitudes and trust in accuracy fell among users. In 2026, the figures again combine widespread use with less favorable views, under redesigned questions.</p>
+    <p class="muted">This edition covers four annual surveys, 2023 to 2026. The November 7, 2026 files and the original 2025 release (published August 12, 2026) remain available below.</p>
   </section>
 
   <div class="wrap pub-layout">
@@ -100,7 +109,7 @@ const jsonLd = {
       <ul>
         <li><a href={pub.researchRelease}>2026 research release</a></li>
         <li><a href={pub.researchRepo}>Analysis, methods and verification</a></li>
-        <li><a href={`${base}/MANIFEST-2026.sha256`}>2026 file manifest (SHA-256)</a></li>
+        <li><a href={`${base}/MANIFEST-four-year.sha256`}>Four-year edition file manifest (SHA-256)</a></li>
         <li><a href={`${base}/CITATION.cff`}>CITATION.cff</a></li>
       </ul>
       <p class="muted" style="font-size:0.82rem">
@@ -115,6 +124,12 @@ const jsonLd = {
         <div class="meta-row"><dt>Licence</dt><dd><a href={pub.licenseUrl}>{pub.license}</a></dd></div>
         <div class="meta-row"><dt>2026 DOI</dt><dd>Not yet assigned</dd></div>
       </dl>
+
+      <h2>November 7, 2026 files</h2>
+      <p class="muted">The earlier 2026 revision files, before the four-year edition.</p>
+      <ul>
+        {NOV7_DOWNLOADS.map((d) => <li><a href={d.href}>{d.label}</a></li>)}
+      </ul>
 
       <h2>2025 release archive</h2>
       <p class="muted">Version 3.1.0, published August 12, 2026. These files and the DOI identify the earlier analysis, before the 2026 survey was added.</p>
