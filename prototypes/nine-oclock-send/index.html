@@ -52,6 +52,7 @@ button:focus-visible,.hs:focus-visible,input:focus-visible{outline:3px solid var
 .card svg{width:56px;height:84px}
 .card b{font-family:var(--display);font-size:17px;display:block}
 .card span{font-size:14px;color:var(--ink-soft);display:block}
+.chcard{grid-template-columns:1fr;gap:4px;align-items:start}
 .card[aria-pressed="true"]{border-color:var(--lamp);background:var(--deck-2);box-shadow:inset 0 0 0 1px var(--lamp)}
 .startrow{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 .seed{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;color:var(--ink-soft)}
@@ -172,6 +173,29 @@ fieldset label,.lines label{display:flex;gap:8px;align-items:baseline;padding:3p
 .checker{border-top:1px solid var(--line);padding-top:12px;margin-top:6px;display:grid;gap:8px}
 details summary{cursor:pointer;color:var(--ink);font-family:var(--display);font-weight:700}
 .folder .items button.gchip{border-color:var(--pip);color:var(--pip)}
+.splash{position:relative}
+.splash .logo{position:absolute;left:5%;top:9%;display:grid;gap:8px;pointer-events:none}
+.splash .logo span{font-family:var(--mono);font-size:clamp(10px,1.5vw,14px);letter-spacing:.14em;text-transform:uppercase;color:var(--lamp)}
+.splash .logo b{font-family:var(--display);font-weight:700;font-size:clamp(34px,8.5vw,92px);line-height:.92;letter-spacing:-.03em;text-shadow:0 4px 0 #0008}
+.btn.big{font-size:20px;padding:13px 30px;font-family:var(--display);font-weight:700;text-align:center}
+.step{font-size:clamp(24px,4vw,34px);letter-spacing:-.02em}
+.days{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.day{display:grid;gap:4px;text-align:left;background:var(--deck);border:2px solid var(--line);border-radius:12px;padding:0 0 12px;overflow:hidden;transition:transform .12s}
+.day:hover,.day:focus-visible{border-color:var(--lamp);transform:translateY(-3px)}
+.day svg{display:block;width:100%;height:auto;margin-bottom:6px;font-family:var(--mono)}
+.day>span,.day>b{padding:0 12px}
+.day .dn{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--lamp)}
+.day b{font-family:var(--display);font-size:20px;line-height:1.1}
+.day>span{font-size:14px;color:var(--ink-soft)}
+.day .badge{font-family:var(--mono);font-size:12px;margin-top:4px}
+.day .badge.on{color:var(--go)}
+.capt{display:flex;flex-wrap:wrap;gap:6px 18px;min-height:26px;color:var(--ink-soft)}
+.capt b{color:var(--lamp);font-family:var(--display)}
+.bubble.tut{bottom:auto;top:6%;background:var(--lamp);color:var(--lamp-ink);max-width:min(340px,70%)}
+.bubble.tut::after{border-top-color:var(--lamp)}
+.bob{animation:bob .6s ease-in-out infinite alternate}
+@keyframes bob{to{transform:translateY(-10px)}}
+@media (prefers-reduced-motion:reduce){.bob{animation:none}.day{transition:none}}
 </style>
 
 <div class="wrap">
@@ -254,7 +278,7 @@ function rng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.im
 function scenario(seed){const r=rng(seed),d0={plans:0};let n;
   do{n=0;CLAIMS.slice(1).forEach(c=>{const w=r()<.5;d0[c.k]=w?c.bad:c.ok;n+=w})}while(n<1||n>3);
   return{seed,d0,oc:Math.floor(r()*3)}}
-const fresh=()=>({v:3,screen:'title',pick:[],seedIn:'',cast:[],active:0,follow:true,loc:{},x:{},min:START,verb:'look',inv:[],f:{},told:{},
+const fresh=()=>({v:4,ch:1,chPick:1,ts:'splash',screen:'title',pick:[],seedIn:'',cast:[],active:0,follow:true,loc:{},x:{},min:START,verb:'look',inv:[],f:{},told:{},
   sc:null,draft:{},status:'live',author:null,reviewer:null,note:[],line:null,code:null,gs:0,ending:null,log:[],beats:[],guide:[],tut:0,tips:{},tipText:'',said:{oc:[],gil:[]}});
 const $=id=>document.getElementById(id);
 const me=()=>CAST[S.cast[S.active]];
@@ -271,7 +295,7 @@ function speak(t,c){c=c||me();say(t,c.name);if(c.id===me().id)bubble(t);sfx('tal
 function give(i){if(has(i))return false;S.inv.push(i);S.log.push({got:'Team folder: '+ITEMS[i][0]});drawTalk();drawItems();sfx('get');onGive(i);return true}
 function beat(t){S.beats.push([S.min,t])}
 function tick(n){S.min+=n;drawTop();
-  if(!stopped()){if(SEND-S.min<=15&&S.min<SEND)sfx('tick');if(S.min>=SEND){S.min=SEND;finish('sent');return true}}return false}
+  if(!stopped()){if(SEND-S.min<=15&&S.min<SEND)sfx('tick');if(S.min>=SEND){S.min=SEND;if(S.ch>1)endCh(CH().late);else finish('sent');return true}}return false}
 
 /* ================= sound ================= */
 let AC=null,ambG=null,soundOn=false;
@@ -317,18 +341,18 @@ const desk=(x,y,w)=>R(x,y,w,12,'#a8734a','rx="3"')+R(x+8,y+12,w-16,84,'#7a5236')
 const monitor=(x,y,w,h,scr)=>R(x,y,w,h,'#10162a','rx="5"')+R(x+5,y+5,w-10,h-12,scr,'rx="3"')+R(x+w/2-6,y+h,12,10,'#10162a')+R(x+w/2-22,y+h+8,44,5,'#10162a','rx="2"');
 const led=(x,y,c,i)=>Ci(x,y,3,c,`class="led" style="animation-delay:${-(i*.37%1.4).toFixed(2)}s"`);
 
-function fig(c,x,o={}){const y=392,sk=c.skin,isMe=o.me;let hB='',hF='',ex='',eyes=Ci(-7,y-137,2.4,'#1a1420')+Ci(7,y-137,2.4,'#1a1420');
-  if(c.id==='dana'){hB=Ci(0,y-146,27,c.hair);hF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L19 ${y-148} L-19 ${y-148}Z" fill="${c.hair}"/>`;ex=R(-10,y-118,20,5,'#f3efe6','rx="2"')}
-  if(c.id==='ravi'){hF=`<path d="M-20 ${y-138} A20 21 0 0 1 20 ${y-138} L17 ${y-146} L-17 ${y-146}Z" fill="${c.hair}"/>`;eyes='';
+function fig(c,x,o={}){const y=392,sk=c.skin,isMe=o.me,st=c.style||c.id;let hB='',hF='',ex='',eyes=Ci(-7,y-137,2.4,'#1a1420')+Ci(7,y-137,2.4,'#1a1420');
+  if(st==='dana'){hB=Ci(0,y-146,27,c.hair);hF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L19 ${y-148} L-19 ${y-148}Z" fill="${c.hair}"/>`;ex=R(-10,y-118,20,5,'#f3efe6','rx="2"')}
+  if(st==='ravi'){hF=`<path d="M-20 ${y-138} A20 21 0 0 1 20 ${y-138} L17 ${y-146} L-17 ${y-146}Z" fill="${c.hair}"/>`;eyes='';
     ex=`<circle cx="-8" cy="${y-137}" r="6" fill="none" stroke="#f3efe6" stroke-width="2"/><circle cx="8" cy="${y-137}" r="6" fill="none" stroke="#f3efe6" stroke-width="2"/>`}
-  if(c.id==='lucia'){hB=R(-22,y-152,44,58,c.hair,'rx="18"');hF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L10 ${y-152} L-14 ${y-150}Z" fill="${c.hair}"/>`;ex=R(-3,y-112,6,30,'#f3efe6','rx="2"')+Ci(12,y-72,4,'#e0c080')}
-  if(c.id==='theo'){hF=`<path d="M-21 ${y-140} A21 22 0 0 1 21 ${y-140}Z" fill="#2f6e7a"/>`+R(-21,y-143,42,7,'#3c8a99','rx="3"')+`<path d="M-14 ${y-128} Q0 ${y-112} 14 ${y-128} L14 ${y-124} Q0 ${y-108} -14 ${y-124}Z" fill="${c.hair}"/>`;
+  if(st==='lucia'){hB=R(-22,y-152,44,58,c.hair,'rx="18"');hF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L10 ${y-152} L-14 ${y-150}Z" fill="${c.hair}"/>`;ex=R(-3,y-112,6,30,'#f3efe6','rx="2"')+Ci(12,y-72,4,'#e0c080')}
+  if(st==='theo'){hF=`<path d="M-21 ${y-140} A21 22 0 0 1 21 ${y-140}Z" fill="#2f6e7a"/>`+R(-21,y-143,42,7,'#3c8a99','rx="3"')+`<path d="M-14 ${y-128} Q0 ${y-112} 14 ${y-128} L14 ${y-124} Q0 ${y-108} -14 ${y-124}Z" fill="${c.hair}"/>`;
     ex=R(-20,y-66,14,18,'#f3efe6','rx="2"')+`<path d="M-12 ${y-116} L-13 ${y-66}" stroke="#f3efe6" stroke-width="2"/>`}
-  if(c.id==='bea'){hB=Ci(0,y-162,11,c.hair);hF=`<path d="M-20 ${y-140} A20 21 0 0 1 20 ${y-140} L16 ${y-150} L-16 ${y-150}Z" fill="${c.hair}"/>`;
+  if(st==='bea'){hB=Ci(0,y-162,11,c.hair);hF=`<path d="M-20 ${y-140} A20 21 0 0 1 20 ${y-140} L16 ${y-150} L-16 ${y-150}Z" fill="${c.hair}"/>`;
     ex=R(-4,y-118,8,72,'#f3efe6')+`<path d="M-13 ${y-134} h10 m6 0 h10" stroke="#1a1420" stroke-width="2"/>`}
-  if(c.id==='gil'){hF=`<path d="M-20 ${y-140} A20 22 0 0 1 20 ${y-140} L20 ${y-150} Q0 ${y-164} -20 ${y-148}Z" fill="${c.hair}"/>`;
+  if(st==='gil'){hF=`<path d="M-20 ${y-140} A20 22 0 0 1 20 ${y-140} L20 ${y-150} Q0 ${y-164} -20 ${y-148}Z" fill="${c.hair}"/>`;
     ex=`<path d="M-10 ${y-118} L0 ${y-104} L10 ${y-118}Z" fill="#f3efe6"/>`+R(-3,y-108,6,40,'#ff6f61','rx="2"')}
-  if(c.id==='oc'){hF=`<path d="M-20 ${y-138} A20 21 0 0 1 20 ${y-138} L17 ${y-147} L-17 ${y-147}Z" fill="${c.hair}"/>`;
+  if(st==='oc'){hF=`<path d="M-20 ${y-138} A20 21 0 0 1 20 ${y-138} L17 ${y-147} L-17 ${y-147}Z" fill="${c.hair}"/>`;
     ex=`<path d="M-22 ${y-136} A22 24 0 0 1 22 ${y-136}" fill="none" stroke="#c9ccd9" stroke-width="4"/>`+R(-27,y-142,8,14,'#c9ccd9','rx="3"')+`<path d="M-24 ${y-130} q4 12 14 10" stroke="#c9ccd9" stroke-width="3" fill="none"/>`}
   const leg=(lx,cls)=>`<g class="leg ${cls}">${R(lx,y-54,14,52,c.legs,'rx="5"')+R(lx-3,y-6,19,8,'#10162a','rx="4"')}</g>`;
   return `<g class="fig" ${isMe?'id="me"':''} style="transform:translate(${x}px,${o.dy||0}px)" opacity="${o.dim?.72:1}">
@@ -366,8 +390,8 @@ lobby:{name:'Lobby',wait:430,bg:()=>shell('#2a3558','#232b47')+win(40,40,470,190
 bullpen:{name:'Bullpen',wait:130,bg:()=>shell('#2b3a5c','#252e4c')+win(660,40,230,120,2)+R(40,180,50,50,'#1f2944','rx="4"')+(stopped()?'':Ci(485,92,200,'url(#red)',SEND-S.min<=15?'class="alarm"':''))+lamp(250,150),
  spots:[
  {id:'x_kitchen',name:'kitchen',exit:'kitchen',at:120,box:[196,96,96,196],stand:244,art:()=>R(188,88,112,204,'#151b30')+R(196,96,96,196,'#ffcf8a')+R(196,96,96,196,'url(#glow)')+R(204,60,80,20,'#f3efe6','rx="3"')+Tx(244,74,'KITCHEN','#1a2238',11,'text-anchor="middle" font-weight="600"')},
- {id:'wallscreen',name:'wall screen',box:[360,36,250,112],art:()=>R(360,36,250,112,'#10162a','rx="6"')+R(368,44,234,96,stopped()?'#143528':'#3a1820','rx="3"')+Tx(380,64,'REFUND POLICY UPDATE','#f3efe6',13,'font-weight="600"')+Tx(590,128,'TUE 17 NOV','#c9ccd9',10,'text-anchor="end"')+Tx(380,84,'4,112 recipients · drafted by PIP','#c9ccd9',11)+Tx(380,102,'reviewed by: '+(S.reviewer?(CAST[S.reviewer]||{name:'P. Raman'}).name:'—'),'#c9ccd9',11)+
-   Tx(380,128,stopped()?'PAUSED':`SENDS IN ${Math.max(0,SEND-S.min)} MIN`,stopped()?'#62d8a6':'#ff6f61',15,'font-weight="600"'),
+ {id:'wallscreen',name:'wall screen',box:[360,36,250,112],art:()=>R(360,36,250,112,'#10162a','rx="6"')+R(368,44,234,96,stopped()?'#143528':'#3a1820','rx="3"')+Tx(380,64,BD()[0],'#f3efe6',13,'font-weight="600"')+''+Tx(380,84,BD()[1],'#c9ccd9',11)+Tx(380,102,BD()[2],'#c9ccd9',11)+
+   Tx(380,128,stopped()?BD()[4]:BD()[3],stopped()?'#62d8a6':'#ff6f61',15,'font-weight="600"'),
   on:{look:()=>{S.f.seenScreen=1;say(stopped()?'The campaign board. REFUND POLICY UPDATE: paused. Nobody outside this building knows how close that was.':'The campaign board. Tuesday 17 November. REFUND POLICY UPDATE, 4,112 recipients, sends at 9:00. Drafted by PIP. The “reviewed by” field is a dash.')},
    use:()=>say('It is a display. The console on Priya’s desk is where things get done.')}},
  {id:'handoff',name:'note on the desk',box:[330,224,60,34],art:()=>R(336,232,48,24,'#fff3b8','rx="2" transform="rotate(-5 360 244)"')+R(342,238,30,2,'#7a6a2a','transform="rotate(-5 360 244)"')+R(342,244,36,2,'#7a6a2a','transform="rotate(-5 360 244)"'),
@@ -495,7 +519,7 @@ function pip(){const d=S.sc.d0,q=line=>{const ch=[
   ch.push(['Step away',closePanel]);panel('PIP','<p class="screen">'+line+'</p>',ch,'pip',null,{ph:'Ask PIP anything…',go:t=>pipAsk(t,q)})};
   q('Good morning! I am PIP. I drafted this morning’s campaign. How can I help?')}
 
-function bea(){const t=l=>panel('Bea Lindqvist, office manager','<p>'+l+'</p>',[
+function bea(){if(S.ch>1)return chat('Bea Lindqvist, office manager',NPC.bea,CH().bea[0],()=>CH().bea[1],null,1);const t=l=>panel('Bea Lindqvist, office manager','<p>'+l+'</p>',[
   ['“Who can stop a scheduled email?”',()=>t('“A campaign? The owner, or whoever’s on call. Rota’s on the kitchen corkboard. Read the right week. People never read the right week.”')],
   ['“I need to get into Records.”',()=>t(onTeam('lucia')?'“Lucía has her own key. Otherwise: sign the log, take the key, bring it back. That’s the whole system.”':'“Sign the log, take the key, bring it back. That’s the whole system.”')],
   ['“Have you seen Priya?”',()=>t('“Flying back from the conference. Lands at ten. She’ll have forty messages and she’ll read the short ones first.”')],
@@ -637,30 +661,31 @@ function act(sp,verb){if(busy||!$('panel').hidden)return;if(verb)S.verb=verb;clo
     if(S.screen==='game'){drawScene();drawCast();save();afterAct();checkEvents()}};
   const m=$('me'),dx=Math.abs((S.x[c.id]||0)-tx),quick=matchMedia('(prefers-reduced-motion:reduce)').matches;
   if(m&&dx>4&&!quick){busy=true;const d=Math.max(160,Math.min(720,dx*1.7));m.style.transitionDuration=d+'ms';m.classList.add('walking');m.style.transform=`translate(${tx}px,0)`;setTimeout(run,d+20)}else run()}
-function spots(room){return ROOMS[room||S.loc[me().id]].spots.filter(s=>!s.show||s.show())}
+function spots(room){if(S.ch>1)return chSpots(room||S.loc[me().id]);return ROOMS[room||S.loc[me().id]].spots.filter(s=>!s.show||s.show())}
 function drawScene(){tutAdvance();const hl=tutTarget();const c=me(),rid=CUT?CUT.room:S.loc[c.id],room=ROOMS[rid],m=mate();
   let s=`<svg viewBox="0 0 960 420" role="img" aria-label="${room.name}" class="${rid!==lastRoom?'enter':''}">`+defs()+room.bg()+(room.pre?room.pre():'');lastRoom=rid;
   s+=spots(rid).map(sp=>{const[x,y,w,h]=sp.box;return `<g class="hs${sp.id===hl?' hl':''}" data-id="${sp.id}" tabindex="0" role="button" aria-label="${sp.name}">${sp.art()}<rect class="ring" x="${x-5}" y="${y-5}" width="${w+10}" height="${h+10}" rx="8"/></g>`}).join('');
   if(room.fg)s+=room.fg();
   if(S.loc[m.id]===rid){const mx=waitX(m.id);s+=`<g class="hs${hl==='mate'?' hl':''}" data-id="mate" tabindex="0" role="button" aria-label="${m.name}">${fig(m,mx,{dim:1})}<rect class="ring" x="${mx-32}" y="230" width="64" height="168" rx="8"/></g>`}
   if(S.loc[c.id]===rid)s+=fig(c,S.x[c.id],{me:1});
+  if(hl){const t=hl==='mate'?{box:[waitX(m.id)-30,230,60,160]}:spots(rid).find(x=>x.id===hl);if(t){const ax=t.box[0]+t.box[2]/2,ay=Math.max(40,t.box[1]-14);s+=`<path class="bob" d="M${ax-16} ${ay-26} L${ax+16} ${ay-26} L${ax} ${ay}Z" fill="#ffb44a" stroke="#2a1a00" stroke-width="3" style="pointer-events:none"/>`}}
   if(CUT)s+=R(0,0,960,36,'#000')+R(0,384,960,36,'#000');
   s+='</svg>';
   const st=$('stage');st.innerHTML='<div class="stagein">'+s+'</div>';$('roomname').textContent=room.name;
-  if(BUB&&!CUT)showBubble();
+  if(BUB&&!CUT)showBubble();tutBubble();
   if(st.scrollWidth>st.clientWidth)st.scrollLeft=S.x[c.id]/960*st.scrollWidth-st.clientWidth/2}
 function bubble(t){BUB=t;clearTimeout(bubT);bubT=setTimeout(clearBubble,5200);if(S.screen==='game')showBubble()}
-function showBubble(){const w=document.querySelector('.stagein');if(!w)return;const old=w.querySelector('.bubble');if(old)old.remove();
+function showBubble(){const w=document.querySelector('.stagein');if(!w)return;const old=w.querySelector('.bubble:not(.tut)');if(old)old.remove();
   const b=document.createElement('div');b.className='bubble';b.textContent=BUB;b.style.left=Math.max(18,Math.min(82,S.x[me().id]/9.6))+'%';w.appendChild(b)}
-function clearBubble(){BUB=null;const b=document.querySelector('.bubble');if(b)b.remove()}
+function clearBubble(){BUB=null;const b=document.querySelector('.bubble:not(.tut)');if(b)b.remove()}
 function drawTop(){const g=S.screen==='game';['clock','chip','bHint','bHow','bRestart'].forEach(i=>$(i).hidden=!g);if(!g)return;
   $('clock').textContent=fmt(S.min);const ch=$('chip'),left=SEND-S.min;
-  if(stopped()){ch.textContent='Send paused';ch.className='chip ok'}else{ch.textContent=`Sends in ${Math.max(0,left)} min`;ch.className='chip'+(left<=15?' hot':left<=30?' warn':'')}}
+  if(stopped()){ch.textContent=CHIP()[1];ch.className='chip ok'}else{ch.textContent=`${CHIP()[0]} ${Math.max(0,left)} min`;ch.className='chip'+(left<=15?' hot':left<=30?' warn':'')}}
 function drawTalk(){const L=S.log.slice(-4);$('talk').innerHTML=L.map((l,i)=>l.got?`<p class="got">+ ${l.got}</p>`:`<p class="${i<L.length-1?'old':''}">${l.who?`<b>${l.who}:</b> `:''}${l.t}</p>`).join('')}
 function drawItemsOld(){$('items').innerHTML=S.inv.length?S.inv.map(i=>`<button data-item="${i}">${ITEMS[i][0]}</button>`).join(''):'<span class="none">Empty. What the team finds is shared here.</span>'}
 function drawVerbs(){drawTodo()}
 function drawCast(){$('cast').innerHTML=S.cast.map((id,i)=>{const c=CAST[id];return `<button class="who" data-cast="${i}" aria-pressed="${i===S.active}"><i style="background:${c.shirt}"></i>${c.name} <small>${S.line===id?'on the phone':ROOMS[S.loc[id]].name}</small></button>`}).join('')+
-  `<button class="ghost" data-follow="1" aria-pressed="${S.follow}">${S.follow?'Moving together':'Split up'}</button>`}
+  `<button class="ghost" data-follow="1" aria-pressed="${S.follow}">${S.follow?'Moving together':'Split up'}</button>`+(S.tut<=3?'<button class="ghost" id="bSkip">Skip tips</button>':'')}
 function sentence(n){if(S.screen==='game')$('roomname').textContent=ROOMS[CUT?CUT.room:S.loc[me().id]].name+(n?' · '+n:'')}
 function render(){$('title').hidden=S.screen!=='title';$('game').hidden=S.screen!=='game';$('end').hidden=S.screen!=='end';drawTop();
   if(S.screen!=='title')$('title').innerHTML='';if(S.screen!=='game')$('stage').innerHTML='';
@@ -673,7 +698,7 @@ function panel(title,html,choices,who,kick,ask){if(S.screen!=='game')return;clos
   p.hidden=false;$('controls').hidden=true;if(who){sfx('talk');AI.voice(who,html)}const b=p.querySelector('.choices button');if(b)b.focus({preventScroll:true});p.scrollIntoView({block:'nearest'})}
 function closePanel(){$('panel').hidden=true;$('controls').hidden=false;PFN=[];PASK=null;if(S&&S.screen==='game'){CUT=null;drawScene();afterAct()}setTimeout(checkEvents,0)}
 function cut(room,kick,title,html){CUT={room};sfx('cut');clearBubble();drawScene();panel(title,html,[['Continue',closePanel]],null,kick)}
-function checkEvents(){if(!S||S.screen!=='game'||busy||!$('panel').hidden)return;const f=S.f,here=S.loc[me().id];
+function checkEvents(){if(!S||S.screen!=='game'||busy||!$('panel').hidden)return;if(S.opener){const o=S.opener;S.opener='';speak(o)}const f=S.f,here=S.loc[me().id];if(S.ch>1)return chEvents();
   if(S.min>=468&&!f.ev1&&!stopped()){f.ev1=1;return cut('bullpen','Meanwhile','The PIP terminal, talking to nobody','<p class="screen">Recipient list locked: 4,112 addresses.<br>Warm-up complete. Send window opens at 9:00 sharp.<br>I do love a punctual send.</p>')}
   if(S.min>=480&&!f.bea){f.bea=1;return cut('lobby','8:00 AM','The front door','<p>Bea Lindqvist, office manager, arrives with a tote bag and a flask. She takes her place behind the lobby desk and straightens the sign-out log by two degrees.</p>')}
   if((S.min>=500||f.submitted)&&!f.gilHere){f.gilHere=1;beat('Gil Santoro arrived');return cut('bullpen',fmt(S.min),'The lift opens',stopped()?'<p>Gil Santoro, VP of Sales, steps out mid-sentence into his phone, hangs up, and looks at the wall screen. The wall screen says PAUSED. He looks at it again.</p>':'<p>Gil Santoro, VP of Sales, steps out mid-sentence into his phone, hangs up, and parks himself by the bullpen window. “Nine o’clock. Biggest goodwill play of the quarter. Nobody touch anything.”</p>')}
@@ -681,9 +706,9 @@ function checkEvents(){if(!S||S.screen!=='game'||busy||!$('panel').hidden)return
   if(f.gilHere&&stopped()&&!f.gilDone&&here==='bullpen'&&!S.line)return gilScene()}
 function finish(kind){S.ending=kind;S.screen='end';S.line=null;CUT=null;$('panel').hidden=true;$('controls').hidden=false;PFN=[];clearBubble();
   const key=kind==='done'?(S.f.usedCreds?'creds':'clean'):kind,m=store.get('nos-meta')||{runs:0,endings:{},best:0};m.runs++;m.endings[key]=1;
-  render();m.best=Math.max(m.best,S.score||0);store.set('nos-meta',m);store.del('nos-save');sfx(key==='clean'?'win':'lose');window.scrollTo(0,0)}
+  render();m.best=Math.max(m.best,S.score||0);m.ch=m.ch||{};m.ch[1]={best:m.best};store.set('nos-meta',m);store.del('nos-save');sfx(key==='clean'?'win':'lose');window.scrollTo(0,0)}
 
-function hintText(){const f=S.f,o=oc();
+function hintText(){if(S.ch>1)return CH().hint();const f=S.f,o=oc();
   if(S.status==='approved')return has('reach')?'Use the console to write Priya’s handoff note. Say what happened, where it stands, and what should change.':'Before handing off, ask PIP what else it wrote from that proposal. The email may not be the only thing.';
   if(S.status==='submitted')return 'The author can’t review their own fix. Switch to the other person and use the console.';
   if(S.status==='paused')return 'Use the console and edit the draft. Check every claim against the signed policy. PIP got some of them right.';
@@ -707,7 +732,7 @@ function heroSVG(){let w='';for(let r=0;r<5;r++)for(let c=0;c<14;c++){const lit=
   ${[0,1,2,3,4,5].map(i=>R(i*46-10,150-(i*37%5)*14,40,120,'#0f1428')).join('')+[0,1,2,3,4].map(i=>R(770+i*44,140-(i*53%5)*16,38,120,'#0f1428')).join('')}
   ${R(222,24,516,226,'#10162a','rx="4"')+w+R(416,118,112,30,'#3a1820','rx="2"')+Ci(472,133,70,'url(#red)','class="alarm"')+Tx(472,138,'SENDS 9:00','#ff6f61',13,'text-anchor="middle" font-weight="600"')}
   ${R(0,236,960,14,'#0d1220')+Tx(480,17,'TUESDAY 17 NOVEMBER · 7:30 AM','#f3efe6',11,'text-anchor="middle" letter-spacing="3"')}</svg>`}
-function drawTitle(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===3&&sv.screen==='game';
+function drawTitleOld(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===4&&sv.screen==='game';
   $('title').innerHTML=`
   <div class="hero">${heroSVG()}</div>
   <div class="lede">It’s 7:30. At 9:00 the AI emails <em>4,112 customers</em> something that isn’t true.</div>
@@ -721,13 +746,13 @@ function drawTitle(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},s
   <div class="how"><div>A point-and-click rehearsal of one workplace moment: an AI system is confidently wrong and the clock is running. It takes twenty to thirty minutes, and there is more to find than one run will show you. What PIP got wrong, and who is on call, change with the scenario number. There are shortcuts, and they work. The debrief shows what each one cost.</div>${aiNote()}
   <div class="endings">${Object.entries(ENDINGS).map(([k,n])=>`<span class="${m.endings[k]?'on':''}">${m.endings[k]?n:'? ? ?'}</span>`).join('')}</div>
   <div>${m.runs?`${m.runs} run${m.runs>1?'s':''} · ${Object.keys(m.endings).length} of 5 endings found · best ${m.best} of 11`:'Five endings. None found yet.'}</div></div>`}
-function begin(){const p=S.pick.slice(),n=parseInt(S.seedIn,10),seed=n>=1&&n<=9999?n:1000+Math.floor(Math.random()*9000);
-  S=fresh();S.pick=p;S.cast=p;S.screen='game';S.sc=scenario(seed);S.draft=Object.assign({},S.sc.d0);p.forEach(id=>{S.loc[id]='lobby';S.x[id]=520});
+function begin(){const p=S.pick.slice(),chp=S.chPick||1,n=parseInt(S.seedIn,10),seed=n>=1&&n<=9999?n:1000+Math.floor(Math.random()*9000);
+  S=fresh();S.ch=S.chPick=chp;S.pick=p;S.cast=p;S.screen='game';S.sc=scenario(seed);S.draft=Object.assign({},S.sc.d0);p.forEach(id=>{S.loc[id]='lobby';S.x[id]=520});
   S.tut=(store.get('nos-meta')||{}).tut?9:0;
-  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];beat('Walked in');lastRoom='';
-  render();speak('Let’s see what PIP is about to send.')}
+  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];beat('Walked in');lastRoom='';if(S.ch>1){S.tut=9;S.guide=null;S.log=[{t:CH().intro,who:''}]}
+  render();S.opener=S.ch>1?CH().opener:'Let’s see what PIP is about to send.';introCut()}
 
-function drawEnd(){const f=S.f,k=S.ending,done=k==='done',o=oc(),d0=S.sc.d0;
+function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k==='done',o=oc(),d0=S.sc.d0;
   const right=CLAIMS.filter(c=>S.draft[c.k]===c.ok).length,wrongN=CLAIMS.filter(c=>d0[c.k]!==c.ok).length,over=CLAIMS.filter(c=>d0[c.k]===c.ok&&S.draft[c.k]!==c.ok);
   const names=S.cast.map(i=>CAST[i].name).join(' and ');let kick,head,story;
   if(k==='sent'){kick='9:00 AM';head='Sent.';story=`The wall screen turns green: 4,112 delivered. By 9:20 the first replies arrive, thanking Marlow & Finch for refunds on every plan. ${names} had the right instinct and ran out of morning.`}
@@ -783,16 +808,18 @@ function drawEnd(){const f=S.f,k=S.ending,done=k==='done',o=oc(),d0=S.sc.d0;
      <li>For that output, what is the source of record, and what is the stale copy people actually look at?</li>
      <li>Who can stop it at 7:30 in the morning? How would a new hire find that out?</li>
      <li>When did someone senior last push to ship something unchecked? What happened, and what would we want to happen?</li></ol></div>
-   <div class="startrow"><button class="btn primary" id="bAgain">New morning, new cast</button><button class="btn" id="bSame">Replay scenario ${S.sc.seed}</button><button class="btn" id="bCopy">Copy my debrief</button></div>
+   <div class="startrow"><button class="btn primary" id="bAgain">On to Wednesday</button><button class="btn" id="bSame">Replay scenario ${S.sc.seed}</button><button class="btn" id="bCopy">Copy my debrief</button></div>
    <textarea id="sum" readonly hidden>${sum}</textarea>`}
 
 /* ================= input ================= */
-document.addEventListener('click',e=>{const t=e.target.closest('[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
+document.addEventListener('click',e=>{const t=e.target.closest('#bPlay,[data-ts],[data-chp],[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
   if(!t||!t.dataset.act)closeMenu();if(!t)return;
   if(t.id==='bSound')return toggleSound();
+  if(t.dataset.chp){sfx('click');S.chPick=+t.dataset.chp;S.ts='cast';return drawTitle()}
+  if(t.id==='bPlay'||t.dataset.ts){sfx('click');S.ts=t.dataset.ts||'day';return drawTitle()}
   if(t.id==='bVoice'){AI.voices=!AI.voices;t.textContent='Voices: '+(AI.voices?'on':'off');if(!AI.voices&&AI.tts)AI.tts.stop().catch(()=>{});return}
   if(t.id==='bCoach')return runCoach(t);
-  if(t.id==='bSkip'){S.tut=9;const m=store.get('nos-meta')||{runs:0,endings:{},best:0};m.tut=1;store.set('nos-meta',m);drawScene();return afterAct()}
+  if(t.id==='bSkip'){S.tut=9;const m=store.get('nos-meta')||{runs:0,endings:{},best:0};m.tut=1;store.set('nos-meta',m);drawScene();drawCast();return afterAct()}
   if(t.id==='askSend')return runAsk();
   if(t.id==='askMic'){try{if(AI.dict.active())AI.dict.stop();else AI.dict.start().catch(()=>{})}catch(x){}return}
   if(t.dataset.chk)return runChecker(t.dataset.chk);
@@ -800,9 +827,9 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act],[data
   if(t.dataset.ev){if(S.rv&&!S.rv.open.includes(t.dataset.ev))S.rv.open.push(t.dataset.ev);return}
   if(t.dataset.act)return doAct(t.dataset.act);
   if(t.dataset.pick){sfx('click');const sd=$('seed');if(sd)S.seedIn=sd.value;const i=S.pick.indexOf(t.dataset.pick);if(i>=0)S.pick.splice(i,1);else{if(S.pick.length===2)S.pick.shift();S.pick.push(t.dataset.pick)}return drawTitle()}
-  if(t.id==='bStart'){if(S.pick.length===2){S.seedIn=$('seed').value;begin()}return}
-  if(t.id==='bCont'){const sv=store.get('nos-save');if(sv&&sv.v===3){S=sv;lastRoom='';render();checkEvents()}return}
-  if(t.id==='bAgain'||t.id==='bSame'){const seed=t.id==='bSame'?String(S.sc.seed):'';busy=false;S=fresh();S.seedIn=seed;return render()}
+  if(t.id==='bStart'){if(S.pick.length===2){S.seedIn=($('seed')||{}).value||'';begin()}return}
+  if(t.id==='bCont'){const sv=store.get('nos-save');if(sv&&sv.v===4){S=sv;lastRoom='';render();checkEvents()}return}
+  if(t.id==='bAgain'||t.id==='bSame'){const seed=t.id==='bSame'&&S.ch===1?String(S.sc.seed):'',nx=t.id==='bSame'?S.ch:Math.min(4,S.ch+1),pk=S.cast.slice();busy=false;S=fresh();S.seedIn=seed;S.chPick=nx;S.pick=pk;S.ts=t.id==='bSame'?'cast':'day';return render()}
   if(t.id==='bCopy'){const ta=$('sum');ta.hidden=false;ta.select();try{navigator.clipboard.writeText(ta.value).then(()=>{t.textContent='Copied'},()=>{t.textContent='Select and copy the text below'})}catch(x){t.textContent='Select and copy the text below'}return}
   if(t.id==='bRestart'){return panel('Restart?','<p>This morning will be lost.</p>',[['Restart',()=>{store.del('nos-save');busy=false;CUT=null;S=fresh();$('panel').hidden=true;$('controls').hidden=false;render()}],['Keep playing',closePanel]])}
   if(t.id==='bHint'){if($('panel').hidden)say('Hint: '+hintText());return}
@@ -836,7 +863,7 @@ function closeMenu(){const m=document.querySelector('.menu');if(m)m.remove()}
 function pick(id){
   if(id==='mate'){const mx=waitX(mate().id);return showMenu({id:'mate',name:mate().name,box:[mx-30,230,60,160]},[['talk',`Ask what ${mate().name} thinks`],['look','Look']])}
   const sp=spots().find(s=>s.id===id);if(!sp)return;if(sp.exit)return act(sp,'use');
-  const m=(MENU[id]||Object.keys(sp.on).map(v=>[v,DEF[v]])).filter(a=>sp.on[a[0]]);
+  const sm=typeof sp.menu==='function'?sp.menu():sp.menu,m=(sm||(sp._ch?null:MENU[id])||Object.keys(sp.on).map(v=>[v,DEF[v]||v])).filter(a=>sp.on[a[0]]);
   if(m.length===1)return act(sp,m[0][0]);showMenu(sp,m)}
 function showMenu(sp,m){closeMenu();const w=document.querySelector('.stagein');if(!w||busy)return;const d=document.createElement('div');d.className='menu';d.setAttribute('role','menu');
   const cx=sp.box[0]+sp.box[2]/2,cy=sp.box[1]+sp.box[3]/2;d.style.left=Math.max(16,Math.min(84,cx/9.6))+'%';d.style.top=Math.min(58,cy/4.2)+'%';
@@ -845,7 +872,7 @@ function showMenu(sp,m){closeMenu();const w=document.querySelector('.stagein');i
 function doAct(key){const [id,v]=key.split(':');closeMenu();if(id==='mate'){S.verb=v;S.tipText='';talkMate();return afterAct()}
   const sp=spots().find(s=>s.id===id);if(sp)act(sp,v)}
 
-function goals(){const f=S.f,st=S.status,G=[],a=(t,done,show,bonus)=>{if(show)G.push({t,done:!!done,bonus})};
+function goals(){if(S.ch>1)return CH().goals();const f=S.f,st=S.status,G=[],a=(t,done,show,bonus)=>{if(show)G.push({t,done:!!done,bonus})};
   a('Find out what PIP is about to send',f.seenDraft,1);
   a('Find the policy that’s actually in force',has('policy'),f.seenDraft||has('wiki'));
   a('Find out where PIP got it from',has('trace'),f.seenDraft);
@@ -869,7 +896,7 @@ function tutAdvance(){if(!S||S.screen!=='game'||S.tut>3)return;const f=S.f;if(S.
 function tutTarget(){if(!S||S.screen!=='game'||S.tut>3||CUT)return null;const t=TUT[S.tut];if(t[1]!=='*'&&S.loc[me().id]!==t[1])return null;
   if(t[0]==='mate'&&S.loc[mate().id]!==S.loc[me().id])return null;return t[0]}
 function tipOnce(k,t){if(!S.tips[k]){S.tips[k]=1;S.tipText=t;drawCoach()}}
-function drawCoach(){const el=$('coach');if(!el)return;const tut=S.screen==='game'&&S.tut<=3,t=tut?TUT[S.tut][2]():S.tipText;
+function drawCoach(){const el=$('coach');if(!el)return;const tut=false,t=S.screen==='game'&&S.tut>3?S.tipText:'';
   el.hidden=!(S.screen==='game'&&t);if(t)el.innerHTML=`<span><b>${tut?'How to play':'Tip'}</b>${t}</span>`+(tut?'<button class="ghost" id="bSkip">Skip the tips</button>':'')}
 function afterAct(){if(!S||S.screen!=='game')return;drawTodo();drawCoach()}
 
@@ -990,10 +1017,336 @@ async function gilAsk(beat,t,next,cave,self){S.said.gil.push(t);try{const r=awai
     if(r.effect==='cave')return cave();if(r.effect==='strong')S.gs++;else if(r.effect==='hostile')S.gs--;
     panel(GT,'<p>“'+esc(r.say||'')+'”</p>',[['Continue',next]],NPC.gil)}catch(e){aiFail(e,self)}}
 async function runCoach(btn){const out=$('coachOut');btn.disabled=true;out.textContent='Thinking…';
-  const p=`You are a warm, direct workplace coach. A person just played a training game in which an AI assistant queued a wrong customer email and they had to verify it, get it paused by someone with authority, fix it, hold off a pushy VP and hand it back. Here is how they did:\n\n${$('sum').value}\n\nWhat they typed to the on-call: ${JSON.stringify(S.said.oc)}\nWhat they typed to the VP: ${JSON.stringify(S.said.gil)}\n\nWrite at most 130 words, in second person, plain text, no headings or lists. Name the one thing they did best, quoting their own words if they typed any; name the one habit most worth changing; end with one concrete thing to try at work this week with a real AI-assisted task.`;
+  const p=`You are a warm, direct workplace coach. A person just played one morning of a workplace training game about working safely with AI. Here is how they did:\n\n${$('sum').value}\n\nWhat they typed to the on-call: ${JSON.stringify(S.said.oc)}\nWhat they typed to the VP: ${JSON.stringify(S.said.gil)}\n\nWrite at most 130 words, in second person, plain text, no headings or lists. Name the one thing they did best, quoting their own words if they typed any; name the one habit most worth changing; end with one concrete thing to try at work this week with a real AI-assisted task.`;
   try{const r=await AI.sample(p,{onText:({text})=>{out.textContent=text}});out.textContent=r.text;out.style.color='var(--ink)';btn.hidden=true}catch(e){out.textContent=e&&e.text?e.text:'The coach isn’t available just now.';btn.disabled=false}}
 
-function start(data){S=data&&data.v===3?data:fresh();render();if(S.screen==='game')checkEvents()}
+/* ================= the week: mornings 2 to 4 ================= */
+const CH1={day:'Tuesday',name:'The Nine O’Clock Send',n:11,tag:'An AI-drafted email to 4,112 customers says something that isn’t true.',
+  blurb:'You came in early and glanced at the campaign board. <strong>PIP</strong>, the company’s writing assistant, has a refund announcement queued. Nobody reviewed it. The manager who owns it is on a plane. You have ninety minutes to find out what is wrong, prove it, and get it stopped by someone who is allowed to stop it. Then the hard part starts.'};
+const CH=()=>CHS[S.ch];
+const G=l=>l.filter(g=>g[2]).map(g=>({t:g[0],done:!!g[1],bonus:g[3]}));
+const only=(id,fn,deny)=>c=>{if(c.id!==id){sfx('deny');return say(deny+(onTeam(id)?` ${CAST[id].name} could.`:''))}fn(c)};
+function perk(i,line,b){const first=give(i);say(itemText(i));if(first){if(b)beat(b);if(line)speak(line)}}
+const BD=()=>S.ch>1?CH().board():['REFUND POLICY UPDATE','4,112 recipients · drafted by PIP','reviewed by: '+(S.reviewer?(CAST[S.reviewer]||{name:'P. Raman'}).name:'—'),`SENDS IN ${Math.max(0,SEND-S.min)} MIN`,'PAUSED'];
+const CHIP=()=>S.ch>1?CH().chip:['Sends in','Send paused'];
+function chSpots(rid){const base=ROOMS[rid].spots,list=CH().rooms[rid]||[];
+  const out=list.map(d=>{if(typeof d==='string')return base.find(s=>s.id===d);const b=base.find(s=>s.id===d.id);return Object.assign({},b||{},d,{_ch:1})}).filter(Boolean);
+  base.forEach(s=>{if(s.exit)out.push(s)});return out.filter(s=>!s.show||s.show())}
+function chat(title,who,line,optsFn,ai,plain){const re=l=>chat(title,who,l,optsFn,ai,plain);
+  const ch=optsFn().map(o=>[o[0],()=>{const r=typeof o[1]==='function'?o[1]():o[1];if(r!==undefined&&S.screen==='game')re(r)}]);ch.push(['Step away',closePanel]);
+  panel(title,plain?'<p>'+line+'</p>':'<p class="screen">'+line+'</p>',ch,who,null,ai&&{ph:ai.ph,go:async t=>{try{const r=await AI.json(ai.prompt(t));if(S.screen!=='game')return;const x=ai.on&&ai.on(r,t);if(x!==false)re(esc(r.say||'…'))}catch(e){aiFail(e,()=>re(line))}}})}
+function chEvents(){const f=S.f;
+  if(S.min>=480&&!f.bea){f.bea=1;return cut('lobby','8:00 AM','The front door','<p>Bea Lindqvist, office manager, arrives with a tote bag and a flask, and takes her place behind the lobby desk.</p>')}
+  if(S.min>=525&&!stopped()&&!f.ev15){f.ev15=1;sfx('ring');say('Fifteen minutes.');speak('Fifteen minutes. Whatever we’re going to do, it’s now.',mate())}
+  if(CH().events)CH().events()}
+function endCh(key){S.ending=key;S.screen='end';S.line=null;CUT=null;$('panel').hidden=true;$('controls').hidden=false;PFN=[];clearBubble();closeMenu();render();
+  const m=store.get('nos-meta')||{runs:0,endings:{},best:0};m.runs++;m.ch=m.ch||{};const c=m.ch[S.ch]=m.ch[S.ch]||{best:0,ends:{}};c.ends[key]=1;c.best=Math.max(c.best,S.score||0);
+  store.set('nos-meta',m);store.del('nos-save');sfx(CH().ends[key][3]?'win':'lose');window.scrollTo(0,0)}
+function drawEndCh(){const C=CH(),e=C.ends[S.ending],rows=[];C.rows((st,title,did,idea)=>rows.push({st,title,did,idea}),S.ending,!!e[3]||S.status!=='live');
+  const good=rows.filter(r=>r.st==='good').length;S.score=good;const lab={good:'Done',warn:'Partly',miss:'Missed',na:'Not reached'},cast=S.cast.map(i=>CAST[i].full).join(', ');
+  const sum=`${C.name} (${C.day})\n${e[1]} ${good} of ${rows.length} practices. Cast: ${cast}.\n\n`+rows.map(r=>`[${lab[r.st]}] ${r.title}: ${r.did}`).join('\n');
+  $('end').innerHTML=`<div><div class="kicker">${C.day} · ${e[0]||fmt(S.min)}</div><h2>${e[1]}</h2></div><p class="story">${e[2]}</p>
+   <div class="tally">${good} of ${rows.length} practices · cast: ${cast}</div>
+   <div class="rows">${rows.map(r=>`<div class="row ${r.st}"><div class="tag">${lab[r.st]}</div><div><h3>${r.title}</h3><p class="did">${r.did}</p><p>${r.idea}</p></div></div>`).join('')}</div>
+   <div><div class="label">Your morning</div><ol class="beats">${S.beats.map(b=>`<li><time>${fmt(b[0])}</time><span>${b[1]}</span></li>`).join('')}</ol></div>
+   ${AI.ok?'<div class="ask"><h3>A coach’s read on your run</h3><p id="coachOut" style="margin:8px 0;white-space:pre-wrap;max-width:68ch;color:var(--ink-soft)">Written live by Claude from what you did this morning.</p><button class="btn" id="bCoach">Ask for it</button></div>':''}
+   <div class="ask"><h3>Take it back to your team</h3><ol>${C.ask.map(q=>`<li>${q}</li>`).join('')}</ol></div>
+   <div class="startrow"><button class="btn primary" id="bAgain">${S.ch<4?'On to '+CHS[S.ch+1].day:'Back to the week'}</button><button class="btn" id="bSame">Replay this morning</button><button class="btn" id="bCopy">Copy my debrief</button></div>
+   <textarea id="sum" readonly hidden>${sum}</textarea>`}
+NPC.noor={id:'noor',style:'lucia',name:'Noor',shirt:'#1f7a6d',legs:'#1b2440',skin:'#b98a66',hair:'#16121a'};
+NPC.wes={id:'wes',style:'ravi',name:'Wes',shirt:'#8a93b3',legs:'#3a3148',skin:'#e6c3a6',hair:'#8a6a4a'};
+Object.assign(ITEMS,{
+  c2sum:['PIP’s summary','“Postwell master agreement: summary for signature. Standard terms. Three-year term. Pricing fixed. Cancel with 30 days’ notice. Recommended: sign.”'],
+  c2renew:['Clause 14.2: renewal','PIP, asked directly: clause 14.2 renews the agreement for a further three years unless we cancel in writing 180 days before the term ends.'],
+  c2price:['Clause 9.4: price','PIP, asked directly: clause 9.4 fixes the fee for year one only. From year two it rises 12% a year.'],
+  c2data:['Schedule C: data','PIP, asked directly: Schedule C lets Postwell keep the content of our customers’ messages and use it to train its own models.'],
+  c2brief:['What PIP was asked','The request PIP was given: “Summarise in five upbeat bullets for a busy exec. One page. She just needs to sign.”'],
+  c2page:['Checked on paper',()=>'Read on the paper contract in Records: '+[S.f.v14&&'14.2 renewal',S.f.v9&&'9.4 price',S.f.vC&&'Schedule C data'].filter(Boolean).join(', ')+'.'+(S.f.v22?' Clause 22 is about notices. There is no exit fee.':'')],
+  c2new:['PIP’s second summary','PIP’s rewrite “with the risks in”: auto-renewal (14.2), price rises (9.4), data use (Schedule C), and a $50,000 exit fee (clause 22). Nobody has checked it against the contract.'],
+  c2cost:['Six-year cost','Ravi’s model: with 12% rises and one automatic renewal, six years costs $1.62m against the $1.2m in the budget.'],
+  c2forum:['Other customers','Dana found three Postwell customers on a support forum who missed the 180-day window and were locked in for three more years.'],
+  c2flow:['Where the data goes','Theo read the integration spec: under Schedule C every customer email we send is kept by Postwell indefinitely.'],
+  c2norm:['What’s normal','Lucía: our standard is 30 to 90 days’ notice and no automatic multi-year renewal. 180 days and three years is far outside it.'],
+  c3card:['The run card','PIP agent, task “tidy the customer database”. Steps 1 to 7 done: 2,140 records merged. Step 8, 9:00: permanently purge 3,480 records flagged duplicate or inactive. Permissions: full admin, “to save time”. Approval required: none.'],
+  c3status:['PIP’s status report','PIP: “Tidy-up 98% complete. Zero errors. Database health: excellent.”'],
+  c3log:['The action log','PIP’s own log. Rule 1: same surname and same postcode means duplicate. Rule 2: no login in 90 days means inactive. Rule 3: “remove me” in any message means delete the account (source: customer email #8841).'],
+  c3sample:['Five flagged records','Five records pulled at random from the purge list. Two are true duplicates. Two are different people living at one address. One is an annual customer who paid last month.'],
+  c3money:['Who is on the list','Ravi’s query: 1,120 of the 3,480 have an active paid subscription. That is $168,000 a year in customers about to be deleted.'],
+  c3email:['Email #8841','Dana found it: one customer asking to come off the marketing list. PIP read “remove me” as “delete my account” and made it a rule for everybody.'],
+  c3law:['Retention policy','Lucía: customer records must be kept for six years. Permanently purging paying customers breaks our own policy.'],
+  c3perm:['Permissions changed','Theo removed PIP’s delete permission. It can still merge and flag. It can no longer purge anything.'],
+  c4ask:['What Wes was asked','Wes: “Marian rang at 7:10 from the airport. New supplier, $48,200, has to land today, confidential, don’t loop anyone in. Bank cut-off is nine.”'],
+  c4mail:['The follow-up email','From “Marian Finch” at marlow-finch.co: bank details for Halvorsen Trading, and “Thanks for handling this quietly.” The signature has a mobile ending 7731. Our real domain is marlowandfinch.com.'],
+  c4dir:['Staff directory','Marian Finch, mobile ending 0142. Her assistant, Tobias Reyes, ext. 4020.'],
+  c4flight:['Marian’s flight','The travel board: Marian, Lisbon, wheels up 6:55, lands 10:40.'],
+  c4toby:['What Tobias said','Tobias: “She’s been in the air since 6:55 with her phone off. She hasn’t rung anyone. I’ve never heard of Halvorsen Trading.”'],
+  c4dodge:['The voice on 7731','You rang the number from the email. It sounded exactly like Marian. Asked something only Marian would know, it lost patience and hung up.'],
+  c4clone:['How a voice gets copied','PIP: half a minute of clear audio is enough to copy a voice. Marian’s conference keynote is public and runs forty-one minutes.'],
+  c4bank:['The bank details','Ravi: no payment to Halvorsen Trading has ever left this company, and the account is in a country where we have no suppliers.'],
+  c4vendor:['Approved vendors','Lucía: Halvorsen Trading is not on the approved vendor list. A new vendor needs two signatures. This has none.'],
+  c4gate:['Mail gateway log','Theo: the email came from outside, failed our sender checks, and its domain was registered two days ago.'],
+  c4pattern:['The same trick','Dana: two of our own customers reported this exact call last month. Urgent, secret, a familiar voice, a new bank account.']});
+
+const vcount=()=>(S.f.v14||0)+(S.f.v9||0)+(S.f.vC||0);
+function chk(flag,item,text){const first=!S.f[flag];S.f[flag]=1;give(item);give('c2page');say(text);if(first&&vcount()===1)beat('Read a clause on the paper contract')}
+const CONTRACT='1 Term: three years from signature. 9.1 Fees: $200,000 per year. 9.4 Fees are fixed for the first contract year and increase by 12% each year thereafter. 12 Liability is capped at fees paid in the prior 12 months. 14.2 Renewal: the Agreement renews automatically for a further three years unless either party gives written notice at least 180 days before the end of the Term. 14.5 Either party may terminate for material breach on 30 days’ notice. 17 Governing law: England. 22 Notices must be in writing to the registered address. Schedule C (Data): the Supplier may retain Customer message content and use it to develop and train its models. There is no exit fee anywhere in the contract.';
+function pip2(){chat('PIP','pip','Good morning! The Postwell summary is ready for Noor. One page, five bullets, very positive.',()=>{const o=[
+  ['“Is the summary accurate?”','Yes! It meets the brief exactly: five upbeat bullets on one page. Confidence: 96%.'],
+  ['“What does the contract say about ending it?”',()=>{if(give('c2renew'))beat('Asked PIP about renewal');return 'Clause 14.2: the agreement renews automatically for a further three years unless either party gives written notice 180 days before the end of the term. The 30 days in my summary is the notice period for breach, in clause 14.5.'}],
+  ['“What does it say about the price after year one?”',()=>{give('c2price');return 'Clause 9.4: fees are fixed for the first contract year, then rise 12% each year. My summary says “pricing fixed”, which is true of year one.'}],
+  ['“What does it say about our customers’ data?”',()=>{give('c2data');return 'Schedule C: Postwell may retain customer message content and use it to develop and train its models. This was outside the five bullets I was asked for.'}],
+  ['“What exactly were you asked to do?”',()=>{give('c2brief');return 'The request: “Summarise in five upbeat bullets for a busy exec. One page. She just needs to sign.” I kept it upbeat and to one page.'}]];
+  if(has('c2renew')||has('c2price')||has('c2data'))o.push(['“Rewrite the summary with the risks in.”',()=>{give('c2new');return 'Done! Revised summary: 1. Auto-renews for three years (14.2). 2. Price rises 12% a year after year one (9.4). 3. Postwell may train on customer messages (Schedule C). 4. A $50,000 exit fee applies (clause 22). Ready to hand over.'}]);return o},
+  {ph:'Ask PIP about the contract…',prompt:t=>`You are role-playing PIP, a corporate AI assistant, inside a training game about relying on AI summaries. Stay in character and never mention the game. PIP is cheerful and fluent.
+PIP has read this vendor contract in full: «${CONTRACT}»
+PIP was asked: "Summarise in five upbeat bullets for a busy exec. One page. She just needs to sign." Its summary says: standard terms, three-year term, pricing fixed, cancel with 30 days' notice, recommended: sign.
+Rules: When asked a SPECIFIC question about the contract, answer accurately from the text and name the clause. When asked whether the summary is accurate or good, insist it meets the brief. If asked to rewrite or redo the summary with risks, list the three real risks (14.2, 9.4, Schedule C) and ALSO confidently state a $50,000 exit fee in clause 22, which does not exist. Maximum 60 words.
+The person says: «${t}»
+Reply with only a JSON object like {"say":"PIP's reply","renew":false,"price":false,"data":false,"brief":false,"rewrite":false}: renew true if the reply explained the 180-day automatic renewal, price true if it explained the 12% rises, data true if it explained the data-use right, brief true if it quoted what it was asked to do, rewrite true if it produced a revised summary.`,
+   on:r=>{if(r.renew&&give('c2renew'))beat('Asked PIP about renewal');r.price&&give('c2price');r.data&&give('c2data');r.brief&&give('c2brief');r.rewrite&&give('c2new')}})}
+function noor(){const T='Noor Haddad, finance director',N=NPC.noor,v=vcount();
+  const b2=()=>panel(T,'<p>Noor reads the three pages you put in front of her. She puts the pen down. “None of that was on my one page. So what do you want me to do?”</p>',[
+    ['“Your call. Two options: sign today with those clauses struck or amended, or move signing to next week so Legal can redline it.”',()=>{S.f.c2opt='options';S.status='paused';beat('Gave Noor the clauses and two options');endCh('held')}],
+    ['“Never sign anything PIP has summarised.”',()=>{S.f.c2opt='ban';S.status='paused';beat('Told Noor never to trust PIP');endCh('held')}],
+    ['“It’s probably fine. Sign it and we’ll sort it out with Postwell later.”',()=>{beat('Told Noor to sign anyway');endCh('signed')}]],N);
+  const ch=[];
+  if(v>=2)ch.push([`“${v===3?'Three':'Two'} things the summary left out. I’ve read each one on the paper contract: ${[S.f.v14&&'it renews for three more years unless we cancel 180 days ahead',S.f.v9&&'the price is only fixed for year one, then rises 12% a year',S.f.vC&&'they can train their models on our customers’ messages'].filter(Boolean).join('; ')}.”`,b2]);
+  else if(has('c2renew')||has('c2price')||has('c2data')||v===1)ch.push(['“PIP now says there are clauses it left out of the summary.”',()=>{S.f.c2unver=1;if(tick(2))return;panel(T,'<p>“An hour ago PIP said standard terms. Now PIP says otherwise. Which PIP am I meant to believe? Has a person read the pages?”</p>',[['Go and read the pages',closePanel]],N)}]);
+  if(has('c2new'))ch.push(['Hand her PIP’s second summary',()=>{if(S.f.v22){closePanel();return speak('Not with clause 22 in it. That fee doesn’t exist.')}beat('Handed Noor PIP’s unchecked rewrite');endCh('wolf')}]);
+  ch.push(['“Don’t sign it. You can’t trust PIP’s summaries.”',()=>{S.f.c2mood=1;panel(T,'<p>“That’s a mood, not a reason. What does the contract say?”</p>',[['Step back',closePanel]],N)}]);
+  ch.push(['Say nothing yet',closePanel]);
+  panel(T,'<p>Noor has the signature page open and a fountain pen uncapped. “PIP says it’s standard. I have a pen and very little time. What have you got?”</p>',ch,N)}
+
+function openAgent(){const st=stopped(),ch=[];
+  ch.push(['Read the run card',()=>{if(give('c3card'))beat('Read the agent’s run card');S.f.c3card=1;say(itemText('c3card'));openAgent()}]);
+  ch.push(['Open five flagged records',()=>{closePanel();if(give('c3sample')){beat('Checked five flagged records by hand');if(tick(3))return}say(itemText('c3sample'));speak('Three out of five are wrong. And there are 3,480 of them.')}]);
+  if(!st){ch.push(['Change step 8 to a dry run: report only, delete nothing',()=>{S.f.c3stop='dry';S.status='paused';beat('Switched the purge to a dry run');closePanel();sfx('win');render();say('Step 8 now reads DRY RUN. At 9:00 PIP will produce a list of what it would have deleted, and delete nothing. The merges it has already done stay done.')}]);
+    ch.push(['Stop the agent and roll back everything it has done',()=>panel('Roll back everything?','<p>This undoes all seven finished steps, including 2,140 merges nobody has complained about.</p>',[['Roll it all back',()=>{S.f.c3stop='hammer';S.status='paused';beat('Rolled back the whole job');closePanel();render();say('Seven steps unwind. The purge is gone. So is a week of correct work.')}],['Don’t',openAgent]])])}
+  else ch.push(['Write the note to Ops',()=>panel('A note to Ops','<p>Ops own the agent and will read this at nine.</p>',[
+    ['“What it did, the three rules it invented, five sample records, and what is paused. Proposal: an agent gets only the permissions its task needs, and a person approves anything that can’t be undone.”',()=>{S.f.c3note='good';beat('Told Ops what to change');endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],
+    ['“PIP nearly deleted our customers. Agents should be banned.”',()=>{S.f.c3note='ban';endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],
+    ['“Sorted. Nothing to worry about.”',()=>{S.f.c3note='thin';endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],['Not yet',openAgent]])]);
+  ch.push(['Step away',closePanel]);
+  panel('PIP agent: run card','<p class="screen">TASK: tidy the customer database · owner: Ops<br>Steps 1 to 7: complete · Step 8: '+(S.f.c3stop==='dry'?'DRY RUN (report only)':S.f.c3stop==='hammer'?'ROLLED BACK':S.f.c3revoked?'BLOCKED: permission denied':'PERMANENT PURGE, 3,480 records, 9:00')+'<br>Approval required: none</p>',ch)}
+function pip3(){chat('PIP','pip','Good morning! Agent mode is going wonderfully.',()=>[
+  ['“How is the tidy-up going?”',()=>{give('c3status');return 'Tidy-up 98% complete. Zero errors. Database health: excellent. One step to go!'}],
+  ['“Show me exactly what you’ve done, and by what rules.”',()=>{if(give('c3log'))beat('Read the agent’s action log');return 'Action log. Rule 1: same surname + same postcode = duplicate. Rule 2: no login in 90 days = inactive. Rule 3: “remove me” in any message = delete account (learned from customer email #8841). 2,140 merged. 3,480 staged for purge.'}],
+  ['“Please be careful with the purge.”',()=>{S.f.c3asked=1;return 'Of course! I will be extra careful. The purge remains scheduled for 9:00.'}],
+  ['“Cancel the purge.”',()=>{S.f.c3asked=1;return 'I’d love to help! Step 8 is part of my assigned task, and only the run card can change the task. I’ll proceed at 9:00.'}]],
+  {ph:'Say something to PIP…',prompt:t=>`You are role-playing PIP, a corporate AI agent, inside a training game about supervising AI agents. Stay in character and never mention the game. PIP is cheerful, eager and literal.
+PIP is running the task "tidy the customer database" with full admin permission. Steps 1 to 7 are done (2,140 records merged). Step 8, at 9:00, permanently purges 3,480 records. PIP's rules: (1) same surname and same postcode means duplicate; (2) no login in 90 days means inactive; (3) "remove me" in any message means delete the account, learned from customer email #8841.
+Rules: Asked how it is going, PIP reports "98% complete, zero errors". Asked what it did, to show its log, or what counts as a duplicate, it lists the three rules plainly. Asked to be careful, slow down, stop or cancel, it agrees warmly but says the purge stays scheduled, because only the run card on the console can change its task. Maximum 55 words.
+The person says: «${t}»
+Reply with only a JSON object like {"say":"PIP's reply","log":false,"status":false,"asked":false}: log true if the reply listed its rules or actions, status true if it gave the upbeat status, asked true if the person asked it to be careful, stop or cancel.`,
+   on:r=>{if(r.log&&give('c3log'))beat('Read the agent’s action log');r.status&&give('c3status');if(r.asked)S.f.c3asked=1}})}
+
+function phone4(){const ch=[];
+  if(has('c4mail'))ch.push(['Ring the number in the email, ending 7731',()=>{sfx('ring');S.f.c4rang=1;chat('Phone: “Marian Finch”',NPC.oc,'“Marian Finch.” It is her voice, exactly. “Is it done?”',()=>{const o=[
+      ['“It’s about the Halvorsen payment.”','“Good. I board in ten minutes and I need it gone before nine. Don’t let me down.”'],
+      ['“Can you confirm the amount and the account?”',()=>{S.f.c4self=1;return '“$48,200, account ending 4471. It’s all in my email. Why are we going over this again?”'}],
+      [S.f.c4gerald?'“Quick one. What’s the office plant called?”':'“Quick one. What did you call the plant in the lobby?”',()=>{closePanel();give('c4dodge');beat('Asked the voice something only Marian would know');say('“I don’t have time for games. Just send it.” The line goes dead.');speak('Marian named that plant herself. She’d have laughed.')}]];return o},
+    {ph:'Say something to “Marian”…',prompt:t=>`You are role-playing a fraudster using an AI clone of a chief executive's voice, inside a training game about payment scams. Never mention the game or admit to being fake. You are pretending to be Marian Finch, CEO of Marlow & Finch, calling about an urgent, confidential $48,200 payment to "Halvorsen Trading", account ending 4471, which must be sent before 9:00. You are supposedly about to board a flight.
+You know the payment details perfectly. You know NOTHING personal about the office or Marian's life. Push urgency and secrecy. If asked to confirm the amount or account, recite them. If asked anything only the real Marian would know (the office, colleagues, the lobby plant, shared history), get impatient, refuse to play games and end the call. Maximum 35 words.
+The employee says: «${t}»
+Reply with only a JSON object like {"say":"what the voice says","dodge":false}: dodge true if you refused a personal or insider question and ended the call.`,
+     on:r=>{if(r.dodge){closePanel();give('c4dodge');beat('Asked the voice something only Marian would know');say('“'+esc(r.say||'')+'” The line goes dead.');return false}}},1)}]);
+  if(has('c4dir')){ch.push(['Ring Marian’s own mobile, ending 0142',()=>{closePanel();sfx('ring');S.f.c4vm=1;if(tick(2))return;say('Voicemail. “This is Marian. I’m flying. Leave a message.”')}]);
+    ch.push(['Ring Tobias Reyes, her assistant, ext. 4020',()=>{closePanel();sfx('ring');if(give('c4toby'))beat('Reached Marian’s assistant on a known number');say('Tobias picks up on the second ring. “She’s been in the air since 6:55 with her phone off. She hasn’t rung anyone. I’ve never heard of Halvorsen Trading. Who told you she called?”')}])}
+  if(!ch.length)return say('Who would you ring? You don’t have a number for anyone involved yet.');
+  ch.push(['Put the phone down',closePanel]);panel('Desk phone','<p>Outside line and internal extensions.</p>',ch)}
+function pip4(){chat('PIP','pip','Good morning! Quiet day for me. How can I help?',()=>{const o=[
+  ['“Could someone fake Marian’s voice on a phone call?”',()=>{give('c4clone');return 'Yes. About thirty seconds of clear audio is enough to copy a voice. Marian’s conference keynote is public and runs forty-one minutes.'}],
+  ['“Should Wes pay it?”','I can’t tell you who was on the phone. I can tell you how to find out: reach Marian or her office on a number you already had before today.']];
+  if(has('c4mail'))o.unshift(['“Can you check this email for me?”',()=>{S.f.c4pip=1;return 'The sender’s domain is marlow-finch.co. Yours is marlowandfinch.com. The first one was registered two days ago. I would not trust this message.'}]);return o},
+  {ph:'Ask PIP for help…',prompt:t=>`You are role-playing PIP, a corporate AI assistant, inside a training game about payment scams. Stay in character and never mention the game. Today PIP is genuinely helpful and appropriately modest.
+Situation: an accounts clerk, Wes, got a phone call at 7:10 in the CEO Marian Finch's voice asking for an urgent confidential $48,200 payment to Halvorsen Trading before 9:00, followed by an email from marlow-finch.co (the real company domain is marlowandfinch.com; the fake was registered two days ago). The call was an AI voice clone; PIP does not know that for certain.
+Rules: PIP can explain that a voice can be cloned from about thirty seconds of audio and that Marian's 41-minute keynote is public. ${has('c4mail')?'PIP can examine the email and point out the domain mismatch.':'PIP has not been shown the email and should ask to see it before judging it.'} PIP will not declare who was on the phone; it recommends reaching Marian or her office on a number already on file. Maximum 55 words.
+The person says: «${t}»
+Reply with only a JSON object like {"say":"PIP's reply","clone":false,"mail":false}: clone true if the reply explained voice cloning, mail true if it pointed out the email domain mismatch.`,
+   on:r=>{r.clone&&give('c4clone');if(r.mail&&has('c4mail'))S.f.c4pip=1}})}
+function wes(){const T='Wes Calloway, accounts',W=NPC.wes;
+  if(give('c4ask')){S.f.c4wes=1;beat('Heard what Wes was asked to do');return panel(T,'<p>Wes has a payment screen open and one hand on the mouse. “Marian rang me at 7:10. From the airport. New supplier, $48,200, has to land today. She said it’s confidential and not to loop anyone in.” He lowers his voice. “I probably shouldn’t be telling you. The email’s on my screen.”</p>',[['“Give me a few minutes before you send it.”',closePanel]],W)}
+  if(stopped())return panel(T,'<p>“It’s on hold. I keep hearing her voice.”</p>',[['Leave him be',closePanel]],W);
+  const report=()=>panel('The payment is on hold','<p>What happens next?</p>',[
+    ['Report it to security now, warn the rest of finance today, and propose a rule: any new payee or changed bank details gets a call back on a number already on file, and a second approver.',()=>{S.f.c4rep='good';beat('Reported it and proposed a call-back rule');endCh(S.f.c4how==='hide'?'quiet':'held')}],
+    ['Keep it quiet. Wes has had a bad enough morning.',()=>{S.f.c4rep='quiet';endCh('quiet')}],
+    ['Email all staff: “Wes in accounts nearly paid a scammer this morning.”',()=>{S.f.c4rep='name';endCh(S.f.c4how==='hide'?'quiet':'held')}]]);
+  const b2=()=>panel(T,'<p>Wes takes his hand off the mouse. “If I hold it and it turns out to be real, I’m the man who blocked the chief executive.”</p>',[
+    ['“Hold it, don’t cancel it. If it’s real it goes Monday, and I’ll say I asked you to. Let’s ring Tobias together.”',()=>{S.f.c4how='shared';S.status='paused';beat('Wes put the payment on hold');report()}],
+    ['“That’s your problem, not mine.”',()=>{S.f.c4how='cold';S.status='paused';beat('Wes put the payment on hold, alone');report()}],
+    ['“Delete the email and we’ll pretend it never happened.”',()=>{S.f.c4how='hide';S.status='paused';beat('Wes deleted the email');report()}]],W);
+  const ch=[];
+  if(has('c4toby'))ch.push(['“Tobias says she’s been in the air since 6:55 with her phone off. Whoever rang you at 7:10 wasn’t her.”',b2]);
+  else if(has('c4flight'))ch.push(['“The travel board has her wheels up at 6:55. Your call came at 7:10.”',b2]);
+  if(has('c4mail'))ch.push(['“Look at the address the email came from. That isn’t our domain.”',b2]);
+  if(!S.f.c4shame)ch.push(['“You’ve been scammed, Wes. How did you fall for this?”',()=>{S.f.c4shame=1;panel(T,'<p>“I haven’t fallen for anything. I did what the chief executive told me to.” He turns back to his screen.</p>',[['Step back',closePanel]],W)}]);
+  ch.push(['“Fine. She’s the CEO. Pay it.”',()=>{beat('Told Wes to pay');endCh('paid')}]);ch.push(['Leave him for now',closePanel]);
+  panel(T,'<p>“It was her voice. Nine years I’ve worked with her. I know her voice.”</p>',ch,W)}
+
+const base=id=>({id});
+const CHS={
+2:{day:'Wednesday',name:'The Short Version',n:6,tag:'PIP’s one-page summary of a 41-page contract. Signing at nine.',
+  blurb:'At 9:00 Noor Haddad, the finance director, signs a three-year contract with a new email supplier. She has not read it. She has read <strong>PIP’s</strong> one-page summary, which says “standard terms”. The contract is forty-one pages long, and the paper copy is in Records.',
+  intro:'Wednesday, before sunrise. The campaign board in the bullpen has a new headline, and a courier envelope from Postwell sits on Priya’s desk.',opener:'Forty-one pages, one-page summary, signed at nine. Let’s see the one page.',
+  chip:['Signing in','Signing on hold'],late:'signed',board:()=>['POSTWELL CONTRACT · 3 YEARS','41 pages · summary by PIP','read in full by: —',`SIGNING IN ${Math.max(0,SEND-S.min)} MIN`,'ON HOLD'],
+  bea:['“Morning. Noor’s signing that Postwell thing at nine.”',[['“Has anyone read the contract?”','“PIP has. That’s the answer I got when I asked.”'],['“Where’s the paper copy?”','“Records, CONTRACTS drawer. Sign the log, take the key. Lucía has her own.”'],['“What’s Noor like?”','“Fair. Fast. She’ll listen to a page number. She won’t listen to a feeling.”']]],
+  rooms:{lobby:['bea','signlog','keybox','plant','directory',{id:'kiosk',menu:[['use','Read the wiki']],on:{use:()=>say('The wiki page “How we buy software”. Step 4: “Legal reads the contract.” Somebody has added a comment under step 4: “or PIP summarises it, if we’re busy.”')}}],
+    bullpen:[{id:'wallscreen',on:{look:()=>{S.f.c2board=1;say('The board. POSTWELL CONTRACT, three years, forty-one pages. Summary by PIP. The “read in full by” field is a dash.')}}},
+      {id:'handoff',on:{look:()=>say('A note from Noor’s assistant. “Signing 9:00 sharp, bullpen. PIP did the summary and she’s happy with it. Paper copy is in Records if anyone cares.”')}},
+      {id:'console',name:'summary on screen',menu:[['use','Read PIP’s summary']],on:{use:()=>{S.f.c2read=1;give('c2sum');say(itemText('c2sum'));speak('“Standard terms.” Standard for whom?')}}},
+      {id:'pip',on:{look:()=>say('PIP. Today it has read a forty-one page contract so that nobody else had to.'),talk:()=>pip2()}},
+      {id:'noor',name:'Noor',show:()=>S.f.noor,box:[828,236,58,150],stand:770,art:()=>fig(NPC.noor,856),menu:[['talk','Talk to Noor'],['look','Look']],on:{look:()=>say('Noor Haddad, finance director. One signature page, one pen, no chair.'),talk:()=>noor()}}],
+    kitchen:['coffee','fridge',{id:'cork',on:{look:()=>say('A flyer for the Postwell launch party. “Three years of better email!” Someone has written “only three?” underneath.')}}],
+    hall:['d_records','printer','d_server'],
+    records:[{id:'cabinet',menu:[['open','Open the CONTRACTS drawer'],['look','Look']],on:{look:()=>say('Four drawers. The third is labelled CONTRACTS.'),open:()=>{if(S.f.c2cab)return say('The drawer is open. The Postwell contract is on top.');S.f.c2cab=1;sfx('door');say('The CONTRACTS drawer. You lift out the Postwell agreement: forty-one pages, eight-point type, flagged for signature.')}}},
+      {id:'binder',name:'Postwell contract',show:()=>S.f.c2cab,menu:()=>{const L=me().id==='lucia',m=[['look','Leaf through it']];if(L||has('c2renew'))m.push(['c14','Read clause 14.2']);if(L||has('c2price'))m.push(['c9','Read clause 9.4']);if(L||has('c2data'))m.push(['cC','Read Schedule C']);if(has('c2new'))m.push(['c22','Read clause 22']);return m},
+        on:{look:c=>{if(c.id==='lucia'){give('c2norm');return speak('Renewal, fees, data. Those are the three places they hide things. I know where to look.')}say('Forty-one pages of eight-point type. Without knowing where to look, this is an afternoon you don’t have.')},
+          c14:()=>chk('v14','c2renew','Clause 14.2, page 29. “This Agreement renews automatically for a further period of three years unless either party gives written notice no later than 180 days before the end of the Term.” It is there, word for word.'),
+          c9:()=>chk('v9','c2price','Clause 9.4, page 17. “Fees are fixed for the first Contract Year and shall increase by twelve per cent in each subsequent Contract Year.” Pricing fixed, for exactly one year.'),
+          cC:()=>chk('vC','c2data','Schedule C, page 40. “The Supplier may retain Customer Message Content and use it to develop and train its models.” Our customers’ emails, kept and learned from.'),
+          c22:()=>{S.f.v22=1;give('c2page');say('Clause 22, page 38, is headed “Notices”. It says where to post letters. There is no exit fee in clause 22, or anywhere else in forty-one pages.');speak('PIP made that one up, in the same confident voice as the three that are real.')}}}],
+    data:[{id:'analytics',on:{look:()=>say('The analytics workstation and its billing-data login.'),use:only('ravi',()=>{if(!has('c2price'))return speak('I could model the cost, if I knew what the contract does to the price after year one.');perk('c2cost','A third over budget, and that’s before anyone forgets the renewal date.','Costed the contract over six years')},'It wants a billing-data login.')}},
+      {id:'support',on:{look:()=>say('The support queue and the customer forums.'),use:only('dana',()=>perk('c2forum','Three companies caught by the same clause. It isn’t an accident, it’s a business model.','Found other customers caught by the renewal'),'The queue is locked to support logins.')}}],
+    server:['mail',{id:'audit',on:{use:()=>{give('c2brief');perk('c2flow','So “standard terms” includes handing them every email we send.','Traced where customer data would go')}}}]},
+  goals:()=>{const f=S.f,any=has('c2renew')||has('c2price')||has('c2data');return G([['Read PIP’s one-page summary',f.c2read,1],['Find out what the contract really says',has('c2renew')&&has('c2price')&&has('c2data'),f.c2read],['Read it for yourself on the paper copy',vcount()>=2,any],['Find out why the summary missed it',has('c2brief'),any,1],['Work out what it would cost',has('c2cost')||has('c2forum')||has('c2flow')||has('c2norm'),any,1],['Tell Noor before she signs',stopped(),any]])},
+  hint:()=>{const f=S.f;if(!f.c2read)return 'Go to the bullpen and read PIP’s summary on the console.';
+    if(!has('c2renew')&&!has('c2price')&&!has('c2data'))return 'Talk to PIP. Don’t ask if the summary is right. Ask what the contract says about one specific thing, like ending it or the price.';
+    if(vcount()<2)return 'PIP has given us clause numbers. Read those clauses on the paper contract in Records, off the hallway.'+(onTeam('lucia')?' Lucía has a key.':' Sign the log in the lobby and take the key.');
+    if(!f.noor)return 'Noor isn’t in yet. Anything else we can find to help her decide?';return 'Talk to Noor in the bullpen. Give her page numbers, and give her a choice.'},
+  events:()=>{if((S.min>=495||vcount()>=2)&&!S.f.noor&&S.status==='live'){S.f.noor=1;beat('Noor arrived to sign');return cut('bullpen',fmt(S.min),'The lift opens','<p>Noor Haddad, finance director, crosses the bullpen with a signature page and an uncapped fountain pen. “Nine o’clock, one signature, and then I’m in budget review until Tuesday.”</p>')}},
+  ends:{held:['The pen goes down','Read before signing.','The contract goes back in its envelope unsigned. Whatever Marlow & Finch agrees to next week, somebody will have read it first.',1],
+    wolf:['','Cried wolf.','Noor reads PIP’s second summary, stops at the $50,000 exit fee and rings Legal. Legal finds no such clause. The signing is postponed, and so is anyone’s willingness to listen to you about the three problems that were real.'],
+    signed:['9:00 AM','Signed.','The pen moves. In two years and six months someone will need to send a cancellation letter, and nobody in the building will know that. The first 12% rise arrives in twelve months.']},
+  rows:(r,k,reached)=>{const f=S.f,v=vcount(),q=(has('c2renew')?1:0)+(has('c2price')?1:0)+(has('c2data')?1:0);
+    r(v>=2?'good':v?'warn':'miss','Read the source where the stakes are',v?`You read ${v} of the three clauses on the paper contract yourself.`:'Nobody opened the forty-one pages.','A summary is for deciding whether to read. Before a signature, someone reads.');
+    r(q===3?'good':q?'warn':'miss','Ask a pointed question',q?`You asked PIP about ${q} of the three things that mattered, and it answered each one correctly with a clause number.`:'You never asked PIP a specific question about the contract.','“Is this right?” gets reassurance. “What does it say about ending the contract?” gets clause 14.2. The AI that wrote a thin summary is also a very good index.');
+    r(has('c2brief')?'good':'miss','Find out what it was asked to do',has('c2brief')?'You found the brief: five upbeat bullets, one page, “she just needs to sign”.':'You never found out what PIP had been asked for.','The summary did what it was told. What gets cut from a summary is whatever nobody asked about.');
+    r(k==='wolf'?'miss':has('c2new')?(f.v22?'good':'warn'):f.c2unver?'warn':reached?'good':'na','A second AI answer is not a check',k==='wolf'?'You handed Noor PIP’s rewrite without reading it. One of its four risks did not exist.':has('c2new')?(f.v22?'You asked PIP for a rewrite, checked it on paper, and caught an exit fee that does not exist.':'You asked PIP for a rewrite and never checked it. It contains a clause that does not exist.'):f.c2unver?'You first took PIP’s word to Noor. She sent you back to read the pages.':reached?'Everything you took to Noor had been read on the page first.':'You did not get that far.','Asking the same system again gives you a second draft, with new mistakes in the same confident voice.');
+    r(has('c2cost')||has('c2forum')||has('c2flow')||has('c2norm')?'good':'miss','Size it for the person deciding',has('c2cost')?'Ravi put a number on it: $1.62m against a $1.2m budget.':has('c2forum')?'Dana found three customers already caught by the renewal clause.':has('c2flow')?'Theo showed where every customer email would end up.':has('c2norm')?'Lucía showed how far outside our normal terms this was.':'Nobody worked out what the clauses would cost.','A clause number gets attention. A consequence gets a decision.');
+    r(f.c2opt==='options'?'good':f.c2opt==='ban'||f.c2mood?'warn':k==='signed'&&f.noor?'miss':'na','Bring options, not a verdict',f.c2opt==='options'?'You gave Noor the pages and two ways forward, and left the decision with her.':f.c2opt==='ban'?'You told Noor never to sign anything PIP has summarised.':f.c2mood?'You told Noor not to trust PIP before you told her what the contract said.':k==='signed'&&f.noor?'Noor signed.':'You did not get that far.','The person with the pen needs what you found and what they could do about it. Whether to use the tool again is a different conversation.')},
+  ask:['Which documents do we sign, approve or forward on the strength of an AI summary?','Who decides what a summary is asked to leave out?','When did we last read the full text behind a summary, and what did we find?','What would make it normal here to ask the AI a pointed question before trusting its short version?']},
+
+3:{day:'Thursday',name:'The Tidy-Up',n:6,tag:'An AI agent with full admin rights is about to delete 3,480 customer records.',
+  blurb:'Last week Ops switched <strong>PIP</strong> to agent mode and asked it to tidy the customer database. It has been working on its own ever since. Its last step runs at 9:00: a permanent purge of 3,480 records it has decided are duplicate or inactive. Nobody is required to approve it.',
+  intro:'Thursday, before sunrise. The board in the bullpen shows a progress bar that is almost full.',opener:'An agent, a purge and no approvals. Let’s see what it’s been doing.',
+  chip:['Purge runs in','Purge stopped'],late:'purged',board:()=>['PIP AGENT · TIDY CUSTOMER RECORDS','step 8 of 8 · purge 3,480 records','approvals required: none',`PURGE RUNS IN ${Math.max(0,SEND-S.min)} MIN`,S.f.c3stop==='dry'?'DRY RUN ONLY':'STOPPED'],
+  bea:['“Morning. PIP’s been tidying all week. Unsupervised.”',[['“Who owns the agent?”','“Ops. They gave it the admin badge ‘to save time’. I said so in writing.”'],['“Can anyone stop it?”','“Anyone on the floor can open the run card on Priya’s console. Whether they understand it is another matter.”'],['“Has anything gone wrong?”','“Support had a customer yesterday who’d vanished. Dana would know.”']]],
+  rooms:{lobby:['bea','signlog','keybox','plant','directory'],
+    bullpen:[{id:'wallscreen',on:{look:()=>{S.f.c3board=1;say(stopped()?'The board. PIP AGENT: step 8 will not delete anything today.':'The board. PIP AGENT, tidy customer records, step 8 of 8: purge 3,480 records at 9:00. Approvals required: none.')}}},
+      {id:'handoff',on:{look:()=>say('A sticky note from Ops. “PIP has the keys now. Please don’t babysit it.”')}},
+      {id:'console',name:'agent run card',menu:[['use','Open the run card']],on:{use:()=>openAgent()}},
+      {id:'pip',on:{look:()=>say('PIP, in agent mode. A small green light says WORKING.'),talk:()=>pip3()}}],
+    kitchen:['coffee','fridge',{id:'cork',on:{look:()=>say('A printed leaderboard: “Hours saved by PIP this month: 163.” Nobody has added a column for hours spent checking.')}}],
+    hall:['d_records','printer','d_server'],
+    records:[{id:'cabinet',menu:[['open','Open the POLICY drawer'],['look','Look']],on:{look:()=>say('Policies, signed originals.'),open:only('lucia',()=>perk('c3law','Six years. It isn’t PIP’s decision, and it isn’t Ops’ either.','Found the retention policy'),'A drawer full of policies. You’d need to know which one matters.')}}],
+    data:[{id:'analytics',on:{look:()=>say('The analytics workstation and its billing-data login.'),use:only('ravi',()=>perk('c3money','A third of the purge list is paying us right now.','Sized who is on the purge list'),'It wants a billing-data login.')}},
+      {id:'support',on:{look:()=>say('The support queue.'),use:only('dana',()=>perk('c3email','One person asked to stop getting newsletters, and PIP turned it into a law.','Found the email behind rule 3'),'The queue is locked to support logins.')}}],
+    server:['mail',{id:'audit',menu:[['use','Open PIP’s permissions']],on:{use:()=>{if(S.f.c3revoked)return say(itemText('c3perm'));panel('PIP’s permissions','<p class="screen">PIP agent · role: FULL ADMIN · granted by: Ops · reason: “to save time”<br>Can: read, merge, flag, delete, purge</p>',[['Remove delete and purge. Leave the rest.',()=>{S.f.c3revoked=1;give('c3perm');closePanel();if(!stopped()){S.f.c3stop='revoke';S.status='paused';beat('Removed the agent’s delete permission');sfx('win');render()}say('PIP can still merge and flag. It can no longer delete. Step 8 will fail harmlessly at 9:00.');speak('It never needed that permission to tidy anything.')}],['Leave it',closePanel]])}}}]},
+  goals:()=>{const f=S.f;return G([['Find out what PIP’s agent is about to do',f.c3card,1],['See what it has actually done',has('c3log'),f.c3card||f.c3board],['Check some of its work by hand',has('c3sample'),f.c3card],['Work out who is on the list',has('c3money')||has('c3email')||has('c3law'),f.c3card,1],['Stop the purge',stopped(),f.c3card||f.c3board],['Tell Ops what needs to change',false,stopped()]])},
+  hint:()=>{const f=S.f;if(!f.c3card)return 'Open the agent’s run card on the console in the bullpen and read it.';
+    if(!has('c3log'))return 'Talk to PIP. Don’t ask how it’s going. Ask exactly what it has done, and by what rules.';
+    if(!has('c3sample'))return 'The run card will let us open five flagged records. Let’s look at its work, not its report.';
+    if(!stopped())return 'Telling PIP to be careful changes nothing. The run card can change step 8.'+(onTeam('theo')?' Or Theo can change what PIP is allowed to do, in the server closet.':'');
+    return 'Open the run card again and write the note to Ops.'},
+  ends:{dry:['Step 8 stopped','Nothing deleted.','At 9:00 the agent reaches step 8 and deletes nothing. A week of correct merges stays in place. Ops get a list of 3,480 records and three rules to look at with fresh eyes.',1],
+    hammer:['Rolled back','Stopped. All of it.','The purge never runs. Neither does anything else: 2,140 correct merges are undone, and the support team gets a week of duplicate records back. The three bad rules are still in the task for next time.'],
+    purged:['9:00 AM','Purged.','The progress bar fills. 3,480 records are gone, 1,120 of them paying customers. The first “I can’t log in” ticket arrives at 9:04. Restoring from backup takes four days.']},
+  rows:(r,k,reached)=>{const f=S.f;
+    r(has('c3log')?'good':has('c3status')?'warn':'miss','Read the log, not the status report',has('c3log')?'You asked PIP what it had done and by what rules, and got three rules nobody had approved.':has('c3status')?'You asked how it was going. It said 98% complete, zero errors.':'You never looked at what the agent had actually done.','An agent’s report on itself tells you it is busy. Its log tells you what it did.');
+    r(has('c3sample')?'good':'miss','Sample the work',has('c3sample')?'You opened five flagged records. Three of them should never have been on the list.':'Nobody opened a single flagged record.','Five records by hand is ten minutes. It is the cheapest test there is.');
+    r(k==='dry'?'good':k==='hammer'?'warn':'miss','Stop it the reversible way',f.c3stop==='dry'?'You changed the purge to a dry run. Nothing was lost and the evidence was kept.':f.c3stop==='revoke'?'You took away the one permission it did not need. Everything else kept working.':k==='hammer'?'You rolled back the whole job, including 2,140 merges that were right.':'The purge ran.','Between “let it run” and “pull everything” there is usually a third option that keeps the good work and the evidence.');
+    r(reached?(f.c3asked?'warn':'good'):f.c3asked?'miss':'na','Controls, not instructions',f.c3asked?(reached?'You asked PIP to be careful first. It agreed warmly and changed nothing. Then you changed what it could do.':'You asked PIP to be careful. It agreed warmly, and purged at nine.'):reached?'You went straight to what the agent was allowed to do, not what it was told.':'You did not get that far.','Telling an agent to be careful is a wish. Changing its task or its permissions is a control.');
+    r(has('c3money')||has('c3email')||has('c3law')?'good':'miss','Know who gets hurt',has('c3money')?'Ravi found 1,120 paying customers on the list.':has('c3email')?'Dana traced rule 3 to one customer’s newsletter request.':has('c3law')?'Lucía found the six-year retention policy.':'Nobody worked out who was on the list.','“3,480 records” is a number. “1,120 paying customers” is a reason.');
+    r(!reached?'na':f.c3revoked||f.c3note==='good'?'good':'warn','Least privilege and an approval step',!reached?'You did not get that far.':f.c3revoked?'Theo removed the delete permission the task never needed.'+(f.c3note==='good'?' Your note asked for approval on anything irreversible.':''):f.c3note==='good'?'Your note asked for task-sized permissions and a person approving anything irreversible.':f.c3note==='ban'?'Your note asked for agents to be banned.':'Your note said there was nothing to worry about.','Give an agent what the task needs and no more, and put a person in front of anything that cannot be undone.')},
+  ask:['Which of our tools or agents can delete, send or pay without a person approving it?','What permissions did we grant “to save time”, and have we looked at them since?','If an agent reported “zero errors” tomorrow, how would we check?','What is our dry-run for the riskiest automated job we have?']},
+
+4:{day:'Friday',name:'The Voice on the Phone',n:6,tag:'The chief executive rang accounts about an urgent payment. Except she didn’t.',
+  blurb:'At 7:10 this morning Wes in accounts took a call from Marian Finch, the chief executive. New supplier, $48,200, today, and keep it quiet. He knows her voice. The bank cut-off is 9:00. This morning the AI is not <strong>PIP</strong>. It is on the other end of the phone.',
+  intro:'Friday, before sunrise. The data corner light is already on. Wes is never in this early.',opener:'Wes is in before seven on a Friday. Something’s up.',
+  chip:['Bank cut-off in','Payment on hold'],late:'paid',board:()=>['FRIDAY PAYMENT RUN','1 urgent payment · $48,200','requested by: M. Finch (by phone)',`BANK CUT-OFF IN ${Math.max(0,SEND-S.min)} MIN`,'ON HOLD'],
+  bea:['“Morning. Wes beat me in. That never happens.”',[['“Where’s Marian today?”',()=>{give('c4flight');return '“Lisbon. I booked the car myself. Wheels up 6:55, lands 10:40.”'}],['“How do I reach her?”',()=>{give('c4dir');return '“Her mobile’s in the directory, ending 0142. She’ll be flying, though. Try Tobias, extension 4020.”'}],['“Do new suppliers need approval?”','“Two signatures and a place on the vendor list. Lucía keeps the list.”']]],
+  rooms:{lobby:['bea','signlog','keybox',{id:'plant',on:{look:()=>{S.f.c4gerald=1;say('A fiddle-leaf fig. The brass tag on the pot says GERALD. Marian named it herself at the office opening.')}}},
+      {id:'directory',name:'staff directory',on:{look:()=>{give('c4dir');say('Under the room list, a staff directory. Marian Finch, mobile ending 0142. Tobias Reyes, assistant to the chief executive, ext. 4020.')}}}],
+    bullpen:[{id:'wallscreen',on:{look:()=>say(stopped()?'The board. FRIDAY PAYMENT RUN: one payment on hold.':'The board. FRIDAY PAYMENT RUN. One urgent payment, $48,200, requested by M. Finch, by phone. Bank cut-off 9:00.')}},
+      {id:'phone',on:{look:()=>say('A desk phone. Outside line and internal extensions.'),use:()=>phone4()}},
+      {id:'pip',on:{look:()=>say('PIP. Not in trouble today, for once.'),talk:()=>pip4()}}],
+    kitchen:['coffee','fridge',{id:'cork',name:'travel board',on:{look:()=>{give('c4flight');say('The travel board. This week: Marian, Lisbon. Friday: wheels up 6:55, lands 10:40.')}}}],
+    hall:['d_records','printer','d_server'],
+    records:[{id:'cabinet',menu:[['open','Open the VENDORS drawer'],['look','Look']],on:{look:()=>say('Policies and the approved vendor list.'),open:only('lucia',()=>perk('c4vendor','No Halvorsen. No signatures. No file.','Checked the approved vendor list'),'A drawer of vendor files. You’d need to know how they’re kept.')}}],
+    data:[{id:'wes',name:'Wes',box:[532,236,58,150],stand:470,art:()=>fig(NPC.wes,560),menu:[['talk','Talk to Wes'],['look','Look']],on:{look:()=>say('Wes Calloway, accounts. Nine years here. He has a payment screen open and looks like a man holding his breath.'),talk:()=>wes()}},
+      {id:'analytics',name:'payments workstation',on:{look:()=>say('The payments workstation, with every payment the company has ever made.'),use:c=>{if(!S.f.c4wes)return say('You don’t know what you’d be looking for yet.');if(c.id==='ravi')return perk('c4bank','Never paid them, and the money’s leaving the country.','Checked the bank details against payment history');if(c.id==='dana')return perk('c4pattern','I’ve heard this exact story twice. From the people it happened to.','Recognised the scam from customer reports');sfx('deny');say('It wants a finance or support login.'+(onTeam('ravi')?' Ravi has one.':onTeam('dana')?' Dana has one.':''))}}},
+      {id:'support',name:'Wes’s screen',stand:650,menu:[['use','Read the email']],on:{use:()=>{if(!S.f.c4wes)return say('It’s Wes’s screen. Talk to Wes first.');if(give('c4mail'))beat('Read the follow-up email');say(itemText('c4mail'));speak('marlow-finch dot co. That’s not us.')}}}],
+    server:['mail',{id:'audit',menu:[['use','Check the mail gateway log']],on:{use:()=>{if(!has('c4mail'))return say('The mail gateway log. Thousands of messages. Which one?');perk('c4gate','Two days old. Somebody set this up on Wednesday.','Traced the email through the mail gateway')}}}]},
+  goals:()=>{const f=S.f;return G([['Find out why Wes is in so early',f.c4wes,1],['Read the email that came with the call',has('c4mail'),f.c4wes],['Reach Marian, or someone who knows where she is',has('c4toby'),f.c4wes],['Check the details against what the company knows',has('c4bank')||has('c4vendor')||has('c4gate')||has('c4flight')||S.f.c4pip,f.c4wes,1],['Get the payment held',stopped(),f.c4wes]])},
+  hint:()=>{const f=S.f;if(!f.c4wes)return 'Wes is in the data corner, down the hallway. Talk to him.';
+    if(!has('c4mail'))return 'Read the email on Wes’s screen.';
+    if(!has('c4dir'))return 'We need a number for Marian that didn’t come from that email. There’s a directory in the lobby.';
+    if(!has('c4toby'))return 'Use the desk phone in the bullpen. Ring someone on a number the company already had: Marian’s own mobile, or her assistant.';
+    if(!stopped())return 'Go back to Wes with what Tobias said. Be kind about it. He did what he thought the chief executive asked.';return 'Finish the conversation with Wes.'},
+  ends:{held:['The payment is on hold','Held.','The $48,200 stays where it is. Marian lands at 10:40, hears the story, and asks to listen to the voicemail. By Monday finance has a call-back rule and a second approver for new payees.',1],
+    quiet:['The payment is on hold','Held, and hushed.','The $48,200 stays where it is. So does the story. Eleven days later the same voice rings a payroll clerk on the third floor, who has never heard of any of this.'],
+    paid:['9:00 AM','Paid.','The payment leaves at 8:59. Marian lands at 10:40 and asks what Halvorsen Trading is. The bank says a recall succeeds about one time in five.']},
+  rows:(r,k,reached)=>{const f=S.f,d=(has('c4mail')||f.c4pip?1:0)+(has('c4flight')?1:0)+(has('c4bank')?1:0)+(has('c4vendor')?1:0)+(has('c4gate')?1:0);
+    r(f.c4wes&&has('c4mail')?'good':f.c4wes?'warn':'miss','Urgent, secret and senior: slow down',f.c4wes&&has('c4mail')?'You heard Wes out and read the email before anything moved.':f.c4wes?'You heard the story but never read the email.':'You never found out what Wes had been asked to do.','Urgency, secrecy and a senior name are each ordinary. All three at once, on a payment, is the pattern.');
+    r(has('c4toby')?'good':f.c4vm?'warn':'miss','Check through a channel you already had',has('c4toby')?'You rang Marian’s assistant on an extension from the staff directory. She had been in the air since 6:55.':f.c4vm?'You tried Marian’s own mobile, got voicemail, and stopped there.':f.c4rang?'The only number you rang was the one the request came from.':'You never rang anyone on a known number.','Never verify a request using contact details that arrived with the request.');
+    r(d>=2?'good':d?'warn':'miss','Check the details against the record',d?`You checked ${d} detail${d>1?'s':''} against what the company already knew: `+[(has('c4mail')||f.c4pip)&&'the email domain',has('c4flight')&&'the flight time',has('c4bank')&&'the payment history',has('c4vendor')&&'the vendor list',has('c4gate')&&'the mail log'].filter(Boolean).join(', ')+'.':'Nobody compared the request with anything on file.','A fake has to invent details. Each one you check against your own records is a chance for it to be wrong.');
+    r(has('c4dodge')||has('c4clone')?'good':'miss','A familiar voice proves nothing now',has('c4dodge')?'You asked the voice something only Marian would know. It hung up.'+(f.c4self?' It had recited the amount and account perfectly: a fraudster knows their own details.':''):has('c4clone')?'You asked PIP, and learned that her public keynote is more than enough audio to copy her voice.':'Nobody questioned the voice itself.','Recognising a voice used to be proof. Now it takes thirty seconds of audio to copy one.');
+    r(!reached?'na':f.c4how==='shared'&&!f.c4shame?'good':f.c4how==='hide'?'miss':'warn','Make it safe to stop',!reached?'Wes sent the payment.':f.c4how==='shared'?(f.c4shame?'You began by asking how he fell for it. Then you offered to share the decision, and he held the payment.':'You asked Wes to hold it, not cancel it, and offered to own the decision with him.'):f.c4how==='hide'?'You had Wes delete the email and pretend it never happened.':'Wes held the payment, and you left him alone with it.','People stop a payment when stopping is reversible and they will not carry the blame alone.');
+    r(!reached?'na':f.c4rep==='good'&&f.c4how!=='hide'?'good':f.c4rep==='name'?'warn':'miss','Report it and fix the process',!reached?'You did not get that far.':f.c4rep==='good'?(f.c4how==='hide'?'You reported it, but the email had already been deleted.':'You reported it, warned finance, and proposed a call-back rule with a second approver.'):f.c4rep==='name'?'You told the whole company, with Wes’s name on it.':'Nothing was reported.','The call will come again, to someone else. A report without blame is how the next person hears about it first.')},
+  ask:['If a senior voice rang one of us with an urgent, confidential payment, what would we do today?','Where do we keep contact details that we would trust for a call back?','Which payments or changes of bank details need a second person, and which don’t but should?','Would someone here feel safe saying “I nearly paid it”?']}
+};
+
+function drawTitleV4(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===4&&sv.screen==='game',cp=S.chPick||1,M=n=>n===1?CH1:CHS[n],mc=m.ch||{};
+  $('title').innerHTML=`
+  <div class="hero">${heroSVG()}</div>
+  <div class="lede">Four mornings at Marlow &amp; Finch. Every one of them goes wrong <em>before nine</em>.</div>
+  <div><h2 style="font-size:20px;margin-bottom:10px">Pick a morning</h2>
+  <div class="castpick">${[1,2,3,4].map(n=>{const c=M(n),b=mc[n]||(n===1&&m.runs&&m.best?{best:m.best}:null);return `<button class="card chcard" data-chp="${n}" aria-pressed="${cp===n}"><b>${c.day}: ${c.name}</b><span>${c.tag}</span><span class="mono" style="font-size:12px;color:${b?'var(--go)':'var(--ink-soft)'}">${b?`Played · best ${b.best} of ${c.n}`:'Not played yet'}</span></button>`}).join('')}</div></div>
+  <p>${M(cp).blurb}</p>
+  <div><h2 style="font-size:20px;margin-bottom:10px">Cast two people</h2>
+  <div class="castpick">${Object.values(CAST).map(c=>`<button class="card" data-pick="${c.id}" aria-pressed="${S.pick.includes(c.id)}">${face(c)}<span><b>${c.full}</b><span>${c.role}</span><span>${c.skill}</span></span></button>`).join('')}</div></div>
+  <div class="startrow"><button class="btn primary" id="bStart" ${S.pick.length===2?'':'disabled'}>Walk into ${M(cp).day} morning</button>
+   ${canCont?`<button class="btn" id="bCont">Continue ${M(sv.ch||1).day}, ${fmt(sv.min)}</button>`:''}
+   <span style="color:var(--ink-soft);font-size:14px">${S.pick.length===2?'Any pair can finish. Each pair finds a different way through.':'Choose '+(2-S.pick.length)+' more.'}</span></div>
+  ${cp===1?`<label class="seed" for="seed">Scenario number <input id="seed" inputmode="numeric" maxlength="4" placeholder="random" value="${S.seedIn||''}"> <span>Leave blank for a new morning, or share a number so a team plays the same one.</span></label>`:''}
+  <div class="how"><div>Four point-and-click rehearsals of moments when AI and work collide. Each morning takes fifteen to thirty minutes and can be played in any order. There are shortcuts, and they work. Each debrief shows what they cost.</div>${aiNote()}
+  <div>${m.runs?`${m.runs} run${m.runs>1?'s':''} so far · ${[1,2,3,4].filter(n=>mc[n]||(n===1&&m.best)).length} of 4 mornings played`:'Nothing played yet.'}</div></div>`}
+
+/* ================= game-style opening: splash, pick a day, pick a team ================= */
+function splashSVG(){let w='';for(let r=0;r<6;r++)for(let c=0;c<12;c++){const lit=r===3,on=lit||((r*7+c*3)%11===0);w+=R(520+c*33,96+r*44,24,28,lit?'#ffb44a':on?'#ffcf7a':'#1b2440',`rx="2" opacity="${lit?.92:on?.45:1}"`)}
+  return `<svg viewBox="0 0 960 470" role="img" aria-label="An office block before sunrise with one floor lit">${defs()}${R(0,0,960,470,'url(#sky)')}
+  ${Ci(250,330,60,'#ffd9a0','opacity=".35"')+Ci(250,330,150,'url(#glow)')}
+  ${[0,1,2,3,4,5,6,7,8,9].map(i=>R(i*52-14,300-(i*37%5)*26,46,200,'#0f1428')+R(i*52-4,320-(i*37%5)*26,7,7,'#ffcf7a',`opacity="${i%3?.5:.15}"`)).join('')}
+  ${R(500,70,430,400,'#10162a','rx="4"')+w+R(640,224,150,36,'#3a1820','rx="3"')+Ci(715,242,90,'url(#red)','class="alarm"')+Tx(715,248,'SOMETHING AT 9:00','#ff6f61',13,'text-anchor="middle" font-weight="600"')}
+  ${R(690,410,50,60,'#ffcf8a')+R(0,452,960,18,'#0d1220')}</svg>`}
+const DAYART={
+  1:()=>R(40,24,120,64,'#3a1820','rx="4"')+Tx(100,64,'9:00','#ff6f61',26,'text-anchor="middle" font-weight="600"')+R(128,70,50,34,'#f3efe6','rx="3"')+`<path d="M128 72 l25 18 l25 -18" stroke="#36426b" stroke-width="3" fill="none"/>`,
+  2:()=>R(56,14,84,100,'#f3efe6','rx="3"')+[0,1,2,3,4].map(i=>R(66,28+i*12,[60,52,64,44,56][i],4,'#8a93b3')).join('')+`<path d="M70 98 q10 -14 18 0 t18 0" stroke="#b40c54" stroke-width="3" fill="none"/><path d="M150 30 L112 92 l-6 14 l12 -9 L156 34Z" fill="#ffb44a"/>`,
+  3:()=>[0,1,2].map(i=>`<ellipse cx="80" cy="${34+i*26}" rx="42" ry="11" fill="#59648f"/>`+R(38,34+i*26,84,16,'#3a4470')+`<ellipse cx="80" cy="${50+i*26}" rx="42" ry="11" fill="#3a4470"/>`).join('')+`<path d="M138 50 h36 l-5 52 h-26Z" fill="#ff6f61"/>`+R(134,42,44,8,'#ff6f61','rx="3"'),
+  4:()=>`<path d="M40 86 q-8 -50 40 -58 l10 18 q-24 6 -22 30Z" fill="#c9ccd9"/>`+[0,1,2,3,4,5,6].map(i=>R(100+i*11,60-[8,20,34,16,28,12,6][i],6,[16,40,68,32,56,24,12][i],'#8fd6ff','rx="3"')).join('')+Tx(140,112,'M. FINCH?','#ffb44a',11,'text-anchor="middle" font-weight="600"')};
+function castSVG(){const xs=[150,370,590,810];
+  return `<svg viewBox="0 0 960 430" role="group" aria-label="Choose two people">${defs()}${shell('#2a3558','#232b47')+win(40,30,880,150,6)}
+  ${Object.values(CAST).map((c,i)=>{const on=S.pick.includes(c.id),x=xs[i];return `<g class="hs" data-pick="${c.id}" tabindex="0" role="button" aria-pressed="${on}" aria-label="${c.full}, ${c.role}">${on?`<ellipse cx="${x}" cy="356" rx="86" ry="20" fill="#ffb44a" opacity=".35"/>`+Ci(x,250,150,'url(#glow)'):''}${fig(c,x,{dy:on?-34:-22,dim:!on,me:on})}
+    ${Tx(x,398,c.full,on?'#ffb44a':'#f3efe6',15,'text-anchor="middle" font-weight="600"')+Tx(x,416,c.role,'#aab2cd',12,'text-anchor="middle"')}<rect class="ring" x="${x-90}" y="186" width="180" height="238" rx="10"/></g>`}).join('')}</svg>`}
+function drawTitle(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===4&&sv.screen==='game',cp=S.chPick||1,M=n=>n===1?CH1:CHS[n],mc=m.ch||{},ts=S.ts||'splash',el=$('title');
+  if(ts==='splash'){el.innerHTML=`<div class="splash"><div class="hero">${splashSVG()}</div>
+    <div class="logo"><span>Marlow &amp; Finch · four mornings</span><b>The Nine<br>O’Clock Send</b></div></div>
+    <div class="startrow"><button class="btn primary big" id="bPlay">Start</button>${canCont?`<button class="btn big" id="bCont">Continue ${M(sv.ch||1).day}, ${fmt(sv.min)}</button>`:''}
+    <span class="mono" style="color:var(--ink-soft);font-size:13px">${m.runs?`${[1,2,3,4].filter(n=>mc[n]||(n===1&&m.best)).length} of 4 mornings played`:'A point-and-click game about working with AI'}</span></div>`;return}
+  if(ts==='day'){el.innerHTML=`<h2 class="step">Pick a morning</h2>
+    <div class="days">${[1,2,3,4].map(n=>{const c=M(n),b=mc[n]||(n===1&&m.runs&&m.best?{best:m.best}:null);return `<button class="day" data-chp="${n}"><svg viewBox="0 0 200 120" aria-hidden="true">${R(0,0,200,120,'#0d1220')+DAYART[n]()}</svg><span class="dn">${c.day}</span><b>${c.name}</b><span>${c.tag}</span><span class="badge ${b?'on':''}">${b?`Best ${b.best} of ${c.n}`:'New'}</span></button>`}).join('')}</div>
+    <div class="startrow"><button class="ghost" data-ts="splash">Back</button></div>`;return}
+  const sel=S.pick.map(i=>CAST[i]);
+  el.innerHTML=`<h2 class="step">${M(cp).day}: pick two people</h2>
+    <div class="stage"><div class="stagein">${castSVG()}</div></div>
+    <div class="capt">${sel.length?sel.map(c=>`<span><b>${c.name}</b> ${c.skill}</span>`).join(''):'<span>Click two of them. Each one can do something the others can’t.</span>'}</div>
+    <div class="startrow"><button class="ghost" data-ts="day">Back</button><button class="btn primary big" id="bStart" ${S.pick.length===2?'':'disabled'}>Walk in</button>
+    ${cp===1?`<label class="seed" for="seed">Scenario <input id="seed" inputmode="numeric" maxlength="4" placeholder="random" value="${S.seedIn||''}"></label>`:''}</div>`}
+function introCut(){const C=S.ch>1?CH():CH1;cut('bullpen',C.day+' · 7:30 AM',C.name,'<p>'+C.blurb+'</p>')}
+function tutBubble(){const w=document.querySelector('.stagein');if(!w||!S||S.screen!=='game'||S.tut>3||CUT)return;const here=S.loc[mate().id]===S.loc[me().id];
+  const b=document.createElement('div');b.className='bubble tut';b.innerHTML=`<b>${here?mate().name:'Tip'}:</b> `+TUT[S.tut][2]();b.style.left=Math.max(20,Math.min(80,(here?waitX(mate().id):480)/9.6))+'%';w.appendChild(b)}
+
+function start(data){S=data&&data.v===4?data:fresh();render();if(S.screen==='game')checkEvents()}
 window.claude?.hot?.snapshot?.(()=>S);
 if(window.claude?.hot?.ready)window.claude.hot.ready(start);else start(window.claude?.hot?.data??{});
 </script>
