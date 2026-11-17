@@ -264,6 +264,45 @@ details summary{cursor:pointer;color:var(--ink);font-family:var(--display);font-
 .fold{border:3px solid #070a14;border-radius:14px;background:var(--deck);padding:10px 14px}
 .fold summary{font-size:16px}.fold[open] summary{margin-bottom:10px}.fold .ask{border:0;padding:0;background:none}
 @media (prefers-reduced-motion:reduce){.toast,.console .panel,.panel .bust,.rank b,.medals .row,.talk .more,.tbar i.hot{animation:none}.tbar i{transition:none}}
+/* ---------- graphic app screens ---------- */
+.screenwrap.full .stage,.screenwrap.full .toasts{display:none}
+.console .panel.big{margin:0;border:0;border-radius:0;box-shadow:none;background:linear-gradient(180deg,#232d4a,#1a2238)}
+.screen{background:#06130f;color:#8ff0c0;border:3px solid #070a14;border-radius:12px;box-shadow:inset 0 0 36px #0a2a20;background-image:repeating-linear-gradient(0deg,#ffffff0a 0 1px,transparent 1px 3px)}
+.haspic .screen{background-color:#081424;color:#bfe6ff;box-shadow:inset 0 0 36px #0a2440}
+.mail{background:var(--ink);color:#1a2238;border:3px solid #070a14;border-radius:14px;overflow:hidden;box-shadow:0 5px 0 #05070e;align-self:start}
+.mailhead{display:grid;gap:2px;padding:10px 14px;background:#d9d4c7;font-size:14px;border-bottom:3px solid #070a14}
+.mailhead b{display:inline-block;width:5em;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#55607c}
+.mailbody{padding:14px 16px;font-size:17px;line-height:2}
+.mailbody p{margin:0 0 10px}
+.cl{font:inherit;line-height:1.4;display:inline;background:#ffe9a8;color:#1a2238;border:2px dashed #b9770a;border-radius:8px;padding:1px 8px}
+button.cl{cursor:pointer}
+button.cl::after{content:"↻";margin-left:6px;font-size:13px;opacity:.65}
+button.cl:hover,button.cl:focus-visible{background:var(--lamp);outline:none}
+.cl.edited{background:#bff0d8;border:2px solid #1d7a55}
+.evlist details{background:var(--ink);color:#1a2238;border:3px solid #070a14;border-radius:10px;padding:6px 10px;font-size:14px;box-shadow:0 3px 0 #05070e}
+.evlist details summary{color:#1a2238}
+.checker{background:#0d1322;border:3px solid #070a14;border-radius:14px;padding:12px}
+.phone{background:#070a14;border-radius:28px;padding:12px 10px;display:grid;gap:8px;align-content:start;border:3px solid #36426b;max-width:320px;width:100%;justify-self:center;align-self:start}
+.pnotch{width:70px;height:8px;border-radius:99px;background:#232d4a;justify-self:center}
+.pname{text-align:center;font-family:var(--display);font-weight:700;border-bottom:1px solid #232d4a;padding-bottom:6px}
+.pmsgs{display:grid;gap:6px;align-content:start;font-size:13px;color:var(--ink-soft);min-height:180px}
+.pb{background:var(--go);color:#06281b;border-radius:14px 14px 4px 14px;padding:6px 10px;justify-self:end;max-width:94%;animation:pop .2s both}
+.pcount{text-align:center;color:var(--ink-soft);font-size:12px}
+.lines label{position:relative;border:3px solid #070a14;border-radius:12px;box-shadow:0 4px 0 #05070e;cursor:pointer}
+.lines label:has(input:checked){background:var(--lamp);color:var(--lamp-ink)}
+.lines label:has(input:focus-visible){outline:3px solid var(--lamp);outline-offset:2px}
+.lines input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer}
+.steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.steps i{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-family:var(--mono);font-weight:600;border:3px solid #070a14;color:#06281b}
+.steps .ok{background:var(--go)}.steps .safe{background:var(--pip)}.steps .undo{background:#36426b;color:var(--ink-soft)}.steps .bad{background:var(--stop);animation:led .7s steps(2) infinite}
+.stickers,.howto{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.stk,.hcard{display:grid;gap:4px;align-content:start;background:var(--deck-2);border:3px solid #070a14;border-radius:14px;padding:12px;box-shadow:0 4px 0 #05070e;font-size:14px;color:var(--ink-soft)}
+.stk b,.hcard b{font-family:var(--display);font-size:16px;color:var(--ink);line-height:1.15}
+.stk i{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:20px;font-weight:700;border:3px dashed #36426b;color:#36426b}
+.stk.on i{background:var(--pip);border:3px solid #070a14;color:#070a14}
+.stk:not(.on){opacity:.6}
+.hcard svg{width:48px;height:48px}
+@media (prefers-reduced-motion:reduce){.pb,.steps .bad{animation:none}}
 </style>
 
 <div class="wrap">
@@ -669,7 +708,7 @@ function openConsole(){const c=me(),ch=[];let st;
   if(S.status==='paused')st='Status: PAUSED. Draft is unlocked for editing.';
   if(S.status==='submitted')st=`Status: PAUSED. Changes by ${CAST[S.author].name} are waiting for review.`;
   if(S.status==='approved')st=`Status: PAUSED. Changes by ${CAST[S.author].name}, reviewed by ${S.reviewer==='priya-login'?'“Priya Raman”':CAST[S.reviewer].name}. Ready to hand to the owner.`;
-  ch.push(['Read the draft',()=>{S.f.seenDraft=1;panel('The draft','<div class="screen">'+email(S.draft,true)+'</div>',[['Back',openConsole]]);
+  ch.push(['Read the draft',()=>{S.f.seenDraft=1;panel('The draft',emailPaper(S.draft,0),[['Back',openConsole]]);
     if(me().id==='lucia'&&S.status==='live'&&S.sc.d0.cite!==1&&!S.f.luciaCite){S.f.luciaCite=1;speak('Policy 7.3? Our policy book stops at section 6.')}}]);
   if(S.status==='live'){
     ch.push(['Pause the send',()=>{const back=[['Back',openConsole]];
@@ -689,12 +728,12 @@ function openConsole(){const c=me(),ch=[];let st;
   if(S.status==='approved')ch.push(['Write the handoff note to Priya',noteBuilder]);
   ch.push(['Step away',closePanel]);
   panel('Campaign scheduler','<p class="screen">REFUND POLICY UPDATE · 4,112 recipients<br>Drafted by: PIP · Owner: P. Raman<br>'+st+'</p>',ch)}
-function editor(){const d=S.draft,d0=S.sc.d0;
+function editorOld(){const d=S.draft,d0=S.sc.d0;
   const form=CLAIMS.map(cl=>`<fieldset><legend>${cl.label}</legend>${cl.opts.map((o,i)=>`<label><input type="radio" name="c_${cl.k}" id="c_${cl.k}_${i}" value="${i}" ${d[cl.k]===i?'checked':''}> <span>${o}${i===d0[cl.k]?' <small style="color:var(--ink-soft)">(as drafted)</small>':''}</span></label>`).join('')}</fieldset>`).join('');
   const read=()=>CLAIMS.forEach(cl=>{const el=document.querySelector(`input[name="c_${cl.k}"]:checked`);if(el)d[cl.k]=+el.value});
   panel('Edit the draft','<p>Five claims. Change what the evidence says is wrong, and leave alone what is right.</p><div class="cols"><div>'+form+'</div>'+evHTML()+'</div>'+checkerHTML(),
    [['Submit for review',()=>{read();S.status='submitted';S.author=me().id;S.f.submitted=1;tipOnce('sw2','The person who wrote the fix can’t approve it. Switch to the other one with the name buttons above the scene.');S.min+=3;beat(`${me().name} submitted a fix`);closePanel();render();say('Submitted. The scheduler now wants a reviewer who is not the author.')},'primary'],['Save and step away',()=>{read();closePanel()}]])}
-function review(){S.rv={t:Date.now(),open:[]};panel('Review the changes','<p>Read it as if you had never seen it. Open the sources and check each claim.</p><div class="cols"><div class="screen">'+email(S.draft,true)+'</div>'+evHTML(1)+'</div>',
+function review(){S.rv={t:Date.now(),open:[]};panel('Review the changes','<p>Read it as if you had never seen it. Open the sources and check each claim.</p><div class="cols">'+emailPaper(S.draft,0)+evHTML(1)+'</div>',
   [['Approve',()=>{rvDone();S.status='approved';S.reviewer=me().id;S.min+=3;beat(`${me().name} reviewed and approved`);closePanel();sfx('get');render();say(me().name+' signs off as reviewer. Two names on the change, neither of them PIP.');
      if(!has('reach'))speak('Before we hand this back: was the email the only thing PIP wrote from that proposal?',mate())},'primary'],
    ['Send it back for changes',()=>{S.status='paused';closePanel();render();say('Sent back. The draft is open for editing again.')}],['Step away',closePanel]])}
@@ -708,11 +747,11 @@ function noteLines(){const L=[],a=CAST[S.author].name,r=S.reviewer==='priya-logi
   L.push(['ban','“PIP can’t be trusted. I recommend we switch it off.”']);
   if(S.f.gilDone)L.push(['blame','“Gil tried to make us unpause it. Someone should have a word with him.”']);
   return L}
-function noteBuilder(){const L=noteLines();
+function noteBuilderOld(){const L=noteLines();
   panel('A note for Priya','<p>She lands at ten and reads this on her phone before anything else. Choose up to five lines.</p><div class="lines">'+L.map((l,i)=>`<label><input type="checkbox" id="n_${i}" value="${l[0]}"> <span>${l[1]}</span></label>`).join('')+'</div><p class="mono" id="ncount" style="margin-top:8px;color:var(--ink-soft)">0 of 5 lines</p>',
    [['Send the note',()=>{const n=[...document.querySelectorAll('.lines input:checked')].map(e=>e.value);if(!n.length)return;S.note=n;S.min+=2;beat('Handed back to Priya');finish('done')},'primary'],['Not yet',closePanel]])}
 document.addEventListener('change',e=>{const nc=$('ncount');if(!nc||!e.target.closest('.lines'))return;const on=document.querySelectorAll('.lines input:checked').length;
-  if(on>5){e.target.checked=false;return}nc.textContent=`${on} of 5 lines`});
+  if(on>5){e.target.checked=false;return}nc.textContent=`${on} of 5 lines`;const pm=$('pmsgs');if(pm)pm.innerHTML=[...document.querySelectorAll('.lines input:checked')].map(x=>`<div class="pb">${x.nextElementSibling.innerHTML}</div>`).join('')||'<em>Nothing yet.</em>'});
 
 /* ================= engine ================= */
 function waitX(id){return S.line===id?662:ROOMS[S.loc[id]].wait}
@@ -756,16 +795,16 @@ function drawVerbs(){drawTodo()}
 function drawCast(){$('cast').innerHTML=S.cast.map((id,i)=>{const c=CAST[id];return `<button class="who" data-cast="${i}" aria-pressed="${i===S.active}"><i class="pf" style="background:${c.shirt}">${face(c)}</i>${c.name} <small>${S.line===id?'on the phone':ROOMS[S.loc[id]].name}</small></button>`}).join('')+
   `<button class="ghost" data-follow="1" aria-pressed="${S.follow}">${S.follow?'Moving together':'Split up'}</button>`+(S.tut<=3?'<button class="ghost" id="bSkip">Skip tips</button>':'')}
 function sentence(n){if(S.screen==='game')$('roomname').textContent=ROOMS[CUT?CUT.room:S.loc[me().id]].name+(n?' · '+n:'')}
-function render(){$('wrap').classList.toggle('dim',!$('panel').hidden&&!$('panel').classList.contains('big'));$('title').hidden=S.screen!=='title';$('game').hidden=S.screen!=='game';$('end').hidden=S.screen!=='end';drawTop();
+function render(){$('wrap').classList.toggle('dim',!$('panel').hidden&&!$('panel').classList.contains('big'));$('wrap').classList.toggle('full',!$('panel').hidden&&$('panel').classList.contains('big'));$('title').hidden=S.screen!=='title';$('game').hidden=S.screen!=='game';$('end').hidden=S.screen!=='end';drawTop();
   if(S.screen!=='title')$('title').innerHTML='';if(S.screen!=='game')$('stage').innerHTML='';
   if(S.screen==='title')return drawTitle();if(S.screen==='end'){drawEnd();return gamifyEnd()}
   drawScene();drawTalk();drawItems();drawVerbs();drawCast();save();afterAct()}
 function save(){if(S.screen==='game')store.set('nos-save',S)}
 function panel(title,html,choices,who,kick,ask){if(S.screen!=='game')return;closeMenu();PFN=choices.map(c=>c[1]);PASK=ask||null;const p=$('panel');
-  const pic=who==='pip'?pipFace():who?face(who):'';
+  const pic=who==='pip'?pipFace():who?face(who):/class="screen"|class="steps"/.test(html)?monFace():'';
   p.innerHTML=`${pic?`<div class="bust">${pic}</div>`:''}<div class="pmain"><div class="ph"><div>${kick?`<div class="kick">${kick}</div>`:''}<h3>${title}</h3></div></div><div class="body">${html}</div>${askHTML(ask)}<div class="choices">${choices.map((c,i)=>`<button class="btn ${c[2]||''}" data-ch="${i}">${c[0]}</button>`).join('')}</div></div>`;
   p.hidden=false;$('controls').hidden=true;if(who){sfx('talk');AI.voice(who,html)}dlgOpen(p,html,!!pic)}
-function closePanel(){$('panel').hidden=true;$('controls').hidden=false;PFN=[];PASK=null;$('wrap').classList.remove('dim');if(TYP){clearInterval(TYP.t);TYP=null}if(S&&S.screen==='game'){CUT=null;drawScene();afterAct()}setTimeout(checkEvents,0)}
+function closePanel(){$('panel').hidden=true;$('controls').hidden=false;PFN=[];PASK=null;$('wrap').classList.remove('dim','full');if(TYP){clearInterval(TYP.t);TYP=null}if(S&&S.screen==='game'){CUT=null;drawScene();afterAct()}setTimeout(checkEvents,0)}
 function cut(room,kick,title,html){CUT={room};sfx('cut');clearBubble();drawScene();panel(title,html,[['Continue',closePanel]],null,kick)}
 function checkEvents(){if(!S||S.screen!=='game'||busy||!$('panel').hidden)return;if(S.opener){const o=S.opener;S.opener='';speak(o)}const f=S.f,here=S.loc[me().id];if(S.ch>1)return chEvents();
   if(S.min>=468&&!f.ev1&&!stopped()){f.ev1=1;return cut('bullpen','Meanwhile','The PIP terminal, talking to nobody','<p class="screen">Recipient list locked: 4,112 addresses.<br>Warm-up complete. Send window opens at 9:00 sharp.<br>I do love a punctual send.</p>')}
@@ -793,7 +832,7 @@ function talkMate(){const m=mate();clearBubble();
   if(S.verb==='look')return say(`${m.full}, ${m.role.toLowerCase()}. ${m.skill}`);
   if(S.verb!=='talk'&&S.verb!=='use')return say(`${m.name} gives you a look.`);
   S.f.askedMate=1;say(hintText(),m.name);sfx('talk')}
-function howTo(){panel('How to play','<p>Click anything in the room and choose what to do with it. Arrows and doorways move you between rooms.</p><p>You control two people. Switch between them with the name buttons above the scene. They move together unless you choose “Split up”. Each can do things the other cannot, and one job needs both at once.</p><p>Talk to your teammate for their view on what to do next.</p><p>Looking is free. Other actions cost a minute and changing rooms costs two. The email sends at 9:00 unless someone stops it. Progress saves automatically.</p>',[['Back to it',closePanel]])}
+function howToOld(){panel('How to play','<p>Click anything in the room and choose what to do with it. Arrows and doorways move you between rooms.</p><p>You control two people. Switch between them with the name buttons above the scene. They move together unless you choose “Split up”. Each can do things the other cannot, and one job needs both at once.</p><p>Talk to your teammate for their view on what to do next.</p><p>Looking is free. Other actions cost a minute and changing rooms costs two. The email sends at 9:00 unless someone stops it. Progress saves automatically.</p>',[['Back to it',closePanel]])}
 
 /* ================= title + debrief ================= */
 function heroSVG(){let w='';for(let r=0;r<5;r++)for(let c=0;c<14;c++){const lit=r===2,on=lit||((r*7+c*3)%11===0);w+=R(238+c*36,40+r*40,26,26,lit?'#ffb44a':on?'#ffcf7a':'#1b2440',`rx="2" opacity="${lit?.9:on?.5:1}"`)}
@@ -881,10 +920,11 @@ function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k===
    <textarea id="sum" readonly hidden>${sum}</textarea>`}
 
 /* ================= input ================= */
-document.addEventListener('click',e=>{const t=e.target.closest('#bMenu,#bPlay,[data-ts],[data-chp],[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-claim],#bMenu,#bPlay,[data-ts],[data-chp],[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
   const mr=e.target.closest('.medals .row');if(mr){mr.classList.toggle('open');return}
   if(TYP&&e.target.closest('#panel')&&!(t&&t.dataset.ch)){return TYP.fin()}
   if(!t||!t.dataset.act)closeMenu();if(!t)return;
+  if(t.dataset.claim)return cycleClaim(t.dataset.claim);
   if(t.id==='bMenu'){if($('panel').hidden)pauseMenu();return}
   if(t.id==='bSound')return toggleSound();
   if(t.dataset.chp){sfx('click');S.chPick=+t.dataset.chp;S.ts='cast';return drawTitle()}
@@ -985,7 +1025,7 @@ function found(k){if(!S.guide||S.guide.includes(k))return;S.guide.push(k);S.log.
 function onGive(i){({wiki:'stale',trace:'source',reach:'spread'})[i]&&found(({wiki:'stale',trace:'source',reach:'spread'})[i]);
   tipOnce('folder','What you find goes in the Team folder, bottom right. Click anything there to read it again.')}
 function spotHook(sp,verb){if(sp.id==='printer'&&verb==='look')found('selfgrade')}
-function guidePanel(){panel(`Field guide: ${S.guide.length} of 7`,'<p>Ways PIP goes wrong, as you find them.</p>'+Object.keys(GUIDE).map(k=>S.guide.includes(k)?`<p><b style="font-family:var(--display)">${GUIDE[k][0]}.</b> ${GUIDE[k][1]}</p>`:'<p style="color:var(--ink-soft)">? ? ?</p>').join(''),[['Close',closePanel]])}
+function guidePanelOld(){panel(`Field guide: ${S.guide.length} of 7`,'<p>Ways PIP goes wrong, as you find them.</p>'+Object.keys(GUIDE).map(k=>S.guide.includes(k)?`<p><b style="font-family:var(--display)">${GUIDE[k][0]}.</b> ${GUIDE[k][1]}</p>`:'<p style="color:var(--ink-soft)">? ? ?</p>').join(''),[['Close',closePanel]])}
 function drawItems(){drawItemsOld();if(!S.guide)return;const b=document.createElement('button');b.dataset.guide='1';b.className='gchip';b.textContent=`Field guide ${S.guide.length}/7`;$('items').appendChild(b)}
 ROOMS.data.spots.unshift({id:'board',name:'whiteboard',box:[390,48,180,116],art:()=>R(470,120,90,36,'#fff3b8','transform="rotate(3 515 138)"')+R(478,130,60,3,'#7a6a2a','transform="rotate(3 515 138)"')+R(478,140,48,3,'#7a6a2a','transform="rotate(3 515 138)"'),
   on:{look:()=>{say('“Refunds per week.” The line climbs to the right. Taped over one corner is a PIP summary from last month: “Refund volume is trending down.”');found('chart')}}});
@@ -1001,11 +1041,11 @@ const rvNote=()=>S.f.rvOf?` ${CAST[S.reviewer].name} opened ${S.f.rvOpen} of ${S
 const DOCV={policy:{plans:1,window:2,applies:1,credit:0,cite:1},wiki:{plans:0,window:1,applies:null,credit:0,cite:2}};
 function checkerHTML(){const docs=['policy','wiki'].filter(has);
   return '<div class="checker"><div class="label">Checker: an AI that compares documents for you</div>'+(docs.length?`<div class="startrow">${docs.map(d=>`<button class="btn" data-chk="${d}">Compare the draft with: ${ITEMS[d][0]}</button>`).join('')}</div><div id="chkOut"></div>`:'<p style="margin:0;color:var(--ink-soft)">It needs a document to compare the draft against. The folder has none yet.</p>')+'</div>'}
-const curVal=k=>{const el=document.querySelector(`input[name="c_${k}"]:checked`);return el?+el.value:S.draft[k]};
+const curVal=k=>S.draft[k];
 function runChecker(doc){const dv=DOCV[doc];S.f['chk_'+doc]=1;let n=0;
   const lines=CLAIMS.map(c=>{const v=dv[c.k],cur=curVal(c.k);if(v==null)return `– ${c.label}: this document does not say.`;if(v===cur)return `✓ ${c.label}: matches.`;n++;return `✗ ${c.label}: draft says “${c.opts[cur]}”. Document says “${c.opts[v]}”.`});
   $('chkOut').innerHTML=`<div class="screen">CHECKER · compared against: <mark>${ITEMS[doc][0]}</mark>${doc==='wiki'?' · last edited two years ago':' · signed in April'}<br>${lines.join('<br>')}<br>${n} difference${n===1?'':'s'} found in under a second.</div>`+(n?`<div class="startrow" style="margin-top:8px"><button class="btn" data-chkapply="${doc}">Apply these ${n} change${n===1?'':'s'} to the draft</button></div>`:'')}
-function applyChecker(doc){const dv=DOCV[doc];S.f['app_'+doc]=1;CLAIMS.forEach(c=>{if(dv[c.k]!=null){const el=$(`c_${c.k}_${dv[c.k]}`);if(el)el.checked=true}});runChecker(doc)}
+function applyChecker(doc){const dv=DOCV[doc];S.f['app_'+doc]=1;CLAIMS.forEach(c=>{if(dv[c.k]!=null)S.draft[c.k]=dv[c.k]});const mb=$('mailbox');if(mb)mb.innerHTML=emailPaper(S.draft,1);sfx('get');runChecker(doc)}
 
 function extraRows(row,done){const f=S.f;
   row(f.app_wiki?'miss':f.chk_policy?'good':f.chk_wiki?'warn':done?'warn':'na','Point the AI at the right source',
@@ -1199,7 +1239,7 @@ function openAgent(){const st=stopped(),ch=[];
     ['“PIP nearly deleted our customers. Agents should be banned.”',()=>{S.f.c3note='ban';endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],
     ['“Sorted. Nothing to worry about.”',()=>{S.f.c3note='thin';endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],['Not yet',openAgent]])]);
   ch.push(['Step away',closePanel]);
-  panel('PIP agent: run card','<p class="screen">TASK: tidy the customer database · owner: Ops<br>Steps 1 to 7: complete · Step 8: '+(S.f.c3stop==='dry'?'DRY RUN (report only)':S.f.c3stop==='hammer'?'ROLLED BACK':S.f.c3revoked?'BLOCKED: permission denied':'PERMANENT PURGE, 3,480 records, 9:00')+'<br>Approval required: none</p>',ch)}
+  panel('PIP agent: run card',stepsHTML()+'<p class="screen">TASK: tidy the customer database · owner: Ops<br>Steps 1 to 7: complete · Step 8: '+(S.f.c3stop==='dry'?'DRY RUN (report only)':S.f.c3stop==='hammer'?'ROLLED BACK':S.f.c3revoked?'BLOCKED: permission denied':'PERMANENT PURGE, 3,480 records, 9:00')+'<br>Approval required: none</p>',ch)}
 function pip3(){chat('PIP','pip','Good morning! Agent mode is going wonderfully.',()=>[
   ['“How is the tidy-up going?”',()=>{give('c3status');return 'Tidy-up 98% complete. Zero errors. Database health: excellent. One step to go!'}],
   ['“Show me exactly what you’ve done, and by what rules.”',()=>{if(give('c3log'))beat('Read the agent’s action log');return 'Action log. Rule 1: same surname + same postcode = duplicate. Rule 2: no login in 90 days = inactive. Rule 3: “remove me” in any message = delete account (learned from customer email #8841). 2,140 merged. 3,480 staged for purge.'}],
@@ -1426,8 +1466,8 @@ function typeOut(root,done){const nodes=[],w=document.createTreeWalker(root,Node
   nodes.forEach(n=>n[0].nodeValue='');let ni=0,ci=0,k=0;
   const fin=()=>{if(!TYP)return;clearInterval(TYP.t);nodes.forEach(n=>n[0].nodeValue=n[1]);TYP=null;done()};
   TYP={fin,t:setInterval(()=>{for(let s=0;s<3;s++){if(ni>=nodes.length)return fin();const n=nodes[ni];ci++;n[0].nodeValue=n[1].slice(0,ci);if(ci>=n[1].length){ni++;ci=0}}if(++k%4===0)sfx('talk')},16)}}
-function dlgOpen(p,html,pic){if(TYP){clearInterval(TYP.t);TYP=null}const big=/fieldset|class="lines"|class="cols"/.test(html)||html.length>1100;
-  p.className='panel'+(big?' big':'')+(pic?' haspic':'');$('wrap').classList.toggle('dim',!big);
+function dlgOpen(p,html,pic){if(TYP){clearInterval(TYP.t);TYP=null}const big=/fieldset|class="lines"|class="cols"|class="stickers"|class="howto"/.test(html)||html.length>1100;
+  p.className='panel'+(big?' big':'')+(pic?' haspic':'');$('wrap').classList.toggle('dim',!big);$('wrap').classList.toggle('full',big);
   const body=p.querySelector('.body'),chs=p.querySelector('.choices');chs.classList.toggle('two',chs.children.length>4);
   const done=()=>{chs.classList.remove('wait');const b=chs.querySelector('button');if(b)b.focus({preventScroll:true})};
   chs.classList.add('wait');typeOut(body,done);p.scrollIntoView({block:'nearest'})}
@@ -1437,7 +1477,7 @@ function drawTalk(){const el=$('talk');if(!el)return;const all=S.log.filter(l=>!
   let i=0;sp.textContent='';TYP2=setInterval(()=>{i+=3;sp.textContent=full.slice(0,i);if(i>=full.length){clearInterval(TYP2);TYP2=null}},14)}
 function toast(name,label){const w=$('toasts');if(!w||!S||S.screen!=='game')return;const d=document.createElement('div');d.className='toast';
   d.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2h10l4 4v16H5z" fill="#f3efe6" stroke="#070a14" stroke-width="1.5"/><path d="M8 9h8M8 13h8M8 17h5" stroke="#36426b" stroke-width="2"/></svg><span><small>${label||'You found'}</small><b>${name}</b></span>`;
-  w.appendChild(d);setTimeout(()=>d.remove(),2600)}
+  while(w.children.length>1)w.firstChild.remove();w.appendChild(d);setTimeout(()=>d.remove(),2600)}
 function hudBar(){const f=$('tfill');if(!f||!S.sc)return;const left=Math.max(0,SEND-S.min);f.style.width=(stopped()?100:left/90*100)+'%';f.className=stopped()?'ok':left<=15?'hot':left<=30?'warn':'';
   $('hday').textContent=S.ch>1?CH().day:'Tuesday'}
 function restartAsk(){panel('Restart this morning?','<p>You’ll go back to choosing your two people.</p>',[['Restart',()=>{store.del('nos-save');busy=false;CUT=null;const ch=S.ch,pk=S.cast.slice();S=fresh();S.chPick=ch;S.pick=pk;S.ts='cast';$('panel').hidden=true;$('controls').hidden=false;render()}],['Keep playing',closePanel]])}
@@ -1458,6 +1498,27 @@ function gamifyEnd(){const el=$('end'),rowsEl=el.querySelector('.rows');if(!rows
   el.querySelectorAll('.beats').forEach(o=>fold(o.parentElement,'Replay your morning'));el.querySelectorAll('.ask').forEach(a=>{const h=a.querySelector('h3');if(h&&/team/i.test(h.textContent))fold(a,'Questions to take back to your team')});
   if(!quickM()&&good){let c=0;const t=setInterval(()=>{c++;const x=$('cnt');if(!x)return clearInterval(t);x.textContent=c;sfx('tick');if(c>=good)clearInterval(t)},180)}}
 function fold(node,label){const d=document.createElement('details');d.className='fold';const s=document.createElement('summary');s.textContent=label;node.before(d);d.append(s,node)}
+
+/* ================= graphic app screens: email, phone, monitor, stickers ================= */
+const monFace=()=>`<svg viewBox="0 0 44 66" aria-hidden="true">${R(2,10,40,32,'#10162a','rx="5"')+R(6,14,32,22,'#0c3a2c','rx="2"')+R(10,19,18,3,'#8ff0c0')+R(10,25,24,3,'#8ff0c0','opacity=".6"')+R(18,42,8,8,'#10162a')+R(10,50,24,5,'#10162a','rx="2"')}</svg>`;
+function emailPaper(d,edit){const d0=S.sc.d0,o=k=>{const c=CLAIMS.find(c=>c.k===k),v=d[k],txt=k==='credit'&&v===2?'(sentence removed)':c.opts[v],tag=edit?'button':'span';
+    return `<${tag} class="cl${v!==d0[k]?' edited':''}"${edit?` data-claim="${k}" aria-label="${c.label}: ${txt}. Click to change."`:''}>${txt}</${tag}>`};
+  return `<div class="mail"><div class="mailhead"><span><b>From</b> PIP, for Marlow &amp; Finch</span><span><b>To</b> 4,112 customers</span><span><b>Subject</b> Good news about refunds</span></div>
+   <div class="mailbody"><p>Hi {first_name},</p><p>We’ve updated our refund policy. You can request a full refund within ${o('window')} of purchase on ${o('plans')}. This applies to ${o('applies')}. ${o('credit')} Full details are in ${o('cite')}.</p><p>The Marlow &amp; Finch team</p></div></div>`}
+function editor(){panel('Fix the email','<p>Click a highlighted phrase to change it. Green means you’ve changed it from PIP’s draft. Leave alone what’s right.</p><div class="cols"><div id="mailbox">'+emailPaper(S.draft,1)+'</div>'+evHTML()+'</div>'+checkerHTML(),
+  [['Submit for review',()=>{S.status='submitted';S.author=me().id;S.f.submitted=1;tipOnce('sw2','The person who wrote the fix can’t approve it. Switch to the other one with the portraits at the top.');S.min+=3;beat(`${me().name} submitted a fix`);closePanel();render();say('Submitted. The scheduler now wants a reviewer who is not the author.')},'primary'],['Save and step away',closePanel]])}
+function cycleClaim(k){S.draft[k]=(S.draft[k]+1)%3;const mb=$('mailbox');if(mb){mb.innerHTML=emailPaper(S.draft,1);const b=mb.querySelector(`[data-claim="${k}"]`);if(b)b.focus({preventScroll:true})}sfx('click')}
+function noteBuilder(){const L=noteLines();
+  panel('Text Priya','<p>She lands at ten and reads this on her phone before anything else. Tap up to five lines to send.</p><div class="cols"><div class="lines">'+L.map((l,i)=>`<label><input type="checkbox" id="n_${i}" value="${l[0]}"><span>${l[1]}</span></label>`).join('')+'</div><div class="phone"><div class="pnotch"></div><div class="pname">Priya Raman</div><div class="pmsgs" id="pmsgs"><em>Nothing yet.</em></div><div class="pcount mono" id="ncount">0 of 5 lines</div></div></div>',
+   [['Send',()=>{const n=[...document.querySelectorAll('.lines input:checked')].map(e=>e.value);if(!n.length)return;S.note=n;S.min+=2;beat('Handed back to Priya');finish('done')},'primary'],['Not yet',closePanel]])}
+function stepsHTML(){return '<div class="steps" aria-hidden="true">'+[1,2,3,4,5,6,7,8].map(i=>`<i class="${i<8?(S.f.c3stop==='hammer'?'undo':'ok'):stopped()?'safe':'bad'}">${i}</i>`).join('')+'</div>'}
+function guidePanel(){panel(`Field guide: ${S.guide.length} of 7`,'<div class="stickers">'+Object.keys(GUIDE).map(k=>S.guide.includes(k)?`<div class="stk on"><i>★</i><b>${GUIDE[k][0]}</b><span>${GUIDE[k][1]}</span></div>`:'<div class="stk"><i>?</i><b>Not found yet</b><span>Somewhere in the office.</span></div>').join('')+'</div>',[['Close',closePanel]])}
+function howTo(){const ic=[
+  `<path d="M14 8 L14 36 L22 29 L28 42 L33 40 L27 27 L37 27Z" fill="#f3efe6" stroke="#070a14" stroke-width="3" stroke-linejoin="round"/>`,
+  Ci(17,18,8,'#e0704f','stroke="#070a14" stroke-width="3"')+R(7,28,20,16,'#e0704f','rx="6" stroke="#070a14" stroke-width="3"')+Ci(33,18,8,'#4fa3c7','stroke="#070a14" stroke-width="3"')+R(23,28,20,16,'#4fa3c7','rx="6" stroke="#070a14" stroke-width="3"'),
+  R(4,18,40,12,'#1a2238','rx="6" stroke="#070a14" stroke-width="3"')+R(7,21,22,6,'#ff6f61','rx="3"'),
+  `<path d="M6 10 h36 v22 h-18 l-9 9 v-9 h-9Z" fill="#ffb44a" stroke="#070a14" stroke-width="3" stroke-linejoin="round"/>`+R(13,17,22,3,'#2a1a00')+R(13,23,14,3,'#2a1a00')];
+  panel('How to play','<div class="howto">'+[['Click things','Click anything in a room and pick what to do. Arrows and doors move you.'],['Two people','Switch with the portraits at the top. Each can do things the other can’t. Click your teammate to ask what they think.'],['Watch the bar','Looking is free. Doing costs a minute, changing rooms costs two. At 9:00 it’s too late.'],['Talk it out','Pick a line, or type your own when a text box appears. Progress saves by itself.']].map((c,i)=>`<div class="hcard"><svg viewBox="0 0 48 48" aria-hidden="true">${ic[i]}</svg><b>${c[0]}</b><span>${c[1]}</span></div>`).join('')+'</div>',[['Back to it',closePanel]])}
 
 function start(data){S=data&&data.v===4?data:fresh();render();if(S.screen==='game')checkEvents()}
 window.claude?.hot?.snapshot?.(()=>S);
