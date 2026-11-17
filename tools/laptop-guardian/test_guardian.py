@@ -164,6 +164,37 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual({p.key for p in procs}, {procs[0].key})
         self.assertEqual({p.cls.split("/")[0] for p in procs}, {"automation_browser"})
 
+    def test_a_virtual_machine_is_counted_under_the_app_it_belongs_to(self):
+        # A week in: the Claude app's machine held 2.5-2.8 GB around the clock, listed as "system".
+        files = ["/Applications/Claude.app/Contents/Resources/smol-bin.arm64.img",
+                 "/System/Library/CoreServices/SystemVersion.bundle/English.lproj/SystemVersion.strings",
+                 "/Users/j/Library/Application Support/Claude/vm_bundles/claudevm.bundle/rootfs.img"]
+        self.assertEqual(g.vm_owner_from_files(files), "Claude")
+        self.assertEqual(g.vm_owner_from_files(files[1:]), "Claude", "its disk lives in the app's own folder")
+        self.assertEqual(g.vm_owner_from_files(["/Users/j/Library/Application Support/Some Tool/disk.img"]), "Some Tool")
+        self.assertEqual(g.vm_owner_from_files(files[1:2]), "")
+        vm = ("/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/"
+              "com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine")
+        claude = "/Applications/Claude.app/Contents/MacOS/Claude"
+        make = lambda: [P(300, vm, rss_mb=2800), P(100, claude, rss_mb=1200),
+                        P(101, "/Applications/Claude.app/Contents/Frameworks/Claude Helper (Renderer).app/Contents/MacOS/"
+                               "Claude Helper (Renderer)", "x --type=renderer", ppid=100, rss_mb=500)]
+        asked = []
+        procs = g.classify(make(), self.cfg, UID, vm_lookup=lambda p: asked.append(p.pid) or "Claude")
+        self.assertEqual(asked, [300], "only the machine is looked up")
+        machine = procs[0]
+        self.assertEqual((machine.key, machine.vm_of, machine.cls), ("Claude", "Claude", "system"),
+                         "counted under Claude, and still nobody's helper to close")
+        groups = g.aggregate(procs, self.cfg)
+        self.assertEqual([(x["key"], x["class"], x["rss_mb"], x["vm_mb"], x["n"]) for x in groups],
+                         [("Claude", "ai_app", 4500, 2800, 3)], "one line, with the app's own class")
+        fam, main = g.app_family(procs, "Claude")
+        self.assertEqual((sorted(p.pid for p in fam), main.pid), ([100, 101], 100), "a refresh would never touch the machine")
+        loose = g.classify(make(), self.cfg, UID, vm_lookup=lambda p: "")
+        self.assertEqual((loose[0].key, loose[0].vm_of), ("com.apple.Virtualization.VirtualMachine", None),
+                         "nobody's as far as can be told: listed by its own name, as before")
+        self.assertNotIn("vm_mb", g.aggregate(loose, self.cfg)[0])
+
     def test_archive_utility_is_not_a_browser(self):
         au = "/System/Library/CoreServices/Applications/Archive Utility.app/Contents/MacOS/Archive Utility"
         procs = [P(50, au), P(51, "/Applications/Archive Thing.app/Contents/MacOS/Archive Thing")]
@@ -872,12 +903,18 @@ class RefreshTests(unittest.TestCase):
         again = g.refresh_state_from_events()["ChatGPT"]
         self.assertTrue(g.refresh_waiting(again), "a restart of the helper keeps the request")
         self.assertAlmostEqual(again["wanted_until"], st["wanted_until"], delta=2)
-        # two hours on and no quiet moment came: it stops, and the diary says so
-        late = g.time.time() + 121 * 60
+        # half a day on and still no quiet moment: only then does it lapse, and the diary says so
+        late = g.time.time() + 13 * 3600
         self.assertIsNone(g.refresh_tick(self.cfg, snap, {"ChatGPT": again}, g.Background(), late, ops=FakeOps(age=10.0)))
         self.assertFalse(again.get("wanted"))
         self.assertEqual(self.phases()[-1], ("expired", "ChatGPT"))
         self.assertFalse(g.refresh_waiting(g.refresh_state_from_events().get("ChatGPT")))
+        # a dry run never asks anyone anything
+        st = {}
+        g.refresh_queue("ChatGPT", st, self.cfg, "menu")
+        ops = FakeOps(age=10.0)
+        g.refresh_tick(self.cfg, snap, {"ChatGPT": st}, g.Background(), g.time.time() + 121 * 60, ops=ops, dry_run=True)
+        self.assertEqual((ops.calls, self.phases()[-1]), ([], ("expired", "ChatGPT")))
         # the app was quit by hand meanwhile: nothing is left to refresh
         st = {}
         g.refresh_queue("ChatGPT", st, self.cfg, "menu")
@@ -894,6 +931,84 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual([p for p, _ in self.phases()][-3:], ["started", "aborted", "cancelled"])
         self.assertIn("ChatGPT: cancelled: it did not quit", g.render_report(1))
         self.assertIn("ChatGPT: expired: no quiet moment came", g.render_report(1))
+
+    def test_a_wait_that_finds_no_quiet_moment_asks_instead_of_lapsing(self):
+        # 2026-11-16: asked at 14:51, the agent worked all afternoon, the request lapsed at 16:51
+        # without a word, and the Mac stayed slow until 20:42 with the app at 9-10 GB.
+        calm = {"groups": [{"key": "ChatGPT", "rss_mb": 9000, "n": 90}],
+                "sample": dict(sample(level=1, free=60), mem_total_mb=8192), "quiet": ""}
+        slow = dict(calm, sample=dict(calm["sample"], lag="slow"))
+        t0 = g.time.time()
+
+        def tick(ops, st, minutes, snap=calm):
+            st["next_check"] = 0.0
+            bg = g.Background()
+            app = g.refresh_tick(self.cfg, snap, {"ChatGPT": st}, bg, t0 + minutes * 60, ops=ops)
+            if bg.thread:
+                bg.thread.join(5)
+            return app
+
+        def queued():
+            st = {}
+            g.refresh_queue("ChatGPT", st, self.cfg, "menu", now=t0)
+            return st
+
+        # the two hours run out, the agent is still working, the owner is there: ask
+        st, ops = queued(), FakeOps(age=45.0, answer="Keep waiting")
+        self.assertIsNone(tick(ops, st, 119), "not yet")
+        self.assertEqual(tick(ops, st, 121), "ChatGPT")
+        self.assertEqual([c[0] for c in ops.calls], ["ask"])
+        self.assertIn("None has come: its agent was working 1 min ago", ops.calls[0][1])
+        self.assertIn("ChatGPT now holds 8.8 GB.", ops.calls[0][1])
+        self.assertTrue(st["wanted"], "'keep waiting': the request stands")
+        self.assertAlmostEqual(st["wanted_until"], g.time.time() + 120 * 60, delta=5)
+        self.assertEqual([p for p, _ in self.phases()][-2:], ["wait-asked", "extended"])
+        again = g.refresh_state_from_events()["ChatGPT"]
+        self.assertAlmostEqual(again["wanted_until"], st["wanted_until"], delta=2, msg="and a restart keeps the answer")
+        self.assertTrue(again["wanted_asked"])
+        # 'refresh now': the owner has decided the agent's task can stop
+        st, ops = queued(), FakeOps(age=45.0, answer="Refresh now")
+        tick(ops, st, 121)
+        self.assertEqual([c[0] for c in ops.calls], ["ask", "quit", "term", "clear", "reopen"])
+        self.assertFalse(st["wanted"])
+        self.assertAlmostEqual(st["last"], g.time.time(), delta=5)
+        # 'stop waiting'
+        st, ops = queued(), FakeOps(age=45.0, answer="Stop waiting")
+        tick(ops, st, 121)
+        self.assertFalse(st["wanted"])
+        self.assertEqual(self.phases()[-1], ("cancelled", "ChatGPT"))
+        self.assertIn("ChatGPT: cancelled: you stopped it", g.render_report(1))
+        # no answer: nothing is interrupted and nothing is forgotten
+        st, ops = queued(), FakeOps(age=45.0, answer="")
+        tick(ops, st, 121)
+        self.assertTrue(st["wanted"])
+        self.assertEqual(g.read_events(1)[-1]["answered"], False)
+        # nobody there to ask, or typing: no dialog, and the request stands
+        st, away = queued(), FakeOps(age=45.0, idle=3600.0)
+        self.assertIsNone(tick(away, st, 121))
+        typing = FakeOps(age=45.0, idle=2.0)
+        self.assertIsNone(tick(typing, st, 121))
+        self.assertEqual((away.calls + typing.calls, bool(st["wanted"])), ([], True))
+        self.assertLess(st["next_check"], t0 + 121 * 60 + 15, "it looks again at the next pause")
+        # in front, not busy: the same question, said truthfully
+        st, ops = queued(), FakeOps(front="ChatGPT", answer="Keep waiting")
+        tick(ops, st, 121)
+        self.assertIn("None has come: ChatGPT has been in front.", ops.calls[0][1])
+        # half an hour in, the Mac is slow and the app has outgrown the RAM: ask now, once
+        st, ops = queued(), FakeOps(age=45.0, answer="Keep waiting")
+        self.assertIsNone(tick(ops, st, 31), "calm: two hours is the wait")
+        self.assertIsNone(tick(ops, st, 29, snap=slow), "slow, but not half an hour yet")
+        self.assertEqual(tick(ops, st, 31, snap=slow), "ChatGPT")
+        self.assertIn("8.8 GB and the Mac is slow", ops.calls[0][1])
+        self.assertIsNone(tick(ops, st, 62, snap=slow), "asked once; the next question is when the new wait runs out")
+        self.assertEqual(len(ops.calls), 1)
+        small = dict(slow, groups=[{"key": "ChatGPT", "rss_mb": 3000, "n": 30}])
+        st, ops = queued(), FakeOps(age=45.0)
+        self.assertIsNone(tick(ops, st, 31, snap=small), "slow, but this app is not what is filling the Mac")
+        # and a quiet moment at any point is still simply taken, with no question
+        st, ops = queued(), FakeOps(age=3600.0)
+        self.assertEqual(tick(ops, st, 121), "ChatGPT")
+        self.assertEqual([c[0] for c in ops.calls], ["quit", "term", "clear", "reopen"])
 
     def test_a_yes_in_the_dialog_that_meets_a_working_agent_is_remembered(self):
         st, ops = {}, FakeOps(age=30.0, answer="Refresh now")
@@ -1704,6 +1819,12 @@ class MenuTests(unittest.TestCase):
         self.assertNotIn("grown:ChatGPT", ids, "one entry about it, not two")
         waiting = next(i for i in st["issues"] if i["id"] == "waiting:ChatGPT")
         self.assertIn("is not in front", waiting["detail"])
+        self.assertIn("it asks you what to do", waiting["detail"])
+        with_vm = dict(self.snap())
+        with_vm["groups"] = [{"key": "Claude", "rss_mb": 4500, "vm_mb": 2800, "n": 15, "class": "ai_app"}] + with_vm["groups"]
+        top = g.build_state(self.cfg, with_vm, self.menu())["top"]
+        self.assertEqual((top[0]["key"], top[0]["gb"], top[0]["vm_gb"]), ("Claude", 4.4, 2.7), "the shield says how much is the machine")
+        self.assertNotIn("vm_gb", top[1])
         self.assertEqual((waiting["action"]["id"], waiting["action"]["args"]), ("refresh_cancel", {"app": "ChatGPT"}))
         # the entry's own button takes it back
         _, menu = self.click(dict(waiting["action"]["args"], action=waiting["action"]["id"]), menu)

@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 128 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 130 tests (policy + macOS parsers on output recorded from a real Mac) |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
@@ -228,6 +228,14 @@ python3 guardian.py threads         # agent threads written recently, with the s
   writer asked for by name is never swapped for the other. *Do it by hand* keeps the old way: the request in a
   box with a *Copy the request* button, to paste into the long thread yourself. Nothing
   reaches the clipboard, Claude or the app until a button is clicked; nothing is deleted.
+- **An app's virtual machine is counted under the app.** After a week the biggest line in
+  the list was `com.apple.Virtualization.VirtualMachine`, 2.5 to 2.8 GB around the clock,
+  filed under "system": the Claude app's machine, which made Claude look like 1.7 GB when it
+  held about 5. A machine runs as a system service that launchd starts, so its parent says
+  nothing; the files it has open do (its tools inside `/Applications/<App>.app`, its disk in
+  that app's Application Support folder). Guardian asks `lsof` once per machine, adds it to
+  the app's line, and the menu shows "of which its virtual machine" underneath. It is never
+  part of anything Guardian closes or refreshes.
 - **A signed-out AI does not stop the diagnosis.** On 2026-11-13 the `claude` tool's sign-in
   expired ("OAuth session expired and could not be refreshed") and the daily diagnosis
   failed twice. When the first AI is not signed in, and only then, the other one this Mac
@@ -414,8 +422,17 @@ quiet for `agent_idle_minutes` and the app is not the one in front, so nothing h
 in it is lost. You are not asked again and need not be away, and the size, pressure and
 "not now" rules do not apply: you asked. It waits `wait_minutes` (120), through a restart
 of the helper, and never during a meeting or presentation. While it waits the menu lists
-it under "Needs a look" with a button to cancel. If the app is quit by hand, will not
-quit, or no quiet moment comes, it stops and the diary says which.
+it under "Needs a look" with a button to cancel. If the app is quit by hand or will not
+quit, it stops and the diary says which.
+
+If no quiet moment comes, it asks instead of lapsing. On 2026-11-16 a request made at 14:51
+waited two hours while the agent worked, lapsed without a word, and the Mac stayed slow
+until 20:42 with the app at 9 to 10 GB. Now, when the wait runs out, a dialog says why
+nothing happened and offers *Keep waiting* (the default, another `wait_minutes`), *Refresh
+now* (which stops the agent's task) and *Stop waiting*. It asks earlier, once, after
+`wait_ask_minutes` (30) if the Mac is measurably slow and the app has outgrown the RAM. It
+does not ask while you are away or typing; the request simply stands. No answer means keep
+waiting. Only after `wait_give_up_hours` (12) does a request lapse by itself.
 
 It is never forced. If the app does not quit within 45 seconds it is left running, and
 nothing is cleared or relaunched. The AI diagnosis may tune the thresholds but can never

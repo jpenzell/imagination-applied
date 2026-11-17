@@ -138,6 +138,12 @@ DEFAULT_CONFIG = {
         # A refresh the owner asked for while the app's agent was working is remembered this
         # long and done at the first quiet moment (agent quiet, app not in front).
         "wait_minutes": 120,
+        # 2026-11-16: a request waited two hours for a quiet moment that never came (the agent
+        # worked all afternoon), then lapsed without a word while the app grew to 10 GB and the
+        # Mac stayed slow for four more hours. Now it asks instead: when the wait runs out, or
+        # already after this many minutes if the Mac is slow and the app has outgrown the RAM.
+        "wait_ask_minutes": 30,
+        "wait_give_up_hours": 12,
         "only_under_pressure": True,
         # The moment an app is worth refreshing (its agent idle, the Mac calm) is rarely a moment
         # of pressure: on the first real day there were 16 slow spells and 2 offers, and at
@@ -369,7 +375,7 @@ def run_hygiene(cfg: dict, sample: dict, running: set, dry_run: bool = False) ->
 
 class Proc:
     __slots__ = ("pid", "ppid", "pgid", "uid", "cpu", "rss_kb", "res_kb", "etime_s", "cputime_s",
-                 "comm", "args", "app", "cls", "key", "is_gui", "chrome_type", "faults")
+                 "comm", "args", "app", "cls", "key", "is_gui", "chrome_type", "faults", "vm_of")
 
     def __init__(self, pid, ppid, pgid, uid, cpu, rss_kb, etime_s, cputime_s, comm, args):
         self.pid = pid
@@ -389,6 +395,7 @@ class Proc:
         self.is_gui = False
         self.chrome_type = None
         self.faults = None          # page faults since it started (who is touching memory)
+        self.vm_of = None           # for a virtual machine: the app it belongs to
 
     @property
     def rss_mb(self) -> float:
@@ -644,7 +651,7 @@ def parse_ps(comm_out: str, main_out: str) -> list:
     return procs
 
 
-def classify(procs: list, cfg: dict, my_uid: int) -> list:
+def classify(procs: list, cfg: dict, my_uid: int, vm_lookup=None) -> list:
     """Attach app, class and aggregation key to every process."""
     by_pid = {p.pid: p for p in procs}
     ab = cfg["automation_browser"]["markers"]
@@ -757,17 +764,60 @@ def classify(procs: list, cfg: dict, my_uid: int) -> list:
             continue
         p.cls = "other"
         p.key = p.name
+    # A virtual machine runs as a system service that launchd started, so nothing above ties it
+    # to its app. A week in, the Claude app's machine held 2.5-2.8 GB around the clock and was
+    # listed as "system", while Claude itself looked like 1.7 GB. It is counted under its app
+    # (its class stays "system": it is never anyone's helper to close).
+    lookup = vm_lookup or vm_owner
+    for p in procs:
+        if p.uid == my_uid and p.name == VM_NAME:
+            owner = lookup(p)
+            if owner:
+                p.vm_of, p.key = owner, owner
     return procs
+
+
+VM_NAME = "com.apple.Virtualization.VirtualMachine"
+VM_OWNERS = {}        # pid -> (when it started, when we looked, owner or "")
+
+
+def vm_owner_from_files(names: list) -> str:
+    """Which app a virtual machine belongs to, from the files it has open: the app whose bundle
+    it reads from, else the app whose Application Support folder holds its disk. '' if neither."""
+    for n in names:
+        m = re.match(r"/Applications/([^/]+)\.app/", n)
+        if m:
+            return m.group(1)
+    for n in names:
+        m = re.search(r"/Library/Application Support/([^/]+)/", n)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def vm_owner(p) -> str:
+    """Ask lsof once per machine (and again after half an hour if it could not say)."""
+    now = time.time()
+    started = now - p.etime_s
+    hit = VM_OWNERS.get(p.pid)
+    if hit and abs(hit[0] - started) < 300 and (hit[2] or now - hit[1] < 1800):
+        return hit[2]
+    out = sh(["lsof", "-Fn", "-p", str(p.pid)], timeout=20) if IS_MAC else ""
+    owner = vm_owner_from_files([ln[1:] for ln in out.splitlines() if ln.startswith("n/")])
+    VM_OWNERS[p.pid] = (started, now, owner)
+    return owner
 
 
 def aggregate(procs: list, cfg: dict) -> list:
     """Sum memory and CPU per key (one line for all of Chrome's helpers)."""
     groups = {}
-    for p in procs:
+    for p in sorted(procs, key=lambda p: bool(p.vm_of)):     # an app's own processes first: its class comes from them
         if p.cls == "foreign":
             continue
         g = groups.setdefault(p.key, {"key": p.key, "class": p.cls.split("/")[0],
                                       "rss_mb": 0.0, "res_mb": 0.0, "cpu": 0.0, "n": 0, "pids": []})
+        if p.vm_of:
+            g["vm_mb"] = round(g.get("vm_mb", 0) + p.rss_mb)
         g["rss_mb"] += p.rss_mb
         g["res_mb"] += min(p.res_kb, p.rss_kb) / 1024.0
         g["cpu"] += p.cpu
@@ -1492,7 +1542,7 @@ def bundle_path(comm: str):
 def app_family(procs: list, app: str):
     """Every process that belongs to an app (its helpers and the services it spawned) and its
     main process: the one launchd started, living in <App>.app/Contents/MacOS."""
-    fam = [p for p in procs if p.key in (app, f"{app} helpers (MCP servers)")]
+    fam = [p for p in procs if p.key in (app, f"{app} helpers (MCP servers)") and not p.vm_of]   # never its virtual machine
     pids = {p.pid for p in fam}
     mains = [p for p in fam if p.app == app and p.ppid not in pids and p.chrome_type is None
              and os.path.dirname(p.comm).endswith(f"/{app}.app/Contents/MacOS")]
@@ -1693,7 +1743,7 @@ def refresh_queue(app: str, st: dict, cfg: dict, source: str, now: float = None)
     at the first quiet moment, so they do not have to ask again. Returns when the wait ends."""
     now = now or time.time()
     minutes = int(cfg["refresh"].get("wait_minutes", 120))
-    st.update(wanted=now, wanted_until=now + minutes * 60, next_check=0.0)
+    st.update(wanted=now, wanted_until=now + minutes * 60, next_check=0.0, wanted_asked=0.0)
     log_event("refresh", app=app, phase="queued", wait_minutes=minutes, source=source)
     return st["wanted_until"]
 
@@ -1715,21 +1765,41 @@ def refresh_wanted_tick(app: str, st: dict, cfg: dict, snap: dict, background, n
                         dry_run: bool = False) -> bool:
     """A refresh the owner asked for is waiting. It runs once the app's agent has been quiet for
     agent_idle_minutes and the app is not the one in front, so nothing half-typed in it is lost.
-    The owner need not be away and is not asked again: they already said yes. True when the
-    job was started."""
-    if now >= st.get("wanted_until", 0):
-        refresh_unqueue(app, st, "expired", "no quiet moment came")
-        return False
+    The owner need not be away and is not asked again: they already said yes. If no such moment
+    comes, they are asked what to do (see refresh_wait_ask). True when a job was started."""
+    rcfg = cfg["refresh"]
     if now < st.get("next_check", 0):
         return False
     st["next_check"] = now + 20
-    if not any(grp["key"] == app for grp in snap["groups"]):
+    grp = next((g for g in snap["groups"] if g["key"] == app), None)
+    if grp is None:
         refresh_unqueue(app, st, "cancelled", "it is no longer running")
         return False
     ops = ops or MacAppOps()
     age = ops.activity_age(app, cfg)
-    if (age is not None and age < cfg["refresh"]["agent_idle_minutes"] * 60) or ops.front_app() == app:
-        return False
+    in_front = ops.front_app() == app
+    if (age is not None and age < rcfg["agent_idle_minutes"] * 60) or in_front:
+        # No quiet moment. Is it time to ask?
+        waited, lapsed = now - st.get("wanted", now), now >= st.get("wanted_until", 0)
+        if dry_run or waited >= rcfg.get("wait_give_up_hours", 12) * 3600:
+            if lapsed:
+                refresh_unqueue(app, st, "expired", "no quiet moment came")
+            return False
+        total = snap["sample"].get("mem_total_mb") or 0
+        hurting = (not st.get("wanted_asked") and waited >= rcfg.get("wait_ask_minutes", 30) * 60
+                   and lag_level(snap["sample"], cfg) != "none"
+                   and total and grp["rss_mb"] >= rcfg.get("outgrown_ram_share", 0.75) * total)
+        if not (lapsed or hurting):
+            return False
+        idle = ops.user_idle()
+        if idle is not None and idle > 600:                 # nobody there to ask: keep waiting
+            return False
+        if idle is not None and idle < rcfg.get("ask_pause_seconds", 0):
+            st["next_check"] = now + 10                     # typing: ask at the next pause
+            return False
+        slow = lag_level(snap["sample"], cfg) != "none"
+        return bool(background.submit(
+            f"refresh:{app}", lambda: refresh_wait_ask(app, cfg, st, grp["rss_mb"] / 1024, age, in_front, slow, ops)))
 
     def job():
         rec = refresh_app(app, cfg, ops, dry_run=dry_run)
@@ -1738,6 +1808,39 @@ def refresh_wanted_tick(app: str, st: dict, cfg: dict, snap: dict, background, n
         elif not rec.get("agent_busy"):        # it would not quit: say so once, do not keep trying
             refresh_unqueue(app, st, "cancelled", rec.get("result", ""))
     return bool(background.submit(f"refresh:{app}", job))
+
+
+WAIT_BUTTONS = ["Stop waiting", "Refresh now", "Keep waiting"]
+
+
+def refresh_wait_ask(app: str, cfg: dict, st: dict, gb: float, age_s, in_front: bool, slow: bool, ops=None) -> str:
+    """The quiet moment did not come. Say so and let the owner choose: keep waiting (the default,
+    so a stray Return interrupts nothing), refresh now and stop the agent's task, or stop."""
+    ops = ops or MacAppOps()
+    rcfg = cfg["refresh"]
+    why = (f"its agent was working {max(1, int(age_s // 60))} min ago"
+           if age_s is not None and age_s < rcfg["agent_idle_minutes"] * 60 else f"{app} has been in front")
+    text = (f"You asked Guardian at {datetime.fromtimestamp(st.get('wanted') or time.time()):%-I:%M %p} to refresh "
+            f"{app} at its next quiet moment. None has come: {why}. {app} now holds {gb:.1f} GB"
+            + (" and the Mac is slow" if slow else "") + ". Refreshing now stops whatever its agent is doing; "
+            "chats and threads are kept.")
+    log_event("refresh", app=app, phase="wait-asked", gb=round(gb, 1))
+    answer = ops.ask(text, WAIT_BUTTONS, "Keep waiting")
+    now = time.time()
+    st["wanted_asked"] = now
+    if answer == "Refresh now":
+        rec = refresh_app(app, cfg, ops, force=True)
+        if rec.get("phase") == "done":
+            st.update(last=time.time(), wanted=0.0, wanted_until=0.0)
+        else:
+            refresh_unqueue(app, st, "cancelled", rec.get("result", ""))
+    elif answer == "Stop waiting":
+        refresh_unqueue(app, st, "cancelled", "you stopped it")
+    else:                                   # "Keep waiting", or no answer: the request stands
+        minutes = int(rcfg.get("wait_minutes", 120))
+        st["wanted_until"] = now + minutes * 60
+        log_event("refresh", app=app, phase="extended", wait_minutes=minutes, answered=bool(answer))
+    return answer
 
 
 REFRESH_BUTTONS = ["Not now", "Always when idle", "Refresh now"]
@@ -1780,6 +1883,9 @@ def refresh_state_from_events(hours: float = 48) -> dict:
         ts = datetime.fromisoformat(e["ts"]).timestamp()
         if e.get("phase") == "queued":
             st["wanted"], st["wanted_until"] = ts, ts + e.get("wait_minutes", 120) * 60
+            st["wanted_asked"] = 0.0
+        elif e.get("phase") == "extended" and st.get("wanted"):
+            st["wanted_until"], st["wanted_asked"] = ts + e.get("wait_minutes", 120) * 60, ts
         elif e.get("phase") in ("cancelled", "expired") or (e.get("phase") == "done" and not e.get("dry_run")):
             st["wanted"] = st["wanted_until"] = 0.0
         if e.get("phase") == "done" and not e.get("dry_run"):
@@ -1868,8 +1974,8 @@ def refresh_cmd(cfg: dict, args):
         else:
             write_request("refresh", app=args.app, when_quiet=True, source="cli")
             print(f"{args.app}: the helper will refresh it at the next quiet moment: once its agent has been "
-                  f"quiet for {rcfg['agent_idle_minutes']} minutes and {args.app} is not in front. It stops "
-                  f"waiting after {int(rcfg.get('wait_minutes', 120))} minutes. "
+                  f"quiet for {rcfg['agent_idle_minutes']} minutes and {args.app} is not in front. After "
+                  f"{int(rcfg.get('wait_minutes', 120))} minutes without one it asks you what to do. "
                   f"Cancel: guardian.py refresh {args.app} --cancel")
         return
     snap = snapshot(cfg)
@@ -1885,7 +1991,7 @@ def refresh_cmd(cfg: dict, args):
         if refresh_waiting(state.get(app), now):
             st = state[app]
             why = (f"waiting for a quiet moment (you asked at {datetime.fromtimestamp(st['wanted']):%-I:%M %p}; "
-                   f"it stops waiting at {datetime.fromtimestamp(st['wanted_until']):%-I:%M %p})")
+                   f"if none has come by {datetime.fromtimestamp(st['wanted_until']):%-I:%M %p} it asks you)")
         elif not why:
             age = ops.activity_age(app, cfg)
             verdict, reason = refresh_decide(mode, rcfg, age, ops.front_app() == app, ops.user_idle())
@@ -3449,7 +3555,8 @@ def build_issues(cfg: dict, snap: dict, menu: dict) -> list:
                         "title": f"{app} will be refreshed at its next quiet moment",
                         "detail": f"You asked at {datetime.fromtimestamp(st['wanted']):%-I:%M %p}. Guardian waits until "
                                   f"its agent has been quiet for {rcfg['agent_idle_minutes']} minutes and {app} is not "
-                                  f"in front. It stops waiting at {datetime.fromtimestamp(st['wanted_until']):%-I:%M %p}.",
+                                  f"in front. If none has come by {datetime.fromtimestamp(st['wanted_until']):%-I:%M %p}, "
+                                  "it asks you what to do.",
                         "action": {"id": "refresh_cancel", "label": "Cancel the waiting refresh",
                                    "args": {"app": app}, "busy": False, "warning": ""}})
     if big and (tight or after_slow) and big["rss_mb"] >= rcfg["min_gb"] * 1024 and big["key"] != crit_refresh \
@@ -3564,7 +3671,8 @@ def build_state(cfg: dict, snap: dict, menu: dict) -> dict:
         "swap_used_mb": s.get("swap_used_mb"), "swap_total_mb": s.get("swap_total_mb"),
         "disk_free_gb": s.get("disk_free_gb"), "disk_floor_gb": cfg["disk_floor_gb"],
         "attention": worst if worst in ("crit", "warn") else "none", "headline": headline,
-        "top": [{"key": g["key"], "gb": round(g["rss_mb"] / 1024, 1), "n": g["n"]} for g in snap["groups"][:6]],
+        "top": [dict({"key": g["key"], "gb": round(g["rss_mb"] / 1024, 1), "n": g["n"]},
+                     **({"vm_gb": round(g["vm_mb"] / 1024, 1)} if g.get("vm_mb") else {})) for g in snap["groups"][:6]],
         "lag": {"level": lag_level(s, cfg), "swapin_mb_s": s.get("swapin_mb_s"),
                 "decompress_mb_s": s.get("decompress_mb_s"), "by": s.get("blame") or []},
         "chrome_link_age": (round(time.time() - LINK["seen"]) if LINK["seen"] else None),
@@ -3722,8 +3830,8 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
         if req.get("when_quiet") and not req.get("force"):
             until = refresh_queue(app, st, cfg, "command line" if req.get("source") == "cli" else "menu")
             say(f"{app} will be refreshed at its next quiet moment: once its agent has been quiet for "
-                f"{cfg['refresh']['agent_idle_minutes']} minutes and {app} is not in front. Guardian stops "
-                f"waiting at {datetime.fromtimestamp(until):%-I:%M %p}.")
+                f"{cfg['refresh']['agent_idle_minutes']} minutes and {app} is not in front. If none has come by "
+                f"{datetime.fromtimestamp(until):%-I:%M %p}, it asks you what to do.")
             return False
 
         def job():
@@ -4353,7 +4461,7 @@ def render_report(hours: float) -> str:
         lines += ["- " + ln.strip() for ln in scratch.render_ledger_diff(scratch.ledger_diff(base, entries[-1]))]
         lines.append("")
     refreshes = [e for e in read_events(hours) if e.get("kind") == "refresh"
-                 and e.get("phase") in ("done", "aborted", "declined", "queued", "cancelled", "expired")]
+                 and e.get("phase") in ("done", "aborted", "declined", "queued", "cancelled", "expired", "extended")]
     if refreshes:
         lines.append("## Refreshes (quit cleanly, clear caches, reopen)")
         for e in refreshes[-10:]:

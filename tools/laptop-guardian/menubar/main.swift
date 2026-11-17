@@ -44,6 +44,7 @@ struct AppUse {
     let key: String
     let gb: Double
     let n: Int
+    let vm: Double      // of gb: its virtual machine, 0 when it has none
 }
 
 struct GState {
@@ -110,7 +111,8 @@ func loadState(_ url: URL) -> GState? {
     s.mode = d["mode"] as? String ?? "nudge"
     s.busy = d["busy"] as? String ?? ""
     for t in d["top"] as? [[String: Any]] ?? [] {
-        s.top.append(AppUse(key: t["key"] as? String ?? "?", gb: num(t["gb"]) ?? 0, n: Int(num(t["n"]) ?? 1)))
+        s.top.append(AppUse(key: t["key"] as? String ?? "?", gb: num(t["gb"]) ?? 0, n: Int(num(t["n"]) ?? 1),
+                            vm: num(t["vm_gb"]) ?? 0))
     }
     for i in d["issues"] as? [[String: Any]] ?? [] {
         var action: Action?
@@ -903,6 +905,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             menu.addItem(infoItem(shown,
                                   String(format: "%.1f GB", t.gb)))
+            if t.vm > 0 {       // an app's virtual machine is easy to miss: it runs as a system service
+                menu.addItem(infoItem("    of which its virtual machine", String(format: "%.1f GB", t.vm)))
+            }
         }
 
         // ---- fix it now
