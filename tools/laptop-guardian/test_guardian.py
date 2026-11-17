@@ -10,6 +10,35 @@ import unittest
 
 import guardian as g
 
+# Nothing in this file may reach the real diary, settings or login items. Every path the
+# helper owns points into a throwaway folder before the first test runs, so when a test
+# "puts things back" it puts back this folder. (2026-11-17: a test failed with a job still
+# running; the job finished after tearDown and wrote three made-up refresh lines into the
+# real ~/Library/Logs/guardian/events.jsonl.)
+import atexit
+import shutil
+import tempfile
+
+SANDBOX = g.Path(tempfile.mkdtemp(prefix="guardian-tests-")).resolve()
+atexit.register(shutil.rmtree, SANDBOX, ignore_errors=True)
+SANDBOXED = {"HOME": SANDBOX / "home"}
+SANDBOXED["HOME"].mkdir()       # a home folder always exists; the rest is made as it is needed
+SANDBOXED.update(
+    CONFIG_DIR=SANDBOXED["HOME"] / ".config" / "guardian",
+    STATE_DIR=SANDBOXED["HOME"] / ".local" / "state" / "guardian",
+    LOG_DIR=SANDBOXED["HOME"] / "Library" / "Logs" / "guardian",
+    PLIST_PATH=SANDBOXED["HOME"] / "Library" / "LaunchAgents" / f"{g.LABEL}.plist",
+    MENU_PLIST=SANDBOXED["HOME"] / "Library" / "LaunchAgents" / f"{g.MENU_LABEL}.plist",
+    MENU_APP=SANDBOXED["HOME"] / "Applications" / "Guardian.app")
+SANDBOXED.update(
+    CONFIG_PATH=SANDBOXED["CONFIG_DIR"] / "config.json", PAUSE_PATH=SANDBOXED["CONFIG_DIR"] / "paused",
+    CONFIG_HISTORY=SANDBOXED["CONFIG_DIR"] / "config-history.jsonl",
+    EVENTS_PATH=SANDBOXED["LOG_DIR"] / "events.jsonl", SAMPLES_PATH=SANDBOXED["LOG_DIR"] / "samples.tsv",
+    STDOUT_LOG=SANDBOXED["LOG_DIR"] / "guardian.out.log")
+for _name, _path in SANDBOXED.items():
+    assert isinstance(getattr(g, _name), g.Path), _name
+    setattr(g, _name, _path)
+
 UID = os.getuid()
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # Chrome 157 as recorded on a real Mac (2026-11-10): helpers are now "(Aperitif Renderer)"
@@ -28,6 +57,35 @@ def P(pid, comm, args=None, ppid=1, cpu=0.0, rss_mb=100, age=60, cputime=0, uid=
 def sample(level=1, free=60, disk=100, ts=1_000_000.0):
     return {"ts": ts, "pressure_level": level, "free_pct": free, "disk_free_gb": disk,
             "cpu_speed_limit": 100}
+
+
+class SandboxTests(unittest.TestCase):
+    def test_no_test_can_reach_the_real_diary(self):
+        real = g.Path.home().resolve()
+        for name in SANDBOXED:
+            path = getattr(g, name)
+            self.assertIn(SANDBOX, path.parents, f"{name} points outside the throwaway folder")
+            self.assertNotIn(real, [path, *path.parents], name)
+        # every path the helper keeps at the top of the file is covered: a new one added there
+        # and forgotten here would be the next way out
+        import re
+        owned = set(re.findall(r"^([A-Z_]+) = (?:\(?HOME|CONFIG_DIR|STATE_DIR|LOG_DIR)\b",
+                               g.Path(g.__file__).read_text(), re.M))
+        self.assertEqual(owned - set(SANDBOXED), set())
+        self.assertGreaterEqual(len(owned), 11)
+        # the leak itself: a job that outlives its test writes after the test has "put things back"
+        import threading
+        saved, tmp = (g.LOG_DIR, g.EVENTS_PATH), g.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        g.LOG_DIR, g.EVENTS_PATH = tmp, tmp / "events.jsonl"
+        go = threading.Event()
+        late = threading.Thread(target=lambda: (go.wait(5), g.log_event("refresh", app="ChatGPT", phase="done")))
+        late.start()
+        g.LOG_DIR, g.EVENTS_PATH = saved        # what every tearDown here does
+        go.set()
+        late.join(5)
+        self.assertFalse((tmp / "events.jsonl").exists())
+        self.assertIn('"phase": "done"', (SANDBOX / "home/Library/Logs/guardian/events.jsonl").read_text())
 
 
 class ClassifyTests(unittest.TestCase):
@@ -1032,6 +1090,24 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual((rec["memory_back_mb"], rec["caches_freed_mb"], rec["leftovers"]), (3743, 3800, 1))
         self.assertEqual(self.phases(), [("started", "ChatGPT"), ("done", "ChatGPT")])
         self.assertIn("ChatGPT: done: memory 4.2GB -> 0.6GB", g.render_report(1))
+        # 2026-11-17: the morning report said "actions: 0" for a day with a 9.0 -> 1.2 GB refresh
+        # and twelve idle helpers stopped
+        mine = len([e for e in g.read_events(1) if e["kind"] == "refresh" and e.get("phase") == "done"])
+        self.assertGreaterEqual(mine, 1)
+        g.log_event("trim", app="ChatGPT", found=12, mb=327, closed=12, dry_run=False, trigger="early")
+        g.log_event("trim", app="ChatGPT", found=3, mb=80, closed=0, dry_run=True, trigger="click")
+        g.log_event("refresh", app="ChatGPT", phase="done", dry_run=True, result="would refresh")
+        g.log_event("decision", action="reclaim", **{"class": "disk"}, reason="low", proc=None,
+                    result="reclaimed 0.0GB of caches/old logs")
+        g.log_event("decision", action="reclaim", **{"class": "disk"}, reason="low", proc=None,
+                    result="reclaimed 1.2GB of caches/old logs")
+        report = g.render_report(1)
+        many = "refresh" if mine == 1 else "refreshes"
+        self.assertIn(f"things Guardian did: {mine + 2} ({mine} {many}, 1 trim, 1 disk clean-up)  |", report,
+                      "practice runs and clean-ups that found nothing are not counted")
+        self.assertIn("ChatGPT: 12 of 12 stopped, about 327 MB", report)
+        self.assertIn("## Processes stopped or slowed\n- none", report)
+        self.assertIn(f"Guardian acted {mine + 2} ({mine} {many}, 1 trim, 1 disk clean-up) times", g.digest_oneliner(1))
 
     def test_refresh_leaves_a_working_agent_alone(self):
         ops = FakeOps(age=30.0)
@@ -1172,6 +1248,7 @@ class DiskTests(unittest.TestCase):
         self.assertEqual(len(g.read_ledger()), 2)
         self.assertEqual([e["trigger"] for e in g.read_events(1) if e["kind"] == "disk"], ["fast-drop"])
         report = g.render_report(1)
+        self.assertIn("things Guardian did: 0  |", report, "a disk warning is a notice, not something done")
         self.assertIn("## Disk", report)
         self.assertIn("+7.6 GB  Temporary files", report)
 
@@ -1797,6 +1874,18 @@ class MenuTests(unittest.TestCase):
         _, menu = self.click({"action": "refresh", "app": "ChatGPT"}, self.menu(ops=ops))
         self.assertEqual(ops.calls, [])
         self.assertFalse(menu["last_action"]["ok"])
+        # and a job that is over before the click returns still has the last word (2026-11-17:
+        # one run in eight, "Refreshing ChatGPT..." was written over "its agent is working")
+
+        class AtOnce(g.Background):
+            def submit(self, name, fn):
+                fn()
+                return True
+
+        _, menu = self.click({"action": "refresh", "app": "ChatGPT"},
+                             self.menu(ops=FakeOps(age=30.0), background=AtOnce()))
+        self.assertFalse(menu["last_action"]["ok"])
+        self.assertNotIn("Refreshing", menu["last_action"]["text"])
         ops = FakeOps()
         _, menu = self.click({"action": "refresh", "app": "Google Chrome"}, self.menu(ops=ops))
         self.assertEqual(ops.calls, [])
@@ -2647,6 +2736,18 @@ class LagTests(unittest.TestCase):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5)
         self.assertEqual(cm.exception.code, 404)
         self.assertIsNone(g.start_status_server(port), "a taken port is reported, not fatal")
+        # Chrome hanging up before the answer is ordinary (five tracebacks in a week's log): no error
+        import io
+
+        class HungUp(io.BytesIO):
+            def write(self, b):
+                raise BrokenPipeError(32, "Broken pipe")
+
+        asked = server.RequestHandlerClass.__new__(server.RequestHandlerClass)
+        asked.path, asked.request_version, asked.requestline = "/status?v=0.3.4", "HTTP/1.1", "GET /status HTTP/1.1"
+        asked.client_address, asked.wfile, g.LINK["seen"] = ("127.0.0.1", 1), HungUp(), 0.0
+        asked.do_GET()
+        self.assertAlmostEqual(g.LINK["seen"], g.time.time(), delta=5, msg="the visit still counts")
         # the extension may add two small numbers saying what it just did; anything else is ignored
         g.LINK.pop("aside_total", None)
         for query in ("aside=3&looked=9", "aside=2&looked=7", "aside=99999&looked=1", "aside=1&looked=2&x=rm", "name=josh"):

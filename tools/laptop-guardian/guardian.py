@@ -3375,12 +3375,15 @@ def start_status_server(port: int):
             # older can reload itself instead of waiting for someone to click an arrow.
             body = json.dumps({"v": 1, "lag": LINK["lag"], "ts": LINK["ts"],
                                "ext": bundled_extension_version()}).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass    # Chrome hung up before the answer (asleep, or reloading); it asks again
 
         def log_message(self, *args):
             pass
@@ -3782,10 +3785,17 @@ def handle_request(req: dict, cfg: dict, menu: dict) -> bool:
         log_event("menu", action=action, result=text, ok=ok)
 
     def later(job, started: str) -> bool:
-        if bg is None or not bg.submit(f"menu:{action}", job):
-            say(f"Busy with another job ({getattr(bg, 'name', '?')}). Try again in a minute.", ok=False)
+        busy = f"Busy with another job ({getattr(bg, 'name', '?')}). Try again in a minute."
+        if bg is None or bg.busy():
+            say(busy, ok=False)
             return False
+        # Said before the job starts. Said after, it could land on top of the answer of a job
+        # that ended at once ("its agent is working"), and the menu then showed "Refreshing..."
+        # for a refresh that had been refused.
         say(started)
+        if not bg.submit(f"menu:{action}", job):
+            say(busy, ok=False)
+            return False
         return True
 
     if action == "pause":
@@ -4401,6 +4411,12 @@ def summarize(hours: float) -> dict:
     actions = [e for e in ev if e["kind"] == "decision" and e["action"] in ("kill", "renice")]
     notifies = [e for e in ev if e["kind"] == "decision" and e["action"] == "notify"]
     errors = [e for e in ev if e["kind"] == "error"]
+    # What Guardian did besides stopping or slowing a process. Without these the report said
+    # "0 actions" for a day on which it had refreshed an app from 9 GB to 1 GB.
+    refreshed = [e for e in ev if e["kind"] == "refresh" and e.get("phase") == "done" and not e.get("dry_run")]
+    trims = [e for e in ev if e["kind"] == "trim" and e.get("closed") and not e.get("dry_run")]
+    reclaims = [e for e in ev if e["kind"] == "decision" and e["action"] == "reclaim"
+                and float((re.search(r"reclaimed ([\d.]+)GB", str(e.get("result"))) or [0, 0])[1]) > 0]
     offenders = defaultdict(int)
     for e in episodes:
         m = re.search(r"top: (.*)$", e["reason"])
@@ -4423,22 +4439,33 @@ def summarize(hours: float) -> dict:
                 continue
     warn_samples = sum(1 for p in samples if p[1] not in ("1", "None"))
     return {"hours": hours, "episodes": len(started), "episode_details": episodes, "actions": actions,
+            "refreshed": refreshed, "trims": trims, "reclaims": reclaims,
             "notifies": notifies, "errors": errors, "offenders": sorted(offenders.items(), key=lambda kv: -kv[1]),
             "samples": len(samples), "pct_time_under_pressure": round(100 * warn_samples / max(1, len(samples)))}
+
+
+def did_summary(s: dict) -> str:
+    """'2 (1 refresh, 1 trim)': everything Guardian did in the period, by kind."""
+    kinds = [(len(s["refreshed"]), "refresh", "refreshes"), (len(s["trims"]), "trim", "trims"),
+             (len(s["reclaims"]), "disk clean-up", "disk clean-ups"),
+             (len(s["actions"]), "process stopped or slowed", "processes stopped or slowed")]
+    said = ", ".join(f"{n} {one if n == 1 else many}" for n, one, many in kinds if n)
+    total = sum(n for n, _, _ in kinds)
+    return f"{total} ({said})" if total else "0"
 
 
 def digest_oneliner(hours: float) -> str:
     s = summarize(hours)
     top = ", ".join(k for k, _ in s["offenders"][:3]) or "nobody in particular"
     return (f"Last {int(hours)}h: {s['episodes']} pressure episodes, under pressure {s['pct_time_under_pressure']}% "
-            f"of the time, {len(s['actions'])} actions. Usual suspects: {top}.")
+            f"of the time, Guardian acted {did_summary(s)} times. Usual suspects: {top}.")
 
 
 def render_report(hours: float) -> str:
     s = summarize(hours)
     lines = [f"# Guardian report for {HOSTNAME}, last {int(hours)}h ({datetime.now():%Y-%m-%d %H:%M})", ""]
     lines.append(f"- Samples: {s['samples']}  |  time under memory pressure: {s['pct_time_under_pressure']}%")
-    lines.append(f"- Pressure episodes: {s['episodes']}  |  actions taken or proposed: {len(s['actions'])}  |  "
+    lines.append(f"- Pressure episodes: {s['episodes']}  |  things Guardian did: {did_summary(s)}  |  "
                  f"notifications: {len(s['notifies'])}  |  errors: {len(s['errors'])}")
     lines.append("")
     lines.append("## Usual suspects (times named as a top offender)")
@@ -4469,6 +4496,12 @@ def render_report(hours: float) -> str:
                          + (f": {e['result']}" if e.get("result") else "")
                          + (f": {e['why']}" if e.get("why") else ""))
         lines.append("")
+    if s["trims"]:
+        lines.append("## Trims (idle helpers of an app asked to stop)")
+        for e in s["trims"][-10:]:
+            lines.append(f"- {e['ts']}: {e.get('app')}: {e.get('closed')} of {e.get('found')} stopped, "
+                         f"about {e.get('mb')} MB")
+        lines.append("")
     moves = [e for e in read_events(hours) if e.get("kind") == "archive"
              and e.get("phase") in ("done", "restored", "declined")]
     if moves:
@@ -4476,7 +4509,7 @@ def render_report(hours: float) -> str:
         for e in moves[-10:]:
             lines.append(f"- {e['ts']}: " + (e.get("text") or f"{e['phase']}" + (f" {e['name']}" if e.get("name") else "")))
         lines.append("")
-    lines.append("## Actions")
+    lines.append("## Processes stopped or slowed")
     for e in s["actions"][-20:]:
         who = e["proc"]["key"] if e.get("proc") else "-"
         lines.append(f"- {e['ts']}: {e['action']} {who}: {e['reason']} -> {e['result']}")

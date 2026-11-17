@@ -27,7 +27,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 130 tests (policy + macOS parsers on output recorded from a real Mac) |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 131 tests (policy + macOS parsers on output recorded from a real Mac); they run in a throwaway folder and cannot write to the real diary or settings |
 | `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
@@ -41,7 +41,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 148 tests, should say OK three times
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 168 tests, should say OK three times
 python3 guardian.py menu install       # the shield in the menu bar (builds a small app; needs Apple's Command Line Tools)
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
@@ -580,7 +580,7 @@ act mode. Claude Code and Codex CLI sessions are counted per tool; stale ones ar
 guardian.py status                 pressure, swap, compressor, thermal, disk, top apps by class
 guardian.py watch --once --dry-run one cycle, print decisions, exit
 guardian.py watch --once --dry-run --simulate level=4,free=3   exercise the policy on fake readings
-guardian.py report --hours 24      episodes, usual suspects, actions
+guardian.py report --hours 24      episodes, usual suspects, what Guardian did (refreshes, trims, clean-ups)
 guardian.py ask                    Claude Code / Codex diagnoses the diary (`claude` on PATH, or the engine inside the ChatGPT app)
 guardian.py config --apply-suggestion   apply the config change `ask` proposed
 guardian.py scratch                disk census by tier; --reclaim safe|safe-old|all [--yes]
