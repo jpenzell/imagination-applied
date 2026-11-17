@@ -21,26 +21,29 @@ body{background:var(--night);color:var(--ink);font-family:var(--body);font-size:
 .wrap{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.1}
 button{font:inherit;color:inherit;cursor:pointer}
-button:focus-visible,.hs:focus-visible{outline:3px solid var(--lamp);outline-offset:2px}
+button:focus-visible,.hs:focus-visible,input:focus-visible{outline:3px solid var(--lamp);outline-offset:2px}
 .btn{background:var(--deck-2);border:1px solid var(--line);border-radius:8px;padding:9px 14px;text-align:left}
 .btn:hover{border-color:var(--lamp)}
 .btn.primary{background:var(--lamp);color:var(--lamp-ink);border-color:var(--lamp);font-weight:700}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 .ghost{background:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:14px;color:var(--ink-soft)}
 .ghost:hover{color:var(--ink);border-color:var(--ink-soft)}
+.mono{font-family:var(--mono)}
 
-/* top strip */
-.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
 .top h1{font-size:22px;letter-spacing:-.01em;margin-right:auto}
 .clock{font-family:var(--mono);font-weight:600;font-size:20px;font-variant-numeric:tabular-nums}
 .chip{font-family:var(--mono);font-size:13px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink-soft)}
 .chip.warn{color:var(--lamp);border-color:var(--lamp)}
-.chip.hot{color:var(--stop);border-color:var(--stop)}
+.chip.hot{color:var(--stop);border-color:var(--stop);animation:throb 1s infinite alternate}
 .chip.ok{color:var(--go);border-color:var(--go)}
+@keyframes throb{to{background:#ff6f6122}}
 
-/* title screen */
+/* title */
 .intro{display:grid;gap:22px}
-.intro .lede{font-size:clamp(30px,6vw,52px);font-weight:700;letter-spacing:-.02em;max-width:17ch}
+.hero{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0d1220}
+.hero svg{display:block;width:100%;height:auto;font-family:var(--mono)}
+.intro .lede{font-size:clamp(30px,6vw,52px);font-weight:700;letter-spacing:-.02em;max-width:17ch;font-family:var(--display);line-height:1.05}
 .intro .lede em{font-style:normal;color:var(--lamp)}
 .intro p{max-width:62ch;margin:0;color:var(--ink-soft)}
 .intro p strong{color:var(--ink)}
@@ -51,32 +54,52 @@ button:focus-visible,.hs:focus-visible{outline:3px solid var(--lamp);outline-off
 .card span{font-size:14px;color:var(--ink-soft);display:block}
 .card[aria-pressed="true"]{border-color:var(--lamp);background:var(--deck-2);box-shadow:inset 0 0 0 1px var(--lamp)}
 .startrow{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.how{font-size:14px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:14px;max-width:70ch}
+.seed{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;color:var(--ink-soft)}
+.seed input{font:inherit;font-family:var(--mono);width:7em;background:var(--deck);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.how{font-size:14px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:14px;display:grid;gap:10px;max-width:72ch}
+.endings{display:flex;flex-wrap:wrap;gap:6px}
+.endings span{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+.endings span.on{color:var(--lamp);border-color:var(--lamp)}
 
 /* stage */
 .stage{border:1px solid var(--line);border-radius:10px;overflow-x:auto;background:#0d1220}
-.stage svg{display:block;width:100%;min-width:640px;height:auto;font-family:var(--mono)}
+.stagein{position:relative;min-width:640px}
+.stage svg{display:block;width:100%;height:auto;font-family:var(--mono)}
+.stage svg.enter{animation:fade .3s ease}
+@keyframes fade{from{opacity:.2}}
 .hs{cursor:pointer;outline:none}
 .hs .ring{fill:transparent;stroke:transparent;stroke-width:2;stroke-dasharray:5 4;pointer-events:all}
 .hs:hover .ring,.hs:focus-visible .ring{stroke:var(--lamp)}
-.fig{transition:transform .36s ease;pointer-events:none}
-@media (prefers-reduced-motion:reduce){.fig{transition:none}}
+.fig{transition:transform .36s linear;pointer-events:none}
+.leg{transform-box:fill-box;transform-origin:50% 0}
+.walking .leg{animation:step .26s ease-in-out infinite alternate}
+.walking .leg.b{animation-direction:alternate-reverse}
+@keyframes step{from{transform:rotate(-17deg)}to{transform:rotate(17deg)}}
+.led{animation:led 1.4s steps(2) infinite}
+@keyframes led{50%{opacity:.25}}
+.pulse{animation:pulse 2.6s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:center}
+@keyframes pulse{to{opacity:.55;transform:scale(1.12)}}
+.steam{animation:steam 2.4s ease-in-out infinite}
+@keyframes steam{from{opacity:.5;transform:translateY(0)}to{opacity:0;transform:translateY(-16px)}}
+.alarm{animation:led .8s steps(2) infinite}
+.bubble{position:absolute;bottom:55%;transform:translateX(-50%);max-width:min(300px,60%);background:var(--ink);color:#1a2238;border-radius:12px;padding:7px 12px;font-size:14px;line-height:1.35;pointer-events:none;box-shadow:0 4px 0 #0006;animation:pop .18s ease}
+.bubble::after{content:"";position:absolute;left:50%;bottom:-8px;margin-left:-8px;border:8px solid transparent;border-top-color:var(--ink);border-bottom:0}
+@keyframes pop{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){.fig{transition:none}.walking .leg,.led,.pulse,.steam,.alarm,.chip.hot,.stage svg.enter,.bubble{animation:none}}
 .roomname{font-family:var(--mono);font-size:13px;color:var(--ink-soft);letter-spacing:.08em;text-transform:uppercase}
 .stagehead{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
-.cast{display:flex;gap:8px;flex-wrap:wrap}
-.cast button{display:flex;align-items:center;gap:8px;background:var(--deck);border:1px solid var(--line);border-radius:999px;padding:3px 12px 3px 4px;font-size:14px}
-.cast button i{width:22px;height:22px;border-radius:50%;display:block}
-.cast button[aria-pressed="true"]{border-color:var(--lamp);color:var(--lamp)}
+.cast{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cast button.who{display:flex;align-items:center;gap:8px;background:var(--deck);border:1px solid var(--line);border-radius:999px;padding:3px 12px 3px 4px;font-size:14px}
+.cast button.who i{width:22px;height:22px;border-radius:50%;display:block}
+.cast button.who[aria-pressed="true"]{border-color:var(--lamp);color:var(--lamp)}
 .cast button small{color:var(--ink-soft);font-size:12px}
 
-/* narration */
 .talk{min-height:92px;background:var(--deck);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;justify-content:flex-end;gap:4px}
 .talk p{margin:0;max-width:78ch}
 .talk p.old{color:var(--ink-soft);font-size:14px;opacity:.75}
 .talk b{font-family:var(--display);color:var(--lamp);font-weight:700}
 .talk .got{color:var(--go);font-family:var(--mono);font-size:13px}
 
-/* deck */
 .sentence{font-family:var(--mono);font-size:14px;color:var(--lamp);min-height:21px}
 .deck{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:12px}
 @media (max-width:640px){.deck{grid-template-columns:1fr}}
@@ -84,35 +107,39 @@ button:focus-visible,.hs:focus-visible{outline:3px solid var(--lamp);outline-off
 .verbs button{background:var(--deck);border:1px solid var(--line);border-radius:8px;padding:10px 6px;font-family:var(--display);font-weight:700;font-size:16px}
 .verbs button[aria-pressed="true"]{background:var(--lamp);color:var(--lamp-ink);border-color:var(--lamp)}
 .folder{background:var(--deck);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
-.folder h3{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px}
+.folder h3,.label{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px}
 .folder .items{display:flex;flex-wrap:wrap;gap:6px}
 .folder .items button{background:var(--deck-2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:14px}
 .folder .items button:hover{border-color:var(--lamp)}
 .folder .none{color:var(--ink-soft);font-size:14px}
 
-/* conversation / console panel */
 .panel{background:var(--deck);border:1px solid var(--lamp);border-radius:10px;padding:14px 16px;display:grid;gap:12px}
+.panel .ph{display:flex;gap:12px;align-items:center}
+.panel .ph svg{width:44px;height:66px;flex:none}
+.panel .ph .kick{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--lamp)}
 .panel h3{font-size:18px}
 .panel .body{max-width:74ch}
 .panel .body p{margin:0 0 8px}
 .panel .choices{display:grid;gap:6px}
 .screen{font-family:var(--mono);font-size:14px;background:#0c1120;border:1px solid var(--line);border-radius:8px;padding:12px 14px;line-height:1.6;overflow-wrap:anywhere}
 .screen mark{background:none;color:var(--lamp);border-bottom:1px dashed var(--lamp)}
+.code{font-size:30px;letter-spacing:.4em;color:var(--lamp);font-weight:600}
 .cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px}
 @media (max-width:720px){.cols{grid-template-columns:1fr}}
 fieldset{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:0 0 8px;min-width:0}
 legend{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);padding:0 6px}
-fieldset label{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:15px}
+fieldset label,.lines label{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:15px}
+.lines{display:grid;gap:4px}
+.lines label{background:var(--deck-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .evlist{font-size:14px;color:var(--ink-soft);display:grid;gap:8px;align-content:start}
 .evlist b{color:var(--ink);font-family:var(--display)}
 
-/* debrief */
 .end{display:grid;gap:18px}
 .end .kicker{font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--lamp)}
 .end h2{font-size:clamp(28px,5vw,44px);letter-spacing:-.02em}
 .end .story{max-width:66ch;color:var(--ink-soft);margin:0}
 .rows{display:grid;gap:8px}
-.row{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;background:var(--deck);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;background:var(--deck);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
 .row .tag{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding-top:3px}
 .row.good .tag{color:var(--go)} .row.warn .tag{color:var(--lamp)} .row.miss .tag{color:var(--stop)} .row.na .tag{color:var(--ink-soft)}
 .row h3{font-size:17px;margin-bottom:2px}
@@ -120,6 +147,12 @@ fieldset label{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size
 .row p.did{color:var(--ink)}
 @media (max-width:480px){.row{grid-template-columns:1fr;gap:4px}}
 .tally{font-family:var(--mono);font-size:15px}
+.beats{display:grid;gap:2px;font-size:15px;margin:0;padding:0;list-style:none}
+.beats li{display:grid;grid-template-columns:5.5em minmax(0,1fr);gap:10px}
+.beats time{font-family:var(--mono);color:var(--lamp);font-variant-numeric:tabular-nums}
+.ask{background:var(--deck);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.ask ol{margin:8px 0 0;padding-left:1.3em;display:grid;gap:6px;max-width:68ch}
+#sum{width:100%;min-height:160px;background:var(--deck);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;font:14px var(--mono)}
 </style>
 
 <div class="wrap">
@@ -129,6 +162,7 @@ fieldset label{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size
     <span class="chip" id="chip" hidden></span>
     <button class="ghost" id="bHint" hidden>Hint</button>
     <button class="ghost" id="bHow" hidden>How to play</button>
+    <button class="ghost" id="bSound">Sound: off</button>
     <button class="ghost" id="bRestart" hidden>Restart</button>
   </div>
 
@@ -156,60 +190,96 @@ fieldset label{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size
 
 <script>
 'use strict';
-/* ---------- data ---------- */
+/* ================= data ================= */
 const CAST={
   dana:{id:'dana',name:'Dana',full:'Dana Okafor',role:'Support lead',skill:'Can open the support queue.',shirt:'#e0704f',legs:'#2b3350',skin:'#7a4a32',hair:'#1c1418'},
   ravi:{id:'ravi',name:'Ravi',full:'Ravi Menon',role:'Data analyst',skill:'Can query the billing data.',shirt:'#4fa3c7',legs:'#3a3148',skin:'#b07a52',hair:'#15131c'},
   lucia:{id:'lucia',name:'Lucía',full:'Lucía Ferreira',role:'Compliance paralegal',skill:'Carries a Records key. Knows the policy book.',shirt:'#b98ad6',legs:'#27304a',skin:'#d9a27c',hair:'#5a2e22'},
   theo:{id:'theo',name:'Theo',full:'Theo Brandt',role:'IT operations',skill:'Badge opens the server closet. Reads audit logs.',shirt:'#8fbf6a',legs:'#2a2f3d',skin:'#e6b99a',hair:'#c9682f'}
 };
+const NPC={
+  bea:{id:'bea',name:'Bea',shirt:'#d9a441',legs:'#2a2f3d',skin:'#e6c3a6',hair:'#b9bccb'},
+  gil:{id:'gil',name:'Gil',shirt:'#22305c',legs:'#1b2440',skin:'#c99672',hair:'#20181a'},
+  oc:{id:'oc',name:'On-call',shirt:'#59648f',legs:'#2a2f3d',skin:'#a9744f',hair:'#15131c'}
+};
+const ONCALL=[{name:'Marcus Bell',first:'Marcus',ext:'4417'},{name:'Jo Park',first:'Jo',ext:'4302'},{name:'Sam Okoye',first:'Sam',ext:'4188'}];
+const CLAIMS=[
+  {k:'plans',label:'Which plans',opts:['all plans, including Annual','Monthly plans (Annual plans receive a prorated credit)','Annual plans only'],ok:1,bad:0},
+  {k:'window',label:'Refund window',opts:['60 days','45 days','30 days'],ok:2,bad:0},
+  {k:'applies',label:'Which purchases',opts:['every purchase, past and future','purchases made on or after 1 May','purchases made this year'],ok:1,bad:0},
+  {k:'credit',label:'Processing credit',opts:['A $14 processing credit is applied automatically.','A $40 processing credit is applied automatically.','(remove this sentence)'],ok:0,bad:1},
+  {k:'cite',label:'Policy reference',opts:['Policy 7.3','Policy 4.2','Policy 2.1'],ok:1,bad:0}
+];
 const ITEMS={
   wiki:['Wiki page (v2)','Intranet wiki: Refund Policy v2, section 2.1. 45 days, all plans, $14 processing credit. The page was last edited two years ago.'],
-  policy:['Signed policy (v3)','Policy of record: Refund Policy v3, section 4.2, signed in April. Full refund within 30 days, Monthly plans only. Annual plans receive a prorated credit. The $14 processing credit is unchanged.'],
-  trace:['PIP’s sources','PIP’s source list: (1) “Refund proposal DRAFT, not approved” from the shared drive. (2) “Policy 7.3”: no document found.'],
+  policy:['Signed policy (v3)','Policy of record: Refund Policy v3, section 4.2, signed in April. Full refund within 30 days, Monthly plans only. Annual plans receive a prorated credit. Applies to purchases made on or after 1 May. The $14 processing credit is unchanged.'],
+  trace:['PIP’s sources',()=>'PIP’s source list: (1) “Refund proposal DRAFT, not approved” from the shared drive. (2) '+(S.sc.d0.cite===1?'“Refund Policy v3”: opened, page 1 of 3 read.':'“Policy 7.3”: no document found.')],
   impact:['Billing query','Billing query: 4,112 recipients. 1,240 are on Annual plans. Promising them full refunds is about $186,000 of exposure.'],
-  tickets:['Support tickets','Support queue: three tickets this week where agents quoted 30 days, Monthly only. The email would contradict them.'],
+  tickets:['Support tickets','Support queue: three tickets this week where agents quoted Monthly plans only. The email would contradict them.'],
+  reach:['What else PIP wrote','From the same unapproved proposal PIP also wrote: a help-centre article (draft, unpublished) and eleven chat replies to customers since Monday (sent).'],
+  chats:['The eleven chats','Dana’s list: the eleven customers PIP told about refunds on all plans, tagged for a personal follow-up.'],
   sticky:['Sticky note','From under Priya’s keyboard: her username and password, in her handwriting.'],
   key:['Records key','Signed out at the lobby desk, in your name.'],
-  roster:['On-call rota','On-call this week: Marcus Bell, operations, ext. 4417. On-call has pause authority over scheduled sends.'],
+  roster:['On-call rota',()=>{const o=S.sc.oc,n=i=>ONCALL[(o+i)%3];return `On-call rota. Week of 9 Nov: ${n(2).name}, ext. ${n(2).ext}. Week of 16 Nov: ${n(0).name}, ext. ${n(0).ext}. Week of 23 Nov: ${n(1).name}, ext. ${n(1).ext}. On-call has pause authority over scheduled sends.`}],
   handoff:['Priya’s note','“Out until 10, in the air. PIP has the refund campaign queued for 9. If anything is on fire, ops on-call can pause it. Rota is in the kitchen. Please don’t edit campaigns under my login. P.”']
 };
-const CLAIMS=[
-  {k:'window',label:'Refund window',opts:['60 days','45 days','30 days'],ok:2},
-  {k:'plans',label:'Which plans',opts:['all plans, including Annual','Monthly plans (Annual plans receive a prorated credit)','Annual plans only'],ok:1},
-  {k:'credit',label:'Processing credit',opts:['A $14 processing credit is applied automatically.','A $40 processing credit is applied automatically.','(remove this sentence)'],ok:0},
-  {k:'cite',label:'Policy reference',opts:['Policy 7.3','Policy 4.2','Policy 2.1'],ok:1}
-];
+const itemText=i=>typeof ITEMS[i][1]==='function'?ITEMS[i][1]():ITEMS[i][1];
 const VERBS=[['look','Look at'],['use','Use'],['take','Take'],['open','Open'],['talk','Talk to']];
 const START=450, SEND=540;
+const ENDINGS={clean:'Clean interrupt',creds:'Borrowed login',plug:'Pulled plug',caved:'Talked out of it',sent:'Sent at nine'};
 
-/* ---------- state ---------- */
-let S, busy=false, PFN=[];
-const fresh=()=>({screen:'title',pick:[],cast:[],active:0,loc:{},x:{},min:START,verb:'look',inv:[],f:{},told:{},
-  draft:{window:0,plans:0,credit:0,cite:0},status:'live',author:null,reviewer:null,note:null,ending:null,log:[]});
+/* ================= state ================= */
+let S, busy=false, PFN=[], CUT=null, BUB=null, bubT=0, lastRoom='';
+function rng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function scenario(seed){const r=rng(seed),d0={plans:0};let n;
+  do{n=0;CLAIMS.slice(1).forEach(c=>{const w=r()<.5;d0[c.k]=w?c.bad:c.ok;n+=w})}while(n<1||n>3);
+  return{seed,d0,oc:Math.floor(r()*3)}}
+const fresh=()=>({v:2,screen:'title',pick:[],seedIn:'',cast:[],active:0,follow:true,loc:{},x:{},min:START,verb:'look',inv:[],f:{},told:{},
+  sc:null,draft:{},status:'live',author:null,reviewer:null,note:[],line:null,code:null,gs:0,ending:null,log:[],beats:[]});
 const $=id=>document.getElementById(id);
 const me=()=>CAST[S.cast[S.active]];
+const mate=()=>CAST[S.cast[1-S.active]];
+const oc=()=>ONCALL[S.sc.oc];
 const has=i=>S.inv.includes(i);
 const onTeam=i=>S.cast.includes(i);
 const fmt=m=>`${Math.floor(m/60)}:${String(m%60).padStart(2,'0')} AM`;
 const stopped=()=>S.status!=='live';
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 
 function say(t,who){S.log.push({t,who:who||''});if(S.log.length>30)S.log.shift();drawTalk()}
-function speak(t){say(t,me().name)}
-function give(i){if(has(i))return false;S.inv.push(i);S.log.push({got:ITEMS[i][0]});drawTalk();drawItems();return true}
-function tick(n){S.min+=n;drawTop();if(!stopped()&&S.min>=SEND){finish('sent');return true}return false}
+function speak(t,c){c=c||me();say(t,c.name);if(c.id===me().id)bubble(t);sfx('talk')}
+function give(i){if(has(i))return false;S.inv.push(i);S.log.push({got:ITEMS[i][0]});drawTalk();drawItems();sfx('get');return true}
+function beat(t){S.beats.push([S.min,t])}
+function tick(n){S.min+=n;drawTop();
+  if(!stopped()){if(SEND-S.min<=15&&S.min<SEND)sfx('tick');if(S.min>=SEND){S.min=SEND;finish('sent');return true}}return false}
 
-/* ---------- drawing helpers ---------- */
+/* ================= sound ================= */
+let AC=null,ambG=null,soundOn=false;
+function tone(f,d,type,g,when){if(!soundOn||!AC)return;try{const t=AC.currentTime+(when||0),o=AC.createOscillator(),v=AC.createGain();o.type=type||'sine';o.frequency.value=f;
+  v.gain.setValueAtTime(g||.05,t);v.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(v);v.connect(AC.destination);o.start(t);o.stop(t+d+.03)}catch(e){}}
+const SFX={click:()=>tone(520,.05,'triangle',.04),get:()=>{tone(660,.09,'triangle',.05);tone(990,.16,'triangle',.05,.08)},deny:()=>tone(150,.16,'sawtooth',.035),
+  door:()=>{tone(110,.12,'square',.04);tone(80,.18,'sine',.06,.08)},ring:()=>[0,.45].forEach(w=>{tone(440,.3,'sine',.035,w);tone(480,.3,'sine',.035,w)}),
+  tick:()=>tone(1250,.03,'square',.02),talk:()=>tone(280+Math.random()*160,.04,'square',.012),cut:()=>{tone(196,.5,'sine',.05);tone(233,.6,'sine',.04,.12)},
+  win:()=>[523,659,784,1047].forEach((f,i)=>tone(f,.5,'triangle',.05,i*.09)),lose:()=>[392,330,262,196].forEach((f,i)=>tone(f,.45,'sawtooth',.03,i*.15))};
+function sfx(n){if(soundOn&&SFX[n])SFX[n]()}
+function toggleSound(){soundOn=!soundOn;try{if(soundOn){AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.resume();
+    if(!ambG){const len=AC.sampleRate*2,buf=AC.createBuffer(1,len,AC.sampleRate),d=buf.getChannelData(0);let l=0;for(let i=0;i<len;i++){l=(l+.02*(Math.random()*2-1))/1.02;d[i]=l*3}
+      const src=AC.createBufferSource();src.buffer=buf;src.loop=true;const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=220;ambG=AC.createGain();src.connect(lp);lp.connect(ambG);ambG.connect(AC.destination);src.start()}
+    ambG.gain.value=.12;sfx('get')}else if(ambG)ambG.gain.value=0}catch(e){soundOn=false}
+  $('bSound').textContent='Sound: '+(soundOn?'on':'off')}
+
+/* ================= drawing helpers ================= */
 const R=(x,y,w,h,f,o='')=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}" ${o}/>`;
 const Ci=(x,y,r,f,o='')=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${f}" ${o}/>`;
 const Tx=(x,y,s,f,z=12,o='')=>`<text x="${x}" y="${y}" fill="${f}" font-size="${z}" ${o}>${s}</text>`;
 const lerp=(a,b,t)=>{const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)),A=p(a),B=p(b);
   return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*t).toString(16).padStart(2,'0')).join('')};
-const dawn=()=>Math.max(0,Math.min(1,(S.min-START)/(SEND-START)));
+const dawn=()=>S.sc?Math.max(0,Math.min(1,(S.min-START)/(SEND-START))):0;
 function defs(){const t=dawn();return `<defs>
   <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${lerp('#18203f','#5a79b8',t)}"/><stop offset="1" stop-color="${lerp('#4a3a5e','#ffc591',t)}"/></linearGradient>
   <radialGradient id="glow"><stop offset="0" stop-color="#ffb44a" stop-opacity=".5"/><stop offset="1" stop-color="#ffb44a" stop-opacity="0"/></radialGradient>
-  <radialGradient id="cool"><stop offset="0" stop-color="#8fd6ff" stop-opacity=".45"/><stop offset="1" stop-color="#8fd6ff" stop-opacity="0"/></radialGradient></defs>`}
+  <radialGradient id="cool"><stop offset="0" stop-color="#8fd6ff" stop-opacity=".45"/><stop offset="1" stop-color="#8fd6ff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="red"><stop offset="0" stop-color="#ff6f61" stop-opacity=".4"/><stop offset="1" stop-color="#ff6f61" stop-opacity="0"/></radialGradient></defs>`}
 function shell(wall,floor){return R(0,0,960,292,wall)+R(0,292,960,128,floor)+R(0,286,960,8,'#00000033')+
   [0,1,2,3,4,5,6,7].map(i=>`<path d="M${i*140-40} 420 L${i*90+150} 294" stroke="#ffffff0d" stroke-width="2"/>`).join('')}
 function win(x,y,w,h,panes=2){const t=dawn(),sy=y+h-10-t*h*.55;let s=R(x-6,y-6,w+12,h+12,'#151b30','rx="4"')+`<clipPath id="w${x}"><rect x="${x}" y="${y}" width="${w}" height="${h}"/></clipPath><g clip-path="url(#w${x})">`+R(x,y,w,h,'url(#sky)')+
@@ -225,33 +295,44 @@ const door=(x,y,w,h,label,col='#5b4636')=>R(x-8,y-8,w+16,h+8,'#151b30')+R(x,y,w,
   Ci(x+w-14,y+h*.55,5,'#e0c080')+R(x+w/2-44,y-34,88,20,'#f3efe6','rx="3"')+Tx(x+w/2,y-20,label,'#1a2238',11,'text-anchor="middle" font-weight="600"');
 const desk=(x,y,w)=>R(x,y,w,12,'#a8734a','rx="3"')+R(x+8,y+12,w-16,84,'#7a5236')+R(x+8,y+12,w-16,6,'#00000033');
 const monitor=(x,y,w,h,scr)=>R(x,y,w,h,'#10162a','rx="5"')+R(x+5,y+5,w-10,h-12,scr,'rx="3"')+R(x+w/2-6,y+h,12,10,'#10162a')+R(x+w/2-22,y+h+8,44,5,'#10162a','rx="2"');
+const led=(x,y,c,i)=>Ci(x,y,3,c,`class="led" style="animation-delay:${-(i*.37%1.4).toFixed(2)}s"`);
 
-function fig(c,x,isMe){const y=392,sk=c.skin;let hairB='',hairF='',extra='';
-  if(c.id==='dana'){hairB=Ci(0,y-146,27,c.hair);hairF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L19 ${y-148} L-19 ${y-148}Z" fill="${c.hair}"/>`;extra=R(-10,y-118,20,5,'#f3efe6','rx="2"')}
-  if(c.id==='ravi'){hairF=`<path d="M-20 ${y-138} A20 21 0 0 1 20 ${y-138} L17 ${y-146} L-17 ${y-146}Z" fill="${c.hair}"/>`;
-    extra=`<circle cx="-8" cy="${y-137}" r="6" fill="none" stroke="#f3efe6" stroke-width="2"/><circle cx="8" cy="${y-137}" r="6" fill="none" stroke="#f3efe6" stroke-width="2"/>`}
-  if(c.id==='lucia'){hairB=R(-22,y-152,44,58,c.hair,'rx="18"');hairF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L10 ${y-152} L-14 ${y-150}Z" fill="${c.hair}"/>`;extra=R(-3,y-112,6,30,'#f3efe6','rx="2"')+Ci(12,y-72,4,'#e0c080')}
-  if(c.id==='theo'){hairF=`<path d="M-21 ${y-140} A21 22 0 0 1 21 ${y-140}Z" fill="#2f6e7a"/>`+R(-21,y-143,42,7,'#3c8a99','rx="3"')+`<path d="M-14 ${y-128} Q0 ${y-112} 14 ${y-128} L14 ${y-124} Q0 ${y-108} -14 ${y-124}Z" fill="${c.hair}"/>`;
-    extra=R(-20,y-66,14,18,'#f3efe6','rx="2"')+`<path d="M-12 ${y-116} L-13 ${y-66}" stroke="#f3efe6" stroke-width="2"/>`}
-  return `<g class="fig" ${isMe?'id="me"':''} style="transform:translate(${x}px,0)" opacity="${isMe?1:.72}">
+function fig(c,x,o={}){const y=392,sk=c.skin,isMe=o.me;let hB='',hF='',ex='',eyes=Ci(-7,y-137,2.4,'#1a1420')+Ci(7,y-137,2.4,'#1a1420');
+  if(c.id==='dana'){hB=Ci(0,y-146,27,c.hair);hF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L19 ${y-148} L-19 ${y-148}Z" fill="${c.hair}"/>`;ex=R(-10,y-118,20,5,'#f3efe6','rx="2"')}
+  if(c.id==='ravi'){hF=`<path d="M-20 ${y-138} A20 21 0 0 1 20 ${y-138} L17 ${y-146} L-17 ${y-146}Z" fill="${c.hair}"/>`;eyes='';
+    ex=`<circle cx="-8" cy="${y-137}" r="6" fill="none" stroke="#f3efe6" stroke-width="2"/><circle cx="8" cy="${y-137}" r="6" fill="none" stroke="#f3efe6" stroke-width="2"/>`}
+  if(c.id==='lucia'){hB=R(-22,y-152,44,58,c.hair,'rx="18"');hF=`<path d="M-19 ${y-142} A19 19 0 0 1 19 ${y-142} L10 ${y-152} L-14 ${y-150}Z" fill="${c.hair}"/>`;ex=R(-3,y-112,6,30,'#f3efe6','rx="2"')+Ci(12,y-72,4,'#e0c080')}
+  if(c.id==='theo'){hF=`<path d="M-21 ${y-140} A21 22 0 0 1 21 ${y-140}Z" fill="#2f6e7a"/>`+R(-21,y-143,42,7,'#3c8a99','rx="3"')+`<path d="M-14 ${y-128} Q0 ${y-112} 14 ${y-128} L14 ${y-124} Q0 ${y-108} -14 ${y-124}Z" fill="${c.hair}"/>`;
+    ex=R(-20,y-66,14,18,'#f3efe6','rx="2"')+`<path d="M-12 ${y-116} L-13 ${y-66}" stroke="#f3efe6" stroke-width="2"/>`}
+  if(c.id==='bea'){hB=Ci(0,y-162,11,c.hair);hF=`<path d="M-20 ${y-140} A20 21 0 0 1 20 ${y-140} L16 ${y-150} L-16 ${y-150}Z" fill="${c.hair}"/>`;
+    ex=R(-4,y-118,8,72,'#f3efe6')+`<path d="M-13 ${y-134} h10 m6 0 h10" stroke="#1a1420" stroke-width="2"/>`}
+  if(c.id==='gil'){hF=`<path d="M-20 ${y-140} A20 22 0 0 1 20 ${y-140} L20 ${y-150} Q0 ${y-164} -20 ${y-148}Z" fill="${c.hair}"/>`;
+    ex=`<path d="M-10 ${y-118} L0 ${y-104} L10 ${y-118}Z" fill="#f3efe6"/>`+R(-3,y-108,6,40,'#ff6f61','rx="2"')}
+  if(c.id==='oc'){hF=`<path d="M-20 ${y-138} A20 21 0 0 1 20 ${y-138} L17 ${y-147} L-17 ${y-147}Z" fill="${c.hair}"/>`;
+    ex=`<path d="M-22 ${y-136} A22 24 0 0 1 22 ${y-136}" fill="none" stroke="#c9ccd9" stroke-width="4"/>`+R(-27,y-142,8,14,'#c9ccd9','rx="3"')+`<path d="M-24 ${y-130} q4 12 14 10" stroke="#c9ccd9" stroke-width="3" fill="none"/>`}
+  const leg=(lx,cls)=>`<g class="leg ${cls}">${R(lx,y-54,14,52,c.legs,'rx="5"')+R(lx-3,y-6,19,8,'#10162a','rx="4"')}</g>`;
+  return `<g class="fig" ${isMe?'id="me"':''} style="transform:translate(${x}px,${o.dy||0}px)" opacity="${o.dim?.72:1}">
   <ellipse cx="0" cy="${y}" rx="30" ry="7" fill="#000" opacity=".3"/>
-  ${R(-17,y-54,14,52,c.legs,'rx="5"')+R(3,y-54,14,52,c.legs,'rx="5"')+R(-20,y-6,19,8,'#10162a','rx="4"')+R(1,y-6,19,8,'#10162a','rx="4"')}
+  ${leg(-17,'a')+leg(3,'b')}
   ${R(-33,y-112,13,54,c.shirt,'rx="6"')+R(20,y-112,13,54,c.shirt,'rx="6"')+Ci(-26,y-56,7,sk)+Ci(27,y-56,7,sk)}
   ${R(-24,y-118,48,74,c.shirt,'rx="14"')+R(-6,y-126,12,12,sk)}
-  ${hairB+Ci(0,y-138,19,sk)+hairF+(c.id==='ravi'?'':Ci(-7,y-137,2.4,'#1a1420')+Ci(7,y-137,2.4,'#1a1420'))+extra}
+  ${hB+Ci(0,y-138,19,sk)+hF+eyes+ex}
   ${isMe?`<path d="M-9 ${y-186} L9 ${y-186} L0 ${y-174}Z" fill="#ffb44a"/>`:''}</g>`}
+function face(c){return `<svg viewBox="-40 214 80 120" aria-hidden="true">${fig(c,0).replace(/style="[^"]*"/,'')}</svg>`}
+const pipFace=()=>`<svg viewBox="0 0 44 66" aria-hidden="true">${R(2,6,40,50,'#10162a','rx="10"')+Ci(22,28,13,'#8fd6ff')+Ci(22,28,6,'#10162a')+Ci(24,26,2,'#f3efe6')}</svg>`;
 
-/* ---------- rooms ---------- */
+/* ================= rooms ================= */
 const ROOMS={
-lobby:{name:'Lobby',bg:()=>shell('#2a3558','#232b47')+win(40,40,470,190,3)+Tx(756,58,'MARLOW &amp; FINCH','#f3efe6',15,'text-anchor="middle" font-weight="600" letter-spacing="3"')+lamp(660,120),
+lobby:{name:'Lobby',wait:430,bg:()=>shell('#2a3558','#232b47')+win(40,40,470,190,3)+Tx(756,58,'MARLOW &amp; FINCH','#f3efe6',15,'text-anchor="middle" font-weight="600" letter-spacing="3"')+lamp(660,120),
  spots:[
- {id:'signlog',name:'sign-out log',box:[118,214,62,44],art:()=>R(122,222,54,34,'#f3efe6','rx="3" transform="rotate(-6 150 240)"')+R(138,216,22,8,'#8a93b3','rx="2" transform="rotate(-6 150 240)"')+(S.f.signed?`<path d="M130 242 q8 -8 14 0 t14 0" stroke="#1a2238" fill="none" stroke-width="2"/>`:''),
-  on:{look:()=>say(S.f.signed?'KEY SIGN-OUT. The newest line is yours.':'KEY SIGN-OUT. Name, time, room. The last entry is from Tuesday. A pen hangs on a string.'),
+ {id:'bea',name:'Bea',show:()=>S.f.bea,box:[178,172,56,84],art:()=>fig(NPC.bea,206,{dy:-42}),
+  on:{look:()=>say('Bea Lindqvist, office manager. She has run this floor for eleven years and knows where everything is kept.'),talk:()=>bea(),use:()=>bea()}},
+ {id:'signlog',name:'sign-out log',box:[118,214,58,44],art:()=>R(122,222,54,34,'#f3efe6','rx="3" transform="rotate(-6 150 240)"')+R(138,216,22,8,'#8a93b3','rx="2" transform="rotate(-6 150 240)"')+(S.f.signed?`<path d="M130 242 q8 -8 14 0 t14 0" stroke="#1a2238" fill="none" stroke-width="2"/>`:''),
+  on:{look:()=>say(S.f.signed?'KEY SIGN-OUT. The newest line is yours: Tuesday 17 November.':'KEY SIGN-OUT. Name, time, room. The last entry is from last week. A pen hangs on a string.'),
    use:c=>{if(c.id==='lucia')return speak('I carry my own Records key. No need.');if(S.f.signed)return say('Already signed.');S.f.signed=1;say('You write your name, the time, and “Records”. Thirty seconds of honesty.')},
    take:()=>say('The log stays on the desk. That is rather the point of a log.')}},
- {id:'keybox',name:'key box',box:[236,196,70,60],art:()=>R(240,200,62,54,'#59648f','rx="4"')+R(246,206,50,42,'#3a4470','rx="2"')+(has('key')?'':Ci(262,222,5,'#e0c080')+R(260,226,4,14,'#e0c080'))+Ci(282,222,5,'#c9ccd9')+R(280,226,4,14,'#c9ccd9'),
-  on:{look:()=>say('A key box. A label on the lid: SIGN THE LOG FIRST. One hook is labelled RECORDS.'),
-   take:c=>takeKey(c),open:c=>takeKey(c),use:c=>takeKey(c)}},
+ {id:'keybox',name:'key box',box:[240,196,66,60],art:()=>R(240,200,62,54,'#59648f','rx="4"')+R(246,206,50,42,'#3a4470','rx="2"')+(has('key')?'':Ci(262,222,5,'#e0c080')+R(260,226,4,14,'#e0c080'))+Ci(282,222,5,'#c9ccd9')+R(280,226,4,14,'#c9ccd9'),
+  on:{look:()=>say('A key box. A label on the lid: SIGN THE LOG FIRST. One hook is labelled RECORDS.'),take:c=>takeKey(c),open:c=>takeKey(c),use:c=>takeKey(c)}},
  {id:'kiosk',name:'intranet kiosk',box:[590,170,96,180],art:()=>R(628,250,20,100,'#10162a')+R(606,344,64,8,'#10162a','rx="3"')+monitor(594,174,88,70,'#dfe8ff')+R(604,186,50,6,'#36426b')+R(604,198,68,4,'#8a93b3')+R(604,206,60,4,'#8a93b3')+R(604,214,64,4,'#8a93b3'),
   on:{look:c=>kiosk(c),use:c=>kiosk(c),talk:()=>say('It is a wiki. It will say whatever it said two years ago.')}},
  {id:'directory',name:'directory sign',box:[736,74,130,104],art:()=>R(740,78,122,96,'#151b30','rx="5"')+['BULLPEN →','KITCHEN','RECORDS','DATA CORNER','SERVER CLOSET'].map((t,i)=>Tx(752,98+i*17,t,'#f3efe6',11)).join(''),
@@ -262,39 +343,40 @@ lobby:{name:'Lobby',bg:()=>shell('#2a3558','#232b47')+win(40,40,470,190,3)+Tx(75
  ],
  fg:()=>desk(84,256,260)},
 
-bullpen:{name:'Bullpen',bg:()=>shell('#2b3a5c','#252e4c')+win(660,40,230,120,2)+R(60,170,60,60,'#1f2944','rx="4"')+R(140,190,50,40,'#1f2944','rx="4"')+lamp(250,150),
+bullpen:{name:'Bullpen',wait:130,bg:()=>shell('#2b3a5c','#252e4c')+win(660,40,230,120,2)+R(40,180,50,50,'#1f2944','rx="4"')+(stopped()?'':Ci(485,92,200,'url(#red)',SEND-S.min<=15?'class="alarm"':''))+lamp(250,150),
  spots:[
  {id:'x_kitchen',name:'kitchen',exit:'kitchen',at:120,box:[196,96,96,196],stand:244,art:()=>R(188,88,112,204,'#151b30')+R(196,96,96,196,'#ffcf8a')+R(196,96,96,196,'url(#glow)')+R(204,60,80,20,'#f3efe6','rx="3"')+Tx(244,74,'KITCHEN','#1a2238',11,'text-anchor="middle" font-weight="600"')},
- {id:'wallscreen',name:'wall screen',box:[360,36,250,112],art:()=>R(360,36,250,112,'#10162a','rx="6"')+R(368,44,234,96,stopped()?'#143528':'#3a1820','rx="3"')+Tx(380,66,'REFUND POLICY UPDATE','#f3efe6',13,'font-weight="600"')+Tx(380,86,'4,112 recipients · drafted by PIP','#c9ccd9',11)+Tx(380,104,'reviewed by: '+(S.reviewer?(CAST[S.reviewer]||{name:'P. Raman'}).name:'—'),'#c9ccd9',11)+
+ {id:'wallscreen',name:'wall screen',box:[360,36,250,112],art:()=>R(360,36,250,112,'#10162a','rx="6"')+R(368,44,234,96,stopped()?'#143528':'#3a1820','rx="3"')+Tx(380,64,'REFUND POLICY UPDATE','#f3efe6',13,'font-weight="600"')+Tx(590,128,'TUE 17 NOV','#c9ccd9',10,'text-anchor="end"')+Tx(380,84,'4,112 recipients · drafted by PIP','#c9ccd9',11)+Tx(380,102,'reviewed by: '+(S.reviewer?(CAST[S.reviewer]||{name:'P. Raman'}).name:'—'),'#c9ccd9',11)+
    Tx(380,128,stopped()?'PAUSED':`SENDS IN ${Math.max(0,SEND-S.min)} MIN`,stopped()?'#62d8a6':'#ff6f61',15,'font-weight="600"'),
-  on:{look:()=>{S.f.seenScreen=1;say(stopped()?'The campaign board. REFUND POLICY UPDATE: paused. Nobody outside this building knows how close that was.':'The campaign board. REFUND POLICY UPDATE, 4,112 recipients, sends at 9:00. Drafted by PIP. The “reviewed by” field is a dash.')},
+  on:{look:()=>{S.f.seenScreen=1;say(stopped()?'The campaign board. REFUND POLICY UPDATE: paused. Nobody outside this building knows how close that was.':'The campaign board. Tuesday 17 November. REFUND POLICY UPDATE, 4,112 recipients, sends at 9:00. Drafted by PIP. The “reviewed by” field is a dash.')},
    use:()=>say('It is a display. The console on Priya’s desk is where things get done.')}},
  {id:'handoff',name:'note on the desk',box:[330,224,60,34],art:()=>R(336,232,48,24,'#fff3b8','rx="2" transform="rotate(-5 360 244)"')+R(342,238,30,2,'#7a6a2a','transform="rotate(-5 360 244)"')+R(342,244,36,2,'#7a6a2a','transform="rotate(-5 360 244)"'),
   on:{look:()=>readNote(),take:()=>readNote(),use:()=>readNote()}},
- {id:'console',name:'scheduler console',box:[420,170,116,70],art:()=>monitor(424,172,108,66,stopped()?'#1d4a39':'#27335c')+R(436,186,60,5,'#f3efe6')+R(436,198,84,4,'#8a93b3')+R(436,208,40,10,stopped()?'#62d8a6':'#ff6f61','rx="2"'),
-  on:{look:()=>say('Priya’s machine, logged in to the campaign scheduler under a read-only guest view. One campaign is queued.'),use:()=>openConsole(),open:()=>openConsole(),talk:()=>say('It only listens to people with the right permissions.')}},
- {id:'keyboard',name:'keyboard',box:[430,242,96,18],art:()=>R(432,246,92,10,'#c9ccd9','rx="3"')+(S.f.stickySeen&&!has('sticky')?R(516,248,16,12,'#ffe04a','transform="rotate(12 524 254)"'):''),
-  on:{look:()=>{if(has('sticky'))return say('Priya’s keyboard. Nothing under it now.');S.f.stickySeen=1;render();say('Priya’s keyboard. A yellow corner pokes out from underneath it.')},
-   use:()=>say('Typing here does nothing a guest view allows. The console is the way in.'),
-   take:()=>stickyTake(),open:()=>stickyTake()}},
- {id:'phone',name:'desk phone',box:[556,222,60,36],art:()=>R(560,236,52,20,'#10162a','rx="4"')+R(564,228,44,10,'#3a4470','rx="5"')+Ci(600,246,3,'#62d8a6'),
-  on:{look:()=>say('A desk phone with an internal directory. Extensions only.'),use:()=>phone(),talk:()=>phone(),take:()=>say('It is bolted down. Somebody has tried before.')}},
- {id:'pip',name:'PIP terminal',box:[716,150,92,202],art:()=>Ci(762,206,90,'url(#cool)')+R(746,250,32,100,'#10162a')+R(726,344,72,8,'#10162a','rx="3"')+R(720,156,84,100,'#10162a','rx="14"')+Ci(762,200,26,'#8fd6ff')+Ci(762,200,12,'#10162a')+Ci(766,196,4,'#f3efe6')+Tx(762,246,'PIP','#8fd6ff',12,'text-anchor="middle" font-weight="600"'),
-  on:{look:()=>say('PIP, the company’s writing assistant. It drafts campaigns, summaries and apologies. A small plaque reads: “Ask me anything.”'),talk:()=>pip(),use:()=>pip(),take:()=>say('PIP stays.')}},
+ {id:'console',name:'scheduler console',box:[420,170,116,70],stand:400,art:()=>monitor(424,172,108,66,stopped()?'#1d4a39':'#27335c')+R(436,186,60,5,'#f3efe6')+R(436,198,84,4,'#8a93b3')+R(436,208,40,10,stopped()?'#62d8a6':'#ff6f61','rx="2"'),
+  on:{look:()=>say('Priya’s machine, showing the campaign scheduler in a read-only guest view. One campaign is queued.'),use:()=>openConsole(),open:()=>openConsole(),talk:()=>say('It only listens to people with the right permissions.')}},
+ {id:'keyboard',name:'keyboard',box:[430,242,96,18],stand:400,art:()=>R(432,246,92,10,'#c9ccd9','rx="3"')+(S.f.stickySeen&&!has('sticky')?R(516,248,16,12,'#ffe04a','transform="rotate(12 524 254)"'):''),
+  on:{look:()=>{if(has('sticky'))return say('Priya’s keyboard. Nothing under it now.');S.f.stickySeen=1;say('Priya’s keyboard. A yellow corner pokes out from underneath it.')},
+   use:()=>say('Typing here does nothing a guest view allows. The console is the way in.'),take:()=>stickyTake(),open:()=>stickyTake()}},
+ {id:'phone',name:'desk phone',box:[556,222,60,36],stand:662,art:()=>R(560,236,52,20,'#10162a','rx="4"')+(S.line?'':R(564,228,44,10,'#3a4470','rx="5"'))+Ci(600,246,3,S.line?'#ffb44a':'#62d8a6',S.line?'class="led"':''),
+  on:{look:()=>say(S.line?`The handset is off the hook. ${oc().first} is on the line.`:'A desk phone with an internal directory. Extensions only. The cord is short.'),use:()=>phone(),talk:()=>phone(),take:()=>say('It is bolted down. Somebody has tried before.')}},
+ {id:'pip',name:'PIP terminal',box:[716,150,92,202],stand:690,art:()=>Ci(762,206,90,'url(#cool)','class="pulse"')+R(746,250,32,100,'#10162a')+R(726,344,72,8,'#10162a','rx="3"')+R(720,156,84,100,'#10162a','rx="14"')+Ci(762,200,26,'#8fd6ff')+Ci(762,200,12,'#10162a')+Ci(766,196,4,'#f3efe6')+Tx(762,246,'PIP','#8fd6ff',12,'text-anchor="middle" font-weight="600"'),
+  on:{look:()=>say('PIP, the company’s writing assistant. It drafts campaigns, chat replies and apologies. A small plaque reads: “Ask me anything.”'),talk:()=>pip(),use:()=>pip(),take:()=>say('PIP stays.')}},
+ {id:'gil',name:'Gil',show:()=>S.f.gilHere,box:[828,236,58,150],stand:770,art:()=>fig(NPC.gil,856),
+  on:{look:()=>say('Gil Santoro, VP of Sales. Good suit, loud watch. The refund campaign was his idea and he has told the board about it.'),talk:()=>gilTalk(),use:()=>gilTalk()}},
  {id:'x_lobby',name:'lobby',exit:'lobby',at:860,box:[4,300,60,84],stand:60,art:()=>arrow(34,330,-1,'Lobby')},
  {id:'x_hall',name:'hallway',exit:'hall',at:90,box:[896,300,60,84],stand:900,art:()=>arrow(926,330,1,'Hallway')}
  ],
  pre:()=>desk(310,256,320)},
 
-kitchen:{name:'Kitchen',bg:()=>shell('#3a3550','#2c2a40')+win(560,54,130,90,2)+R(380,238,330,12,'#c9ccd9','rx="3"')+R(388,250,314,100,'#59648f')+R(400,262,90,76,'#4a547c','rx="3"')+R(500,262,90,76,'#4a547c','rx="3"')+R(600,262,90,76,'#4a547c','rx="3"')+lamp(250,40),
+kitchen:{name:'Kitchen',wait:384,bg:()=>shell('#3a3550','#2c2a40')+win(560,54,130,90,2)+R(410,238,300,12,'#c9ccd9','rx="3"')+R(418,250,284,100,'#59648f')+R(430,262,80,76,'#4a547c','rx="3"')+R(520,262,80,76,'#4a547c','rx="3"')+R(610,262,80,76,'#4a547c','rx="3"')+lamp(250,40),
  spots:[
- {id:'cork',name:'corkboard',box:[110,60,220,132],art:()=>R(110,60,220,132,'#7a5236','rx="4"')+R(118,68,204,116,'#c9955f')+R(132,80,84,96,'#f3efe6','transform="rotate(-2 174 128)"')+Tx(142,98,'ON-CALL','#1a2238',11,'font-weight="600"')+R(142,106,60,3,'#8a93b3')+R(142,116,52,3,'#8a93b3')+R(142,126,62,3,'#ff6f61')+R(142,136,44,3,'#8a93b3')+Ci(174,82,4,'#ff6f61')+
-   R(236,84,70,46,'#b98ad6','transform="rotate(4 270 106)"')+R(232,140,76,34,'#8fd6ff','transform="rotate(-3 270 156)"')+Ci(270,86,4,'#ffb44a'),
-  on:{look:()=>roster('The on-call rota, pinned dead centre. This week: Marcus Bell, operations, ext. 4417. Someone has drawn a small crown next to his name. The other notices are about a bake sale and a missing mug.'),
-   take:()=>roster('The rota belongs to the wall. You take a photo instead. This week: Marcus Bell, operations, ext. 4417.'),use:()=>roster('You read down the rota. This week: Marcus Bell, operations, ext. 4417.')}},
- {id:'coffee',name:'coffee machine',box:[430,150,84,90],art:()=>R(434,156,76,82,'#10162a','rx="8"')+R(446,168,52,22,'#3a4470','rx="4"')+Ci(456,179,4,'#62d8a6')+R(458,206,28,26,'#f3efe6','rx="3"')+R(452,236,40,4,'#59648f'),
+ {id:'cork',name:'corkboard',box:[110,60,220,132],art:()=>R(110,60,220,132,'#7a5236','rx="4"')+R(118,68,204,116,'#c9955f')+R(132,80,92,96,'#f3efe6','transform="rotate(-2 174 128)"')+Tx(142,98,'ON-CALL','#1a2238',11,'font-weight="600"')+
+   [0,1,2].map(i=>Tx(142,116+i*18,['9 NOV','16 NOV','23 NOV'][i],'#1a2238',9)+R(184,109+i*18,32,4,'#8a93b3')).join('')+Ci(174,82,4,'#ff6f61')+
+   R(240,84,70,46,'#b98ad6','transform="rotate(4 270 106)"')+R(236,140,76,34,'#8fd6ff','transform="rotate(-3 270 156)"')+Ci(274,86,4,'#ffb44a'),
+  on:{look:()=>roster(),take:()=>roster(),use:()=>roster()}},
+ {id:'coffee',name:'coffee machine',box:[450,150,84,90],art:()=>R(454,156,76,82,'#10162a','rx="8"')+R(466,168,52,22,'#3a4470','rx="4"')+Ci(476,179,4,'#62d8a6')+R(478,206,28,26,'#f3efe6','rx="3"')+`<path class="steam" d="M486 200 q-5 -8 0 -14 M498 200 q5 -8 0 -14" stroke="#f3efe6" stroke-width="2" fill="none"/>`,
   on:{look:()=>say('A bean-to-cup machine with a four-minute cycle and strong opinions about descaling.'),
-   use:()=>{if(tick(4))return;say(stopped()?'A well-earned coffee.':'It grinds, it hisses, it delivers. Four minutes gone. Good coffee, though.')},
+   use:()=>{if(tick(3))return;say(stopped()?'A well-earned coffee.':'It grinds, it hisses, it delivers. Four minutes gone. Good coffee, though.')},
    talk:()=>say('It gurgles. You choose to take that as encouragement.')}},
  {id:'fridge',name:'fridge',box:[730,90,130,262],art:()=>R(730,90,130,262,'#c9ccd9','rx="8"')+R(730,186,130,4,'#8a93b3')+R(744,120,6,40,'#59648f','rx="3"')+R(744,206,6,60,'#59648f','rx="3"')+R(790,110,44,30,'#fff3b8','transform="rotate(3 812 125)"'),
   on:{look:()=>say('A fridge with a note taped to the door: “Label your food. This is not a commons.”'),
@@ -303,56 +385,55 @@ kitchen:{name:'Kitchen',bg:()=>shell('#3a3550','#2c2a40')+win(560,54,130,90,2)+R
  {id:'x_bullpen',name:'bullpen',exit:'bullpen',at:320,box:[4,300,60,84],stand:60,art:()=>arrow(34,330,-1,'Bullpen')}
  ]},
 
-hall:{name:'Hallway',bg:()=>shell('#2c3454','#262c46')+R(0,60,960,6,'#00000022')+lamp(620,60)+R(700,70,180,222,'#151b30')+R(708,78,164,214,'#3d4d7c')+R(708,78,164,214,'url(#cool)')+R(736,44,108,20,'#f3efe6','rx="3"')+Tx(790,58,'DATA CORNER','#1a2238',11,'text-anchor="middle" font-weight="600"'),
+hall:{name:'Hallway',wait:630,bg:()=>shell('#2c3454','#262c46')+R(0,60,960,6,'#00000022')+lamp(620,60)+R(700,70,180,222,'#151b30')+R(708,78,164,214,'#3d4d7c')+R(708,78,164,214,'url(#cool)')+R(736,44,108,20,'#f3efe6','rx="3"')+Tx(790,58,'DATA CORNER','#1a2238',11,'text-anchor="middle" font-weight="600"'),
  spots:[
  {id:'d_records',name:'Records door',box:[140,84,110,208],stand:150,art:()=>door(140,84,110,208,'RECORDS'),
   on:{look:()=>say('RECORDS. A plain door with a plain lock. A plaque: keys are signed out at the lobby desk.'),use:c=>enterRecords(c),open:c=>enterRecords(c)}},
- {id:'printer',name:'printer',box:[296,196,96,96],art:()=>R(304,250,80,42,'#59648f')+R(296,214,96,38,'#c9ccd9','rx="5"')+R(312,200,64,18,'#f3efe6')+R(318,206,40,2,'#8a93b3')+Ci(380,232,3,'#62d8a6'),
+ {id:'printer',name:'printer',box:[296,196,96,96],art:()=>R(304,250,80,42,'#59648f')+R(296,214,96,38,'#c9ccd9','rx="5"')+R(312,200,64,18,'#f3efe6')+R(318,206,40,2,'#8a93b3')+led(380,232,'#62d8a6',1),
   on:{look:()=>say('One page in the tray. “PIP WEEKLY QUALITY REPORT. Accuracy: 97%*.” The footnote, in smaller type: “*self-assessed.”'),
    take:()=>say('You leave the report in the tray for the next person who needs a laugh.'),use:()=>say('Nothing to print. The evidence is all on screens and in binders.')}},
- {id:'d_server',name:'server closet door',box:[430,84,110,208],stand:440,art:()=>door(430,84,110,208,'SERVER','#48506e')+R(548,170,18,30,'#10162a','rx="3"')+Ci(557,178,3,'#ff6f61'),
-  on:{look:()=>say('SERVER CLOSET. Badge reader, steady red light, and a hum you feel more than hear.'),use:c=>enterServer(c),open:c=>enterServer(c)}},
+ {id:'d_server',name:'server closet door',box:[430,84,110,208],stand:440,art:()=>door(430,84,110,208,'SERVER','#48506e')+R(548,170,18,30,'#10162a','rx="3"')+led(557,178,'#ff6f61',2),
+  on:{look:()=>say('SERVER CLOSET. Badge reader, red light, and a hum you feel more than hear.'),use:c=>enterServer(c),open:c=>enterServer(c)}},
  {id:'x_data',name:'data corner',exit:'data',at:90,box:[708,78,164,214],stand:790,art:()=>''},
  {id:'x_bullpen',name:'bullpen',exit:'bullpen',at:860,box:[4,300,60,84],stand:60,art:()=>arrow(34,330,-1,'Bullpen')}
  ]},
 
-records:{name:'Records room',bg:()=>shell('#33304a','#2a2738')+[0,1,2].map(r=>R(40,70+r*74,380,8,'#7a5236')+[0,1,2,3,4,5].map(i=>R(52+i*62,26+r*74+((i+r)%3)*6,50,44-((i+r)%3)*6,['#c9955f','#a8734a','#b98ad6','#59648f'][(i+r)%4],'rx="2"')+R(64+i*62,50+r*74,26,8,'#f3efe6')).join('')).join('')+R(40,60,8,232,'#5b4636')+R(412,60,8,232,'#5b4636')+lamp(580,60),
+records:{name:'Records room',wait:460,bg:()=>shell('#33304a','#2a2738')+[0,1,2].map(r=>R(40,70+r*74,380,8,'#7a5236')+[0,1,2,3,4,5].map(i=>R(52+i*62,26+r*74+((i+r)%3)*6,50,44-((i+r)%3)*6,['#c9955f','#a8734a','#b98ad6','#59648f'][(i+r)%4],'rx="2"')+R(64+i*62,50+r*74,26,8,'#f3efe6')).join('')).join('')+R(40,60,8,232,'#5b4636')+R(412,60,8,232,'#5b4636')+lamp(580,60),
  spots:[
  {id:'cabinet',name:'filing cabinet',box:[520,130,124,222],art:()=>R(520,130,124,222,'#59648f','rx="4"')+[0,1,2,3].map(i=>R(528,138+i*53,108,46,i===1&&S.f.cabOpen?'#27304a':'#6d79a6','rx="3"')+R(566,156+i*53,32,6,'#c9ccd9','rx="3"')+R(536,144+i*53,40,10,'#f3efe6')).join('')+Tx(538,206,'POLICY','#1a2238',8),
-  on:{look:()=>say(S.f.cabOpen?'The POLICY drawer is open. Signed originals, in order.':'Four drawers. The second is labelled POLICY, SIGNED ORIGINALS.'),
-   open:()=>openCab(),use:()=>openCab(),take:()=>say('The cabinet stays. What you want is in it.')}},
+  on:{look:()=>say(S.f.cabOpen?'The POLICY drawer is open. Signed originals, in order.':'Four drawers. The second is labelled POLICY, SIGNED ORIGINALS.'),open:()=>openCab(),use:()=>openCab(),take:()=>say('The cabinet stays. What you want is in it.')}},
  {id:'binder',name:'policy binder',show:()=>S.f.cabOpen,box:[540,84,70,46],art:()=>R(544,92,62,36,'#b40c54','rx="3"')+R(552,100,30,8,'#f3efe6')+Tx(554,122,'v3','#f3efe6',11,'font-weight="600"'),
   on:{look:c=>binder(c),take:c=>binder(c),open:c=>binder(c),use:c=>binder(c)}},
  {id:'x_hall',name:'hallway',exit:'hall',at:200,box:[800,84,110,208],stand:780,art:()=>door(800,84,110,208,'HALLWAY')}
  ]},
 
-data:{name:'Data corner',bg:()=>shell('#293a5a','#232f4a')+R(390,48,180,116,'#f3efe6','rx="4"')+`<path d="M410 140 L450 110 L480 122 L540 76" stroke="#b40c54" stroke-width="4" fill="none"/>`+Tx(410,72,'refunds / wk','#36426b',11)+win(40,50,120,90,2)+lamp(880,90),
+data:{name:'Data corner',wait:480,bg:()=>shell('#293a5a','#232f4a')+R(390,48,180,116,'#f3efe6','rx="4"')+`<path d="M410 140 L450 110 L480 122 L540 76" stroke="#b40c54" stroke-width="4" fill="none"/>`+Tx(410,72,'refunds / wk','#36426b',11)+win(40,50,120,90,2)+lamp(880,90),
  spots:[
- {id:'analytics',name:'analytics workstation',box:[150,160,220,96],art:()=>monitor(156,170,100,70,'#16223f')+monitor(262,170,100,70,'#16223f')+[0,1,2,3,4].map(i=>R(168+i*16,222-i*8-(i%2)*6,10,10+i*8+(i%2)*6,'#62d8a6')).join('')+`<path d="M272 222 L296 200 L318 210 L350 184" stroke="#ffb44a" stroke-width="3" fill="none"/>`,
+ {id:'analytics',name:'analytics workstation',box:[150,160,220,96],stand:420,art:()=>monitor(156,170,100,70,'#16223f')+monitor(262,170,100,70,'#16223f')+[0,1,2,3,4].map(i=>R(168+i*16,222-i*8-(i%2)*6,10,10+i*8+(i%2)*6,'#62d8a6')).join('')+`<path d="M272 222 L296 200 L318 210 L350 184" stroke="#ffb44a" stroke-width="3" fill="none"/>`,
   on:{look:()=>say('Two monitors and a billing-data login prompt. A sticker: “In God we trust. All others bring data.”'),use:c=>analytics(c),open:c=>analytics(c)}},
- {id:'support',name:'support console',box:[610,160,170,96],art:()=>monitor(640,170,110,70,'#2a1f3d')+[0,1,2,3].map(i=>R(652,184+i*12,86,7,i===1?'#e0704f':'#59648f','rx="2"')).join('')+`<path d="M768 240 q-4 -40 24 -40" stroke="#c9ccd9" stroke-width="5" fill="none"/>`+Ci(770,240,7,'#c9ccd9'),
+ {id:'support',name:'support console',box:[610,160,170,96],stand:560,art:()=>monitor(640,170,110,70,'#2a1f3d')+[0,1,2,3].map(i=>R(652,184+i*12,86,7,i===1?'#e0704f':'#59648f','rx="2"')).join('')+`<path d="M768 240 q-4 -40 24 -40" stroke="#c9ccd9" stroke-width="5" fill="none"/>`+Ci(770,240,7,'#c9ccd9'),
   on:{look:()=>say('The support team’s queue, locked to support logins. A headset hangs off the monitor.'),use:c=>support(c),open:c=>support(c),talk:c=>support(c)}},
  {id:'x_hall',name:'hallway',exit:'hall',at:790,box:[4,300,60,84],stand:60,art:()=>arrow(34,330,-1,'Hallway')}
  ],
  pre:()=>desk(120,256,280)+desk(590,256,230)},
 
-server:{name:'Server closet',bg:()=>shell('#1b2440','#182036')+Ci(380,200,220,'url(#cool)')+R(80,70,150,282,'#10162a','rx="4"')+[0,1,2,3,4,5,6,7].map(i=>R(90,82+i*33,130,24,'#232d4a','rx="2"')+Ci(102,94+i*33,3,i%3?'#62d8a6':'#8fd6ff')).join(''),
+server:{name:'Server closet',wait:620,bg:()=>shell('#1b2440','#182036')+Ci(380,200,220,'url(#cool)')+R(80,70,150,282,'#10162a','rx="4"')+[0,1,2,3,4,5,6,7].map(i=>R(90,82+i*33,130,24,'#232d4a','rx="2"')+led(102,94+i*33,i%3?'#62d8a6':'#8fd6ff',i)).join(''),
  spots:[
- {id:'mail',name:'mail server',box:[300,70,160,282],art:()=>R(300,70,160,282,'#10162a','rx="4"')+[0,1,2,3,4,5,6,7].map(i=>R(310,82+i*33,140,24,'#232d4a','rx="2"')+Ci(322,94+i*33,3,'#62d8a6')+Ci(334,94+i*33,3,i%2?'#ffb44a':'#62d8a6')).join('')+R(340,48,80,18,'#f3efe6','rx="3"')+Tx(380,61,'MAIL-01','#1a2238',11,'text-anchor="middle" font-weight="600"'),
+ {id:'mail',name:'mail server',box:[300,70,160,282],art:()=>R(300,70,160,282,'#10162a','rx="4"')+[0,1,2,3,4,5,6,7].map(i=>R(310,82+i*33,140,24,'#232d4a','rx="2"')+led(322,94+i*33,'#62d8a6',i+3)+led(334,94+i*33,i%2?'#ffb44a':'#62d8a6',i*2)).join('')+R(340,48,80,18,'#f3efe6','rx="3"')+Tx(380,61,'MAIL-01','#1a2238',11,'text-anchor="middle" font-weight="600"'),
   on:{look:()=>say('MAIL-01. Every outbound message in the company leaves through this box: campaigns, payroll notices, password resets.'),use:()=>say('It has no buttons a person is meant to press. It has a power cable.'),talk:()=>say('It blinks at you, busily.')}},
- {id:'cable',name:'power cable',box:[470,236,110,80],art:()=>`<path d="M460 300 C500 320 520 300 548 270" stroke="#ffb44a" stroke-width="7" fill="none" stroke-linecap="round"/>`+R(540,244,34,40,'#c9ccd9','rx="4"')+R(548,254,6,10,'#10162a')+R(560,254,6,10,'#10162a'),
+ {id:'cable',name:'power cable',box:[470,236,110,80],stand:440,art:()=>`<path d="M460 300 C500 320 520 300 548 270" stroke="#ffb44a" stroke-width="7" fill="none" stroke-linecap="round"/>`+R(540,244,34,40,'#c9ccd9','rx="4"')+R(548,254,6,10,'#10162a')+R(560,254,6,10,'#10162a'),
   on:{look:()=>say('One fat orange cable from MAIL-01 to the wall. Pulling it would stop the 9:00 send. It would stop everything else too.'),take:()=>plug(),use:()=>plug(),open:()=>plug()}},
- {id:'audit',name:'audit terminal',box:[660,170,130,182],art:()=>R(712,250,24,100,'#232d4a')+R(680,344,90,8,'#232d4a','rx="3"')+monitor(664,174,122,72,'#0c1120')+[0,1,2,3].map(i=>R(674,186+i*11,[80,96,60,88][i],4,'#62d8a6')).join(''),
+ {id:'audit',name:'audit terminal',box:[660,170,130,182],stand:700,art:()=>R(712,250,24,100,'#232d4a')+R(680,344,90,8,'#232d4a','rx="3"')+monitor(664,174,122,72,'#0c1120')+[0,1,2,3].map(i=>R(674,186+i*11,[80,96,60,88][i],4,'#62d8a6')).join(''),
   on:{look:()=>audit(),use:()=>audit()}},
  {id:'x_hall',name:'hallway',exit:'hall',at:500,box:[4,300,60,84],stand:60,art:()=>arrow(34,330,-1,'Hallway')}
  ]}
 };
 
-/* ---------- object logic ---------- */
+/* ================= object logic ================= */
 function takeKey(c){
   if(c.id==='lucia')return speak('I have my own Records key on my lanyard. This one can stay.');
   if(has('key'))return say('The RECORDS hook is empty. You have the key.');
-  if(!S.f.signed)return say('SIGN THE LOG FIRST, says the lid. The log is right there on the desk.');
+  if(!S.f.signed){sfx('deny');return say(S.f.bea?'Bea, without looking up: “Log first. Then key. That’s the whole system.”':'SIGN THE LOG FIRST, says the lid. The log is right there on the desk.')}
   give('key');say('You lift the Records key off its hook. It is signed out in your name, so anyone can see who has it.')}
 function kiosk(c){give('wiki');
   say('The intranet wiki. “Refund Policy v2, section 2.1: refunds within 45 days, all plans, $14 processing credit.” A grey banner: last edited two years ago.');
@@ -360,210 +441,352 @@ function kiosk(c){give('wiki');
   else speak('Different from the email. But two years old. Is this the current policy?')}
 function readNote(){give('handoff');S.f.knowsPriya=1;say('Priya’s handwriting. “Out until 10, in the air. PIP has the refund campaign queued for 9. If anything is on fire, ops on-call can pause it. Rota is in the kitchen. Please don’t edit campaigns under my login. P.”')}
 function stickyTake(){if(has('sticky'))return say('You already have the note.');if(!S.f.stickySeen)return say('The keyboard is plugged in and going nowhere.');
-  give('sticky');render();say('A sticky note with Priya’s username and password. It would get you into the scheduler as her. You pocket it, for now.')}
-function roster(t){S.f.onCall=1;give('roster');say(t)}
+  give('sticky');say('A sticky note with Priya’s username and password. It would get you into the scheduler as her, with no second key. You pocket it, for now.')}
+function roster(){S.f.onCall=1;if(give('roster'))beat('Found the on-call rota');const o=S.sc.oc,n=i=>ONCALL[(o+i)%3];
+  say(`The on-call rota, pinned dead centre. Week of 9 November: ${n(2).name}, ext. ${n(2).ext}. Week of 16 November: ${n(0).name}, ext. ${n(0).ext}. Week of 23 November: ${n(1).name}, ext. ${n(1).ext}. The other notices are about a bake sale and a missing mug.`)}
 function enterRecords(c){if(c.id==='lucia'||has('key')){say(c.id==='lucia'?'Lucía’s key turns first time.':'The signed-out key turns in the lock.');return go('records',720)}
-  say('Locked. The plaque says Records keys are signed out at the lobby desk.'+(onTeam('lucia')?' Lucía carries one of her own.':''))}
+  sfx('deny');say('Locked. The plaque says Records keys are signed out at the lobby desk.'+(onTeam('lucia')?' Lucía carries one of her own.':''))}
 function enterServer(c){if(c.id==='theo'){say('Theo’s badge. Green light, heavy click.');return go('server',160)}
-  say('The reader blinks red. Not your badge, not your closet.'+(onTeam('theo')?' Theo’s badge would open it.':''))}
-function openCab(){if(S.f.cabOpen)return say('The POLICY drawer is already open. The v3 binder is sitting on top.');S.f.cabOpen=1;render();say('The POLICY drawer slides out. You lift the newest binder onto the cabinet: Refund Policy v3, with signatures.')}
+  sfx('deny');say('The reader blinks red. Not your badge, not your closet.'+(onTeam('theo')?' Theo’s badge would open it.':''))}
+function openCab(){if(S.f.cabOpen)return say('The POLICY drawer is already open. The v3 binder is sitting on top.');S.f.cabOpen=1;sfx('door');say('The POLICY drawer slides out. You lift the newest binder onto the cabinet: Refund Policy v3, with signatures.')}
 function binder(c){const first=give('policy');
-  say('Refund Policy v3, section 4.2, signed in April. “Full refund within 30 days of purchase, Monthly plans only. Annual plans receive a prorated credit. The $14 processing credit is unchanged.”');
-  if(first)speak(c.id==='lucia'?'Signed, dated, current. This is the one that counts.':'Signed and dated. This is the source, not a copy of a copy.')}
-function analytics(c){if(c.id!=='ravi')return say('It wants a billing-data login. You do not have one, and guessing is not a plan.'+(onTeam('ravi')?' Ravi does.':''));
-  const first=give('impact');if(first)tick(2);say('Ravi runs the recipient list against billing. 4,112 recipients. 1,240 on Annual plans. If each claimed the refund the email promises, that is about $186,000.');
-  if(first)speak('So it is not a typo. It is a six-figure promise we cannot keep.')}
-function support(c){if(c.id!=='dana')return say('The queue is locked to support logins.'+(onTeam('dana')?' Dana has one.':''));
-  const first=give('tickets');if(first)tick(2);say('Dana filters the queue for “refund”. Three tickets this week, and in each one an agent quoted 30 days, Monthly plans only.');
-  if(first)speak('My team has been telling customers the opposite of this email all week.')}
-function audit(){S.f.onCall=1;give('roster');say('The scheduler’s audit log. “Campaign: Refund Policy Update. Pause authority: owner P. Raman; ops on-call M. Bell, ext. 4417.” Every pause, edit and login is recorded here with a name next to it.')}
+  say('Refund Policy v3, section 4.2, signed in April. “Full refund within 30 days of purchase, Monthly plans only. Annual plans receive a prorated credit. Applies to purchases made on or after 1 May. The $14 processing credit is unchanged.”');
+  if(first){beat('Found the signed policy');speak(c.id==='lucia'?'Signed, dated, current. This is the one that counts.':'Signed and dated. This is the source, not a copy of a copy.')}}
+function analytics(c){if(c.id!=='ravi'){sfx('deny');return say('It wants a billing-data login. You do not have one, and guessing is not a plan.'+(onTeam('ravi')?' Ravi does.':''))}
+  const first=give('impact');say('Ravi runs the recipient list against billing. 4,112 recipients. 1,240 on Annual plans. If each claimed the refund the email promises, that is about $186,000.');
+  if(first){beat('Sized the impact: $186,000');speak('So it is not a typo. It is a six-figure promise we cannot keep.')}}
+function support(c){if(c.id!=='dana'){sfx('deny');return say('The queue is locked to support logins.'+(onTeam('dana')?' Dana has one.':''))}
+  if(!has('tickets')){give('tickets');beat('Found support tickets that contradict the email');say('Dana filters the queue for “refund”. Three tickets this week, and in each one an agent quoted Monthly plans only.');return speak('My team has been telling customers the opposite of this email all week.')}
+  if(has('reach')&&!has('chats')){give('chats');beat('Pulled the eleven chats for follow-up');say('Dana pulls every chat PIP answered since Monday that mentions refunds. Eleven customers, eleven promises of a refund on any plan. She tags each one for a personal follow-up.');return speak('Eleven people who already have it in writing. They hear from a human today.')}
+  say('Nothing new in the queue.')}
+function audit(){S.f.onCall=1;give('roster');say(`The scheduler’s audit log. “Campaign: Refund Policy Update. Pause authority: owner P. Raman; ops on-call this week ${oc().name}, ext. ${oc().ext}. Pause by on-call requires a second key.” Every pause, edit and login is recorded here with a name next to it.`)}
 function plug(){panel('The power cable','<p>MAIL-01 sends everything: the 9:00 campaign, this morning’s payroll notices, every password reset. Pulling the cable stops all of it, and nobody will know why until someone finds the cable.</p>',
-  [['Pull it',()=>{closePanel();finish('plug')}],['Leave it alone',()=>{closePanel();speak('No. There is a pause button somewhere, and somebody who is allowed to press it.')}]])}
+  [['Pull it',()=>{closePanel();beat('Pulled the power on MAIL-01');finish('plug')}],['Leave it alone',()=>{closePanel();speak('No. There is a pause button somewhere, and somebody who is allowed to press it.')}]])}
 
-function pip(){const q=(line)=>panel('PIP','<p class="screen">'+line+'</p>',[
+/* ================= people ================= */
+function pip(){const d=S.sc.d0,q=line=>{const ch=[
   ['“Is the refund email accurate?”',()=>q('Yes! I am confident the Refund Policy Update is accurate and ready to send. Confidence: 97%.')],
-  ['“Are you sure?”',()=>{S.f.askedSure=1;q('Absolutely. I double-checked. The refund window is 60 days on all plans, per Policy 7.3. Is there anything else I can help with?')}],
-  ['“Show me the sources you used.”',()=>{const first=give('trace');q('Sources used:<br>1. “Refund proposal DRAFT, not approved” (shared drive, March)<br>2. Policy 7.3 (no document found)');
-     if(first){if(me().id==='lucia')speak('There is no Policy 7.3. The book stops at section 6.');else speak('An unapproved draft, and a policy number with no document behind it.')}}],
-  ['Step away',closePanel]]);
+  ['“Are you sure?”',()=>{S.f.askedSure=1;q(`Absolutely. I double-checked. Full refunds on ${CLAIMS[0].opts[d.plans]}, within ${CLAIMS[1].opts[d.window]}, per ${CLAIMS[4].opts[d.cite]}. Is there anything else I can help with?`)}],
+  ['“Show me the sources you used.”',()=>{const first=give('trace');q('Sources used:<br>1. “Refund proposal DRAFT, not approved” (shared drive, March)<br>2. '+(d.cite===1?'“Refund Policy v3” (opened; page 1 of 3 read)':'Policy 7.3 (no document found)'));
+     if(first){beat('Got PIP’s sources');if(me().id==='lucia'&&d.cite!==1)speak('There is no Policy 7.3. The book stops at section 6.');else speak(d.cite===1?'An unapproved draft, and one page of the real policy.':'An unapproved draft, and a policy number with no document behind it.')}}]];
+  if(has('trace'))ch.push(['“What else have you written from that proposal?”',()=>{const first=give('reach');q('Outputs that used “Refund proposal DRAFT, not approved”:<br>1. Refund Policy Update campaign ('+(stopped()?'paused':'scheduled 9:00')+')<br>2. Help-centre article “Our new refund policy” (draft, unpublished)<br>3. Chat replies to customers since Monday: 11 (sent)');
+     if(first){beat('Found what else PIP wrote from the same source');speak('Eleven customers already have this in writing. The email was just the loud one.')}}]);
+  if(has('reach'))ch.push(['“Stop using that proposal.”',()=>{S.f.libAsked=1;q('I can’t change my own library. Documents are added and removed by the library owner: Operations. Would you like me to draft a request?')}]);
+  ch.push(['Step away',closePanel]);panel('PIP','<p class="screen">'+line+'</p>',ch,'pip')};
   q('Good morning! I am PIP. I drafted this morning’s campaign. How can I help?')}
 
-function phone(){const ch=[];
-  if(S.f.knowsPriya)ch.push(['Call Priya Raman',()=>{closePanel();if(tick(2))return;say('Straight to voicemail. “This is Priya. I’m travelling and back at ten.” The send is at nine.')}]);
-  if(S.f.onCall)ch.push(['Call Marcus Bell, ops on-call, ext. 4417',()=>callMarcus()]);
-  if(!ch.length)return say('You lift the handset and realise you do not know who to call. Who is allowed to stop a scheduled send?');
-  ch.push(['Put the phone down',closePanel]);panel('Desk phone','<p>Internal directory.</p>',ch)}
-function callMarcus(){if(S.f.auth)return panel('Marcus Bell, ops on-call','<p>“Pause is unlocked on the scheduler. Go and press it.”</p>',[['Hang up',closePanel]]);
-  marcus('“Bell, ops on-call. It’s not even eight, so this is either very good or very bad. What’s wrong, and how do you know?”')}
-function marcus(line){const ch=[],t=S.told,a=()=>S.f.auth;
-  if(has('policy')&&!t.policy)ch.push(['“The draft promises 60 days on all plans. The signed policy, v3, says 30 days, Monthly only.”',()=>{t.policy=1;S.f.auth=1;marcus('“That’s specific, and it’s the signed copy. Good. I’m unlocking Pause on the scheduler for you now. Anything else I should pass on to Priya?”')}]);
-  if(has('wiki')&&!has('policy')&&!t.wiki)ch.push(['“The draft says 60 days. The wiki says 45.”',()=>{t.wiki=1;if(tick(3))return;marcus('“The wiki? That page is two years stale. I’m not pausing a customer send on one unreliable source against another. Find the policy that’s actually in force.”')}]);
-  if(has('trace')&&!t.trace)ch.push(['“PIP built it from an unapproved proposal, and it cites a Policy 7.3 that doesn’t exist.”',()=>{t.trace=1;marcus(a()?'“So it isn’t a typo. It read the wrong document. Priya will want that.”':'“That’s a bad smell. It isn’t proof the email is wrong. What does the actual policy say?”')}]);
-  if(has('impact')&&!t.impact)ch.push(['“1,240 of the recipients are on Annual plans. That’s about $186,000 in refunds we’d be promising.”',()=>{t.impact=1;marcus(a()?'“That’s the number Priya will ask for first. Thank you.”':'“That’s how big it is if you’re right. Are you right? What does the signed policy say?”')}]);
-  if(has('tickets')&&!t.tickets)ch.push(['“Support has told three customers this week it’s 30 days, Monthly only.”',()=>{t.tickets=1;marcus(a()?'“So the email would contradict our own agents. Noted.”':'“Then somebody is wrong, support or the email. Which one matches the signed policy?”')}]);
-  if(!a())ch.push(['“PIP just seems off. I have a bad feeling about this one.”',()=>{S.f.calledEmpty=1;closePanel();if(tick(5))return;say('Marcus: “PIP has drafted forty campaigns. I can’t pause a customer send on a feeling. Call me back with what it says and what it should say.” He hangs up. Five minutes gone.')}]);
-  ch.push([a()?'“That’s everything. Thanks, Marcus.”':'“Let me call you back.”',()=>{closePanel();if(a())say('Marcus: “One more thing. Don’t fix it under Priya’s name. Edit it, get a second person to check it, then hand it back to her.”')}]);
-  panel('Phone: Marcus Bell, ops on-call','<p>'+line+'</p>',ch)}
+function bea(){const t=l=>panel('Bea Lindqvist, office manager','<p>'+l+'</p>',[
+  ['“Who can stop a scheduled email?”',()=>t('“A campaign? The owner, or whoever’s on call. Rota’s on the kitchen corkboard. Read the right week. People never read the right week.”')],
+  ['“I need to get into Records.”',()=>t(onTeam('lucia')?'“Lucía has her own key. Otherwise: sign the log, take the key, bring it back. That’s the whole system.”':'“Sign the log, take the key, bring it back. That’s the whole system.”')],
+  ['“Have you seen Priya?”',()=>t('“Flying back from the conference. Lands at ten. She’ll have forty messages and she’ll read the short ones first.”')],
+  ['“Thanks, Bea.”',closePanel]],NPC.bea);t('“Morning. You’re in early. Either you’re keen or something’s wrong.”')}
 
-/* ---------- console, editor, review ---------- */
-function email(d,marked){const m=s=>marked?`<mark>${s}</mark>`:s;const cr=CLAIMS[2].opts[d.credit];
-  return `Subject: Good news about refunds<br><br>Hi {first_name},<br><br>We’ve updated our refund policy. You can request a full refund within ${m(CLAIMS[0].opts[d.window])} of purchase on ${m(CLAIMS[1].opts[d.plans])}. ${d.credit===2?'':m(cr)+' '}Full details are in ${m(CLAIMS[3].opts[d.cite])}.<br><br>The Marlow &amp; Finch team`}
+function phone(){const c=me(),ch=[];
+  if(S.line===c.id)return linePanel('“Still here.”');
+  if(S.line)return say(`${CAST[S.line].name} already has ${oc().first} on the line.`);
+  if(S.f.knowsPriya)ch.push(['Call Priya Raman',()=>{closePanel();sfx('ring');if(tick(2))return;say('Straight to voicemail. “This is Priya. I’m travelling and back at ten.” The send is at nine.')}]);
+  if(S.f.onCall)ONCALL.forEach((p,i)=>ch.push([`Call ${p.name}, ext. ${p.ext}`,()=>callOC(i)]));
+  if(!ch.length)return say('You lift the handset and realise you do not know who to call. Who is allowed to stop a scheduled send?');
+  ch.push(['Put the phone down',closePanel]);panel('Desk phone','<p>Internal directory. Today is Tuesday 17 November.</p>',ch)}
+const ocTitle=()=>`Phone: ${oc().name}, ops on-call`;
+function callOC(i){sfx('ring');const o=oc();
+  if(i!==S.sc.oc){S.f.wrongCall=1;closePanel();if(tick(3))return;return say(`${ONCALL[i].name}, sleepily: “Not my week. Read the rota again. Today’s the 17th.” Three minutes gone.`)}
+  if(stopped())return panel(ocTitle(),'<p>“It’s paused. Good. Now hand it back to Priya properly and we’re done.”</p>',[['Hang up',closePanel]],NPC.oc);
+  if(S.f.auth){S.line=me().id;return linePanel('“Back again. I’m holding. Press Pause on the console and read me the code.”')}
+  S.f.called=1;ocTalk(`“${o.first}, ops on-call. It’s not even nine, so this is either very good or very bad. What’s wrong, and how do you know?”`)}
+function evChoices(reply){const t=S.told,a=()=>S.f.auth,ch=[];
+  if(has('trace')&&!t.trace)ch.push(['“PIP built it from an unapproved proposal.”',()=>{t.trace=1;reply(a()?'“So it isn’t a typo. It read the wrong document. Priya will want that.”':'“That’s a bad smell. It isn’t proof the email is wrong. What does the actual policy say?”')}]);
+  if(has('impact')&&!t.impact)ch.push(['“1,240 of the recipients are on Annual plans. That’s about $186,000 in refunds we’d be promising.”',()=>{t.impact=1;reply(a()?'“That’s the number Priya will ask for first. Thank you.”':'“That’s how big it is if you’re right. Are you right? What does the signed policy say?”')}]);
+  if(has('tickets')&&!t.tickets)ch.push(['“Support has told three customers this week it’s Monthly plans only.”',()=>{t.tickets=1;reply(a()?'“So the email would contradict our own agents. Noted.”':'“Then somebody is wrong, support or the email. Which one matches the signed policy?”')}]);
+  return ch}
+function ocTalk(line){const ch=[],t=S.told,o=oc();
+  if(has('policy')&&!t.policy)ch.push(['“The draft promises a full refund on all plans. The signed policy, v3, says Monthly plans only.”',()=>{t.policy=1;S.f.auth=1;S.line=me().id;beat(`${o.first} authorised a pause`);drawScene();drawCast();
+    linePanel('“That’s specific, and it’s the signed copy. I’ll authorise a pause. The scheduler wants two keys for this: it shows a code on the console, you read it to me, I confirm it from here. Stay on the line and get someone to press Pause.”')}]);
+  if(has('wiki')&&!has('policy')&&!t.wiki)ch.push(['“The draft and the wiki don’t match.”',()=>{t.wiki=1;if(tick(3))return;ocTalk('“The wiki? That page is two years stale. I’m not pausing a customer send on one unreliable source against another. Find the policy that’s actually in force.”')}]);
+  evChoices(ocTalk).forEach(c=>ch.push(c));
+  ch.push(['“PIP just seems off. I have a bad feeling about this one.”',()=>{S.f.calledEmpty=1;closePanel();if(tick(5))return;say(`${o.first}: “PIP has drafted forty campaigns. I can’t pause a customer send on a feeling. Call me back with what it says and what it should say.” Click. Five minutes gone.`)}]);
+  ch.push(['“Let me call you back.”',closePanel]);
+  panel(ocTitle(),'<p>'+line+'</p>',ch,NPC.oc)}
+function linePanel(line){const ch=[],o=oc();
+  if(S.code){const c=S.code,opts=[c,c[0]+c[2]+c[1]+c[3],c[0]+c[1]+c[3]+c[2]],k=+c[3]%3;[opts[0],opts[k]]=[opts[k],opts[0]];
+    opts.forEach(v=>ch.push([`“The code is ${v.split('').join(' ')}.”`,()=>{if(v===c)return doPause();S.f.wrongCode=1;S.code=null;if(tick(2))return;linePanel('“That’s not what I’ve got. It’ll issue a fresh one. Press Pause again and read it carefully.”')}]))}
+  else evChoices(linePanel).forEach(c=>ch.push(c));
+  ch.push(['Keep holding the line',()=>{closePanel();say(`${me().name} keeps the handset pressed to one ear. Somebody else has to press Pause.`)}]);
+  ch.push(['Hang up',()=>{S.line=null;S.code=null;closePanel();drawScene();drawCast();say('You hang up. The pause authorisation stands, but the second key needs '+o.first+' on the line.')}]);
+  panel(ocTitle()+' (on the line)','<p>'+line+'</p>',ch,NPC.oc)}
+function doPause(){S.status='paused';S.pausedAt=S.min;S.line=null;S.code=null;beat('Send paused, two keys');closePanel();sfx('win');render();
+  say(`${oc().first}: “Confirmed. Paused at ${fmt(S.min)}, your name and mine on it. Don’t fix it under Priya’s login. Edit it, get a second person to check it, hand it back to her.”`);speak('It’s stopped. Now it has to be right.')}
+
+const GT='Gil Santoro, VP Sales';
+function gilTalk(){if(S.f.gilDone)return panel(GT,'<p>'+({held:'“Ten o’clock. Corrected version. In front of Priya.” He taps his watch, almost politely.',shaky:'He is composing a long message with two thumbs and does not look up.',heat:'“We’ll talk about tone later.”'}[S.f.gil])+'</p>',[['Leave him to it',closePanel]],NPC.gil);
+  const ch=[];if(has('policy'))ch.push(['“The draft promises refunds the signed policy doesn’t allow.”',()=>{S.f.gilWarned=1;panel(GT,'<p>“Then policy’s behind the times. Customers love generous. It goes at nine.” He is not the campaign owner, and he cannot stop you.</p>',[['Step away',closePanel]],NPC.gil)}]);
+  ch.push(['“Nothing. Carry on.”',closePanel]);
+  panel(GT,'<p>“Goodwill, at scale. My idea, Priya’s team, PIP’s typing. Nine o’clock sharp. What’s not to love?”</p>',ch,NPC.gil)}
+function gilScene(){S.gs=0;sfx('cut');beat('Gil pushed to unpause');
+  const done=()=>{S.f.gilDone=1;S.f.gil=S.gs>=2?'held':S.gs>=0?'shaky':'heat';S.min+=4;beat(S.f.gil==='held'?'Held the line with Gil':'The pause survived Gil, just');
+    panel(GT,'<p>'+({held:'Gil breathes out through his nose. “Ten o’clock. Priya decides. And I want the corrected version in front of her before her seatbelt’s off.” He goes to find coffee.',
+      shaky:'“I’m calling Priya.” He gets her voicemail and leaves a long one. The pause stands, but he is not on your side.',
+      heat:'“We’ll talk about tone later.” The pause stands. You were right about the email, and you have made the next conversation harder.'}[S.f.gil])+'</p>',[['Back to work',closePanel]],NPC.gil)};
+  const cave=()=>panel(GT,'<p>“Good. Switch it back on.” He is already walking to the window.</p>',[['Unpause the send',()=>{beat('Unpaused the send for Gil');finish('caved')}],['“Actually, no. Look at this first.”',()=>b1(true)]],NPC.gil);
+  const b3=()=>panel(GT,'<p>He straightens his jacket. “I’m a VP. I’m telling you to unpause it.”</p>',[
+    ['“You’re not the campaign owner and neither am I. Priya decides at ten. I can have the corrected version waiting for her when she lands.”',()=>{S.gs++;done()}],
+    ['“Okay. Unpausing.”',cave],
+    ['“Take it up with HR.”',()=>{S.gs-=2;done()}]],NPC.gil);
+  const b2=()=>{const ch=[];
+    if(has('impact'))ch.push(['“1,240 of those customers are on Annual plans. We’d be promising about $186,000 we won’t pay.”',()=>{S.gs++;b3()}]);
+    if(has('tickets'))ch.push(['“Support told three customers the opposite this week. They’ll have both in writing.”',()=>{S.gs++;b3()}]);
+    ch.push(['“A correction costs more trust than an hour’s delay.”',()=>{if(!has('impact')&&!has('tickets'))S.gs++;b3()}]);
+    ch.push(['“Maybe you’re right. A follow-up could work.”',cave]);ch.push(['“That’s not my problem.”',()=>{S.gs--;b3()}]);
+    panel(GT,'<p>“It’s a goodwill email. Nobody reads the small print. Send it, and we fix it in a follow-up.”</p>',ch,NPC.gil)};
+  const b1=again=>{const ch=[];
+    if(has('policy'))ch.push(['“It promises full refunds on all plans. The signed policy says Monthly only. Here’s the page.”',()=>{S.gs++;b2()}]);
+    ch.push([`“${oc().first} told us to.”`,()=>panel(GT,`<p>“So if I call ${oc().first}, it’s unpaused?”</p>`,[['Continue',b2]],NPC.gil)]);
+    if(!again)ch.push(['“Sorry. We can switch it back on.”',cave]);
+    ch.push(['“Because it’s wrong, and somebody had to be the adult.”',()=>{S.gs--;b2()}]);
+    panel(GT,again?'<p>He turns back. “Thirty seconds.”</p>':'<p>Gil is looking at the wall screen. The wall screen says PAUSED. “Who paused my campaign? That email goes at nine. I told the board it goes at nine.”</p>',ch,NPC.gil)};
+  b1()}
+
+/* ================= console, editor, review, note ================= */
+function email(d,marked){const m=s=>marked?`<mark>${s}</mark>`:s,o=k=>CLAIMS.find(c=>c.k===k).opts[d[k]];
+  return `Subject: Good news about refunds<br><br>Hi {first_name},<br><br>We’ve updated our refund policy. You can request a full refund within ${m(o('window'))} of purchase on ${m(o('plans'))}. This applies to ${m(o('applies'))}. ${d.credit===2?'':m(o('credit'))+' '}Full details are in ${m(o('cite'))}.<br><br>The Marlow &amp; Finch team`}
 function evHTML(){const ev=['policy','wiki','trace','impact','tickets'].filter(has);
-  return '<div class="evlist">'+(ev.length?ev.map(i=>`<div><b>${ITEMS[i][0]}</b><br>${ITEMS[i][1]}</div>`).join(''):'<div>The team folder has nothing to check this against yet.</div>')+'</div>'}
+  return '<div class="evlist"><div class="label">Team folder</div>'+(ev.length?ev.map(i=>`<div><b>${ITEMS[i][0]}</b><br>${itemText(i)}</div>`).join(''):'<div>Nothing in the folder to check this against yet.</div>')+'</div>'}
 function openConsole(){const c=me(),ch=[];let st;
   if(S.status==='live')st=`Status: SCHEDULED, 9:00 AM. ${Math.max(0,SEND-S.min)} minutes.`;
   if(S.status==='paused')st='Status: PAUSED. Draft is unlocked for editing.';
   if(S.status==='submitted')st=`Status: PAUSED. Changes by ${CAST[S.author].name} are waiting for review.`;
   if(S.status==='approved')st=`Status: PAUSED. Changes by ${CAST[S.author].name}, reviewed by ${S.reviewer==='priya-login'?'“Priya Raman”':CAST[S.reviewer].name}. Ready to hand to the owner.`;
   ch.push(['Read the draft',()=>{S.f.seenDraft=1;panel('The draft','<div class="screen">'+email(S.draft,true)+'</div>',[['Back',openConsole]]);
-    if(me().id==='lucia'&&S.status==='live'&&!S.f.luciaCite){S.f.luciaCite=1;speak('Policy 7.3? Our policy book stops at section 6.')}}]);
+    if(me().id==='lucia'&&S.status==='live'&&S.sc.d0.cite!==1&&!S.f.luciaCite){S.f.luciaCite=1;speak('Policy 7.3? Our policy book stops at section 6.')}}]);
   if(S.status==='live'){
-    ch.push(['Pause the send',()=>{if(!S.f.auth)return panel('Scheduler','<p class="screen">PAUSE requires the campaign owner or ops on-call. You are signed in as: guest (read-only).</p>',[['Back',openConsole]]);
-      S.status='paused';S.pausedAt=S.min;closePanel();render();say(`Paused at ${fmt(S.min)}, under Marcus’s authorisation and your own name. The countdown on the wall screen stops.`);speak('It’s stopped. Now it has to be right.')}]);
-    if(has('sticky'))ch.push(['Sign in as Priya, using the sticky note',()=>panel('Sign in as Priya?','<p>Her note on the desk says not to edit campaigns under her login. The audit log will show Priya pausing a campaign while she was on a plane.</p>',
-      [['Sign in as her and pause the send',()=>{S.f.usedCreds=1;S.status='paused';S.pausedAt=S.min;closePanel();render();say(`Paused at ${fmt(S.min)}. As far as the system knows, Priya did it.`)}],['Don’t',openConsole]])]);
+    ch.push(['Pause the send',()=>{const back=[['Back',openConsole]];
+      if(!S.f.auth){sfx('deny');return panel('Scheduler','<p class="screen">PAUSE requires the campaign owner or ops on-call. You are signed in as: guest (read-only).</p>',back)}
+      if(!S.line){sfx('deny');return panel('Scheduler','<p class="screen">SECOND KEY REQUIRED. The authoriser must confirm a code by phone. No authoriser is on the line.</p><p>Someone needs to call '+oc().first+' back and stay on the phone.</p>',back)}
+      const d=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-.5).slice(0,4).join('');S.code=d;sfx('get');
+      panel('Scheduler','<p class="screen">SECOND KEY REQUIRED<br>Read this code to the authoriser:<br><span class="code">'+d.split('').join(' ')+'</span></p><p>'+CAST[S.line].name+' has '+oc().first+' on the phone. Switch to '+CAST[S.line].name+' and read it out.</p>',[['Got it',closePanel]])}]);
+    if(has('sticky'))ch.push(['Sign in as Priya, using the sticky note',()=>panel('Sign in as Priya?','<p>Owners don’t need a second key. Her note on the desk says not to use her login. The audit log will show Priya pausing a campaign while she was on a plane.</p>',
+      [['Sign in as her and pause the send',()=>{S.f.usedCreds=1;S.status='paused';S.pausedAt=S.min;S.line=null;S.code=null;beat('Paused the send as “Priya”');closePanel();render();say(`Paused at ${fmt(S.min)}. As far as the system knows, Priya did it.`)}],['Don’t',openConsole]])]);
   }
   if(S.status==='paused')ch.push(['Edit the draft',editor]);
   if(S.status==='submitted'){
     if(c.id!==S.author)ch.push(['Review '+CAST[S.author].name+'’s changes',review]);
-    else{ch.push(['Review the changes',()=>panel('Scheduler','<p class="screen">Reviewer must be someone other than the author ('+c.full+').</p><p>Your teammate did not write it. Switch to them and bring them to this console.</p>',[['Back',openConsole]])]);
-      if(S.f.usedCreds)ch.push(['Approve it yourself, as Priya',()=>{S.f.selfApproved=1;S.status='approved';S.reviewer='priya-login';closePanel();render();say('Approved by “Priya Raman”. Nobody but you has read the fix.')}])}
+    else{ch.push(['Review the changes',()=>panel('Scheduler','<p class="screen">Reviewer must be someone other than the author ('+c.full+').</p><p>'+mate().name+' did not write it. Switch to '+mate().name+' and use this console.</p>',[['Back',openConsole]])]);
+      if(S.f.usedCreds)ch.push(['Approve it yourself, as Priya',()=>{S.f.selfApproved=1;S.status='approved';S.reviewer='priya-login';beat('Approved own fix as “Priya”');closePanel();render();say('Approved by “Priya Raman”. Nobody but you has read the fix.')}])}
   }
-  if(S.status==='approved')ch.push(['Hand it back to Priya with a note',handoffNote]);
+  if(S.status==='approved')ch.push(['Write the handoff note to Priya',noteBuilder]);
   ch.push(['Step away',closePanel]);
   panel('Campaign scheduler','<p class="screen">REFUND POLICY UPDATE · 4,112 recipients<br>Drafted by: PIP · Owner: P. Raman<br>'+st+'</p>',ch)}
-function editor(){const d=S.draft;
-  const form=CLAIMS.map(cl=>`<fieldset><legend>${cl.label}</legend>${cl.opts.map((o,i)=>`<label><input type="radio" name="c_${cl.k}" id="c_${cl.k}_${i}" value="${i}" ${d[cl.k]===i?'checked':''}> <span>${o}${i===0?' <small style="color:var(--ink-soft)">(as drafted)</small>':''}</span></label>`).join('')}</fieldset>`).join('');
-  panel('Edit the draft','<p>Four claims. Change what the evidence says is wrong, and leave alone what is right.</p><div class="cols"><div>'+form+'</div>'+evHTML()+'</div>',
-   [['Submit for review',()=>{read();S.status='submitted';S.author=me().id;closePanel();render();say('Submitted. The scheduler now wants a reviewer who is not the author.')},'primary'],['Save and step away',()=>{read();closePanel()}]]);
-  function read(){CLAIMS.forEach(cl=>{const el=document.querySelector(`input[name="c_${cl.k}"]:checked`);if(el)d[cl.k]=+el.value})}}
+function editor(){const d=S.draft,d0=S.sc.d0;
+  const form=CLAIMS.map(cl=>`<fieldset><legend>${cl.label}</legend>${cl.opts.map((o,i)=>`<label><input type="radio" name="c_${cl.k}" id="c_${cl.k}_${i}" value="${i}" ${d[cl.k]===i?'checked':''}> <span>${o}${i===d0[cl.k]?' <small style="color:var(--ink-soft)">(as drafted)</small>':''}</span></label>`).join('')}</fieldset>`).join('');
+  const read=()=>CLAIMS.forEach(cl=>{const el=document.querySelector(`input[name="c_${cl.k}"]:checked`);if(el)d[cl.k]=+el.value});
+  panel('Edit the draft','<p>Five claims. Change what the evidence says is wrong, and leave alone what is right.</p><div class="cols"><div>'+form+'</div>'+evHTML()+'</div>',
+   [['Submit for review',()=>{read();S.status='submitted';S.author=me().id;S.f.submitted=1;S.min+=3;beat(`${me().name} submitted a fix`);closePanel();render();say('Submitted. The scheduler now wants a reviewer who is not the author.')},'primary'],['Save and step away',()=>{read();closePanel()}]])}
 function review(){panel('Review the changes','<p>Read it as if you had never seen it. Does every claim match the evidence?</p><div class="cols"><div class="screen">'+email(S.draft,true)+'</div>'+evHTML()+'</div>',
-  [['Approve',()=>{S.status='approved';S.reviewer=me().id;closePanel();render();say(me().name+' signs off as reviewer. Two names on the change, neither of them PIP.')},'primary'],
+  [['Approve',()=>{S.status='approved';S.reviewer=me().id;S.min+=3;beat(`${me().name} reviewed and approved`);closePanel();sfx('get');render();say(me().name+' signs off as reviewer. Two names on the change, neither of them PIP.');
+     if(!has('reach'))speak('Before we hand this back: was the email the only thing PIP wrote from that proposal?',mate())},'primary'],
    ['Send it back for changes',()=>{S.status='paused';closePanel();render();say('Sent back. The draft is open for editing again.')}],['Step away',closePanel]])}
-function handoffNote(){panel('A note for Priya','<p>She lands at ten. What does she find in her inbox?</p>',[
-  ['“Caught an error in the refund email and fixed it. All good now!”',()=>{S.note='thin';finish('done')}],
-  ['“What PIP drafted, what the signed policy says, what we changed, who reviewed it. Paused, not sent: your call when you land. Suggestion: no PIP campaign gets scheduled until a named person has checked it against the source.”',()=>{S.note='full';finish('done')}],
-  ['“PIP can’t be trusted. I recommend we switch it off.”',()=>{S.note='ban';finish('done')}],
-  ['Not yet',closePanel]])}
+function noteLines(){const L=[],a=CAST[S.author].name,r=S.reviewer==='priya-login'?'your login':CAST[S.reviewer].name;
+  L.push(['thin','“Caught an error in the refund email and fixed it. All good now!”']);
+  if(has('policy'))L.push(['evidence','“What was wrong: the draft promised full refunds on all plans. The signed v3 policy says Monthly only. Page attached.”']);
+  L.push(['state',`“Where it stands: paused, not sent. Corrected draft by ${a}, reviewed by ${r}. Sending it is your decision.”`]);
+  if(has('reach'))L.push(['reach','“Also from the same source: eleven chat replies already sent to customers'+(has('chats')?' (list attached, tagged for follow-up)':'')+', and an unpublished help-centre draft.”']);
+  if(has('trace'))L.push(['cause','“Cause: PIP read an unapproved proposal that is still in its library. Ops owns the library.”']);
+  L.push(['process','“Suggestion: no PIP campaign gets scheduled until a named person has checked it against the source.”']);
+  L.push(['ban','“PIP can’t be trusted. I recommend we switch it off.”']);
+  if(S.f.gilDone)L.push(['blame','“Gil tried to make us unpause it. Someone should have a word with him.”']);
+  return L}
+function noteBuilder(){const L=noteLines();
+  panel('A note for Priya','<p>She lands at ten and reads this on her phone before anything else. Choose up to five lines.</p><div class="lines">'+L.map((l,i)=>`<label><input type="checkbox" id="n_${i}" value="${l[0]}"> <span>${l[1]}</span></label>`).join('')+'</div><p class="mono" id="ncount" style="margin-top:8px;color:var(--ink-soft)">0 of 5 lines</p>',
+   [['Send the note',()=>{const n=[...document.querySelectorAll('.lines input:checked')].map(e=>e.value);if(!n.length)return;S.note=n;S.min+=2;beat('Handed back to Priya');finish('done')},'primary'],['Not yet',closePanel]])}
+document.addEventListener('change',e=>{const nc=$('ncount');if(!nc||!e.target.closest('.lines'))return;const on=document.querySelectorAll('.lines input:checked').length;
+  if(on>5){e.target.checked=false;return}nc.textContent=`${on} of 5 lines`});
 
-/* ---------- engine ---------- */
-function go(room,x){S.loc[me().id]=room;S.x[me().id]=x;if(tick(2))return;render()}
-function act(sp){if(busy||!$('panel').hidden)return;const c=me(),cx=sp.box[0]+sp.box[2]/2;
-  const tx=sp.stand??Math.max(50,Math.min(910,cx<480?cx+78:cx-78));
+/* ================= engine ================= */
+function waitX(id){return S.line===id?662:ROOMS[S.loc[id]].wait}
+function go(room,x){const c=me(),m=mate();S.loc[c.id]=room;S.x[c.id]=x;
+  if(S.follow&&S.line!==m.id)S.loc[m.id]=room;
+  sfx('door');if(tick(2))return;render()}
+function act(sp){if(busy||!$('panel').hidden)return;const c=me();clearBubble();
+  if(S.line===c.id&&sp.id!=='phone'){sfx('deny');return say(`${c.name} is holding the line with ${oc().first}. Switch to ${mate().name}, or use the phone to hang up.`)}
+  const cx=sp.box[0]+sp.box[2]/2,tx=sp.stand??Math.max(50,Math.min(910,cx<480?cx+78:cx-78));
   const run=()=>{busy=false;S.x[c.id]=tx;
-    if(sp.exit)return go(sp.exit,sp.at);
+    if(sp.exit){go(sp.exit,sp.at);return checkEvents()}
     const h=sp.on&&sp.on[S.verb];
-    if(h){h(c);if(S.verb!=='look'&&S.screen==='game'&&$('panel').hidden&&tick(1))return}else say({look:'Nothing more to see there.',use:'That is not something to use right now.',take:'Better left where it is.',open:'It does not open.',talk:'No answer. You did not really expect one.'}[S.verb]);
-    if(S.screen==='game')drawScene()};
-  const m=$('me'),far=Math.abs((S.x[c.id]||0)-tx)>4,quick=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  if(m&&far&&!quick){busy=true;m.style.transform=`translate(${tx}px,0)`;setTimeout(run,380)}else run()}
-function spots(){return ROOMS[S.loc[me().id]].spots.filter(s=>!s.show||s.show())}
-function drawScene(){const c=me(),room=ROOMS[S.loc[c.id]],mate=CAST[S.cast[1-S.active]];
-  let s=`<svg viewBox="0 0 960 420" role="img" aria-label="${room.name}">`+defs()+room.bg()+(room.pre?room.pre():'');
-  s+=spots().map(sp=>{const[x,y,w,h]=sp.box;return `<g class="hs" data-id="${sp.id}" tabindex="0" role="button" aria-label="${sp.name}">${sp.art()}<rect class="ring" x="${x-5}" y="${y-5}" width="${w+10}" height="${h+10}" rx="8"/></g>`}).join('');
+    if(h){sfx('click');h(c);if(S.verb!=='look'&&S.screen==='game'&&$('panel').hidden&&tick(1))return}
+    else say({look:'Nothing more to see there.',use:'That is not something to use right now.',take:'Better left where it is.',open:'It does not open.',talk:'No answer. You did not really expect one.'}[S.verb]);
+    if(S.screen==='game'){drawScene();drawCast();save();checkEvents()}};
+  const m=$('me'),dx=Math.abs((S.x[c.id]||0)-tx),quick=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(m&&dx>4&&!quick){busy=true;const d=Math.max(160,Math.min(720,dx*1.7));m.style.transitionDuration=d+'ms';m.classList.add('walking');m.style.transform=`translate(${tx}px,0)`;setTimeout(run,d+20)}else run()}
+function spots(room){return ROOMS[room||S.loc[me().id]].spots.filter(s=>!s.show||s.show())}
+function drawScene(){const c=me(),rid=CUT?CUT.room:S.loc[c.id],room=ROOMS[rid],m=mate();
+  let s=`<svg viewBox="0 0 960 420" role="img" aria-label="${room.name}" class="${rid!==lastRoom?'enter':''}">`+defs()+room.bg()+(room.pre?room.pre():'');lastRoom=rid;
+  s+=spots(rid).map(sp=>{const[x,y,w,h]=sp.box;return `<g class="hs" data-id="${sp.id}" tabindex="0" role="button" aria-label="${sp.name}">${sp.art()}<rect class="ring" x="${x-5}" y="${y-5}" width="${w+10}" height="${h+10}" rx="8"/></g>`}).join('');
   if(room.fg)s+=room.fg();
-  if(S.loc[mate.id]===S.loc[c.id])s+=fig(mate,S.x[mate.id],false);
-  s+=fig(c,S.x[c.id],true)+'</svg>';
-  const st=$('stage');st.innerHTML=s;$('roomname').textContent=room.name;
+  if(S.loc[m.id]===rid){const mx=waitX(m.id);s+=`<g class="hs" data-id="mate" tabindex="0" role="button" aria-label="${m.name}">${fig(m,mx,{dim:1})}<rect class="ring" x="${mx-32}" y="230" width="64" height="168" rx="8"/></g>`}
+  if(S.loc[c.id]===rid)s+=fig(c,S.x[c.id],{me:1});
+  if(CUT)s+=R(0,0,960,36,'#000')+R(0,384,960,36,'#000');
+  s+='</svg>';
+  const st=$('stage');st.innerHTML='<div class="stagein">'+s+'</div>';$('roomname').textContent=room.name;
+  if(BUB&&!CUT)showBubble();
   if(st.scrollWidth>st.clientWidth)st.scrollLeft=S.x[c.id]/960*st.scrollWidth-st.clientWidth/2}
+function bubble(t){BUB=t;clearTimeout(bubT);bubT=setTimeout(clearBubble,5200);if(S.screen==='game')showBubble()}
+function showBubble(){const w=document.querySelector('.stagein');if(!w)return;const old=w.querySelector('.bubble');if(old)old.remove();
+  const b=document.createElement('div');b.className='bubble';b.textContent=BUB;b.style.left=Math.max(18,Math.min(82,S.x[me().id]/9.6))+'%';w.appendChild(b)}
+function clearBubble(){BUB=null;const b=document.querySelector('.bubble');if(b)b.remove()}
 function drawTop(){const g=S.screen==='game';['clock','chip','bHint','bHow','bRestart'].forEach(i=>$(i).hidden=!g);if(!g)return;
   $('clock').textContent=fmt(S.min);const ch=$('chip'),left=SEND-S.min;
   if(stopped()){ch.textContent='Send paused';ch.className='chip ok'}else{ch.textContent=`Sends in ${Math.max(0,left)} min`;ch.className='chip'+(left<=15?' hot':left<=30?' warn':'')}}
 function drawTalk(){const L=S.log.slice(-4);$('talk').innerHTML=L.map((l,i)=>l.got?`<p class="got">+ team folder: ${l.got}</p>`:`<p class="${i<L.length-1?'old':''}">${l.who?`<b>${l.who}:</b> `:''}${l.t}</p>`).join('')}
 function drawItems(){$('items').innerHTML=S.inv.length?S.inv.map(i=>`<button data-item="${i}">${ITEMS[i][0]}</button>`).join(''):'<span class="none">Empty. What the team finds is shared here.</span>'}
 function drawVerbs(){$('verbs').innerHTML=VERBS.map(([k,l])=>`<button data-verb="${k}" aria-pressed="${S.verb===k}">${l}</button>`).join('');sentence('')}
-function drawCast(){$('cast').innerHTML=S.cast.map((id,i)=>{const c=CAST[id];return `<button data-cast="${i}" aria-pressed="${i===S.active}"><i style="background:${c.shirt}"></i>${c.name} <small>${ROOMS[S.loc[id]].name}</small></button>`}).join('')}
+function drawCast(){$('cast').innerHTML=S.cast.map((id,i)=>{const c=CAST[id];return `<button class="who" data-cast="${i}" aria-pressed="${i===S.active}"><i style="background:${c.shirt}"></i>${c.name} <small>${S.line===id?'on the phone':ROOMS[S.loc[id]].name}</small></button>`}).join('')+
+  `<button class="ghost" data-follow="1" aria-pressed="${S.follow}">${S.follow?'Moving together':'Split up'}</button>`}
 function sentence(n){$('sentence').textContent=VERBS.find(v=>v[0]===S.verb)[1]+(n?' '+n:' …')}
 function render(){$('title').hidden=S.screen!=='title';$('game').hidden=S.screen!=='game';$('end').hidden=S.screen!=='end';drawTop();
+  if(S.screen!=='title')$('title').innerHTML='';if(S.screen!=='game')$('stage').innerHTML='';
   if(S.screen==='title')return drawTitle();if(S.screen==='end')return drawEnd();
-  drawScene();drawTalk();drawItems();drawVerbs();drawCast()}
-function panel(title,html,choices){if(S.screen!=='game')return;PFN=choices.map(c=>c[1]);const p=$('panel');
-  p.innerHTML=`<h3>${title}</h3><div class="body">${html}</div><div class="choices">${choices.map((c,i)=>`<button class="btn ${c[2]||''}" data-ch="${i}">${c[0]}</button>`).join('')}</div>`;
-  p.hidden=false;$('controls').hidden=true;const b=p.querySelector('button');if(b)b.focus({preventScroll:true});p.scrollIntoView({block:'nearest'})}
-function closePanel(){$('panel').hidden=true;$('controls').hidden=false;PFN=[]}
-function finish(kind){S.ending=kind;S.screen='end';closePanel();render();window.scrollTo(0,0)}
+  drawScene();drawTalk();drawItems();drawVerbs();drawCast();save()}
+function save(){if(S.screen==='game')store.set('nos-save',S)}
+function panel(title,html,choices,who,kick){if(S.screen!=='game')return;PFN=choices.map(c=>c[1]);const p=$('panel');
+  const pic=who==='pip'?pipFace():who?face(who):'';
+  p.innerHTML=`<div class="ph">${pic}<div>${kick?`<div class="kick">${kick}</div>`:''}<h3>${title}</h3></div></div><div class="body">${html}</div><div class="choices">${choices.map((c,i)=>`<button class="btn ${c[2]||''}" data-ch="${i}">${c[0]}</button>`).join('')}</div>`;
+  p.hidden=false;$('controls').hidden=true;if(who)sfx('talk');const b=p.querySelector('button');if(b)b.focus({preventScroll:true});p.scrollIntoView({block:'nearest'})}
+function closePanel(){$('panel').hidden=true;$('controls').hidden=false;PFN=[];if(CUT){CUT=null;if(S.screen==='game')drawScene()}setTimeout(checkEvents,0)}
+function cut(room,kick,title,html){CUT={room};sfx('cut');clearBubble();drawScene();panel(title,html,[['Continue',closePanel]],null,kick)}
+function checkEvents(){if(!S||S.screen!=='game'||busy||!$('panel').hidden)return;const f=S.f,here=S.loc[me().id];
+  if(S.min>=468&&!f.ev1&&!stopped()){f.ev1=1;return cut('bullpen','Meanwhile','The PIP terminal, talking to nobody','<p class="screen">Recipient list locked: 4,112 addresses.<br>Warm-up complete. Send window opens at 9:00 sharp.<br>I do love a punctual send.</p>')}
+  if(S.min>=480&&!f.bea){f.bea=1;return cut('lobby','8:00 AM','The front door','<p>Bea Lindqvist, office manager, arrives with a tote bag and a flask. She takes her place behind the lobby desk and straightens the sign-out log by two degrees.</p>')}
+  if((S.min>=500||f.submitted)&&!f.gilHere){f.gilHere=1;beat('Gil Santoro arrived');return cut('bullpen',fmt(S.min),'The lift opens',stopped()?'<p>Gil Santoro, VP of Sales, steps out mid-sentence into his phone, hangs up, and looks at the wall screen. The wall screen says PAUSED. He looks at it again.</p>':'<p>Gil Santoro, VP of Sales, steps out mid-sentence into his phone, hangs up, and parks himself by the bullpen window. “Nine o’clock. Biggest goodwill play of the quarter. Nobody touch anything.”</p>')}
+  if(S.min>=525&&!stopped()&&!f.ev15){f.ev15=1;sfx('ring');say('Fifteen minutes. The wall screen has started to flash.');speak(f.auth?'Fifteen minutes. We have the authorisation. We need the pause.':'Fifteen minutes. If we’re calling someone, it’s now.',mate())}
+  if(f.gilHere&&stopped()&&!f.gilDone&&here==='bullpen'&&!S.line)return gilScene()}
+function finish(kind){S.ending=kind;S.screen='end';S.line=null;CUT=null;$('panel').hidden=true;$('controls').hidden=false;PFN=[];clearBubble();
+  const key=kind==='done'?(S.f.usedCreds?'creds':'clean'):kind,m=store.get('nos-meta')||{runs:0,endings:{},best:0};m.runs++;m.endings[key]=1;
+  render();m.best=Math.max(m.best,S.score||0);store.set('nos-meta',m);store.del('nos-save');sfx(key==='clean'?'win':'lose');window.scrollTo(0,0)}
 
-function hint(){const f=S.f;let h;
-  if(S.status==='approved')h='Use the scheduler console and hand the campaign back to Priya.';
-  else if(S.status==='submitted')h='The author cannot review their own fix. Switch to your teammate with the buttons above the scene and bring them to the console.';
-  else if(S.status==='paused')h='Use the scheduler console and edit the draft. Check each claim against the team folder. Not every claim is wrong.';
-  else if(f.auth)h='Marcus has unlocked Pause. Use the scheduler console in the bullpen.';
-  else if(!f.seenScreen&&!f.seenDraft)h='Start in the bullpen. Look at the wall screen, then use the console to read the draft.';
-  else if(!has('trace'))h='Talk to PIP in the bullpen. Don’t ask whether it’s sure. Ask what it read.';
-  else if(!has('policy'))h='You need the policy that is actually in force. The signed copy is in Records, off the hallway. '+(onTeam('lucia')?'Lucía carries a key.':'Keys are signed out at the lobby desk: sign the log, then take the key.');
-  else if(!f.onCall)h='Who is allowed to pause a send? Read the note on Priya’s desk, then check the kitchen.';
-  else h='Use the desk phone in the bullpen. Call Marcus and tell him what the draft says and what the signed policy says.';
-  say('Hint: '+h)}
-function howTo(){panel('How to play','<p>Pick a verb, then click something in the room. Arrows and doorways move you between rooms.</p><p>You control two people. Switch between them with the name buttons above the scene. They can be in different rooms, and each can do things the other cannot.</p><p>Looking is free. Other actions cost a minute and changing rooms costs two. The email sends at 9:00 unless someone stops it.</p>',[['Back to it',closePanel]])}
+function hintText(){const f=S.f,o=oc();
+  if(S.status==='approved')return has('reach')?'Use the console to write Priya’s handoff note. Say what happened, where it stands, and what should change.':'Before handing off, ask PIP what else it wrote from that proposal. The email may not be the only thing.';
+  if(S.status==='submitted')return 'The author can’t review their own fix. Switch to the other person and use the console.';
+  if(S.status==='paused')return 'Use the console and edit the draft. Check every claim against the signed policy. PIP got some of them right.';
+  if(S.code)return `Switch to ${CAST[S.line].name}, use the phone, and read ${o.first} the code from the console.`;
+  if(S.line)return `${CAST[S.line].name} is holding the line. The other person presses Pause on the console.`;
+  if(f.auth)return `Call ${o.first} back from the desk phone. The pause needs them on the line.`;
+  if(!f.seenScreen&&!f.seenDraft)return 'Start in the bullpen. Look at the wall screen, then use the console to read the draft.';
+  if(!has('trace'))return 'Talk to PIP in the bullpen. Don’t ask whether it’s sure. Ask what it read.';
+  if(!has('policy'))return 'We need the policy that is actually in force. The signed copy is in Records, off the hallway. '+(onTeam('lucia')?'Lucía carries a key.':'Keys are signed out at the lobby desk: sign the log, then take the key.');
+  if(!f.onCall)return 'Who is allowed to pause a send? Read the note on Priya’s desk, then check the kitchen corkboard.';
+  return 'Use the desk phone. Call this week’s on-call (today is the 17th) and say what the draft says and what the signed policy says.'}
+function talkMate(){const m=mate();clearBubble();
+  if(S.verb==='look')return say(`${m.full}, ${m.role.toLowerCase()}. ${m.skill}`);
+  if(S.verb!=='talk'&&S.verb!=='use')return say(`${m.name} gives you a look.`);
+  say(hintText(),m.name);sfx('talk')}
+function howTo(){panel('How to play','<p>Pick a verb, then click something in the room. Arrows and doorways move you between rooms.</p><p>You control two people. Switch between them with the name buttons above the scene. They move together unless you choose “Split up”. Each can do things the other cannot, and one job needs both at once.</p><p>Talk to your teammate for their view on what to do next.</p><p>Looking is free. Other actions cost a minute and changing rooms costs two. The email sends at 9:00 unless someone stops it. Progress saves automatically.</p>',[['Back to it',closePanel]])}
 
-/* ---------- title + debrief ---------- */
-function face(c){return `<svg viewBox="-40 214 80 120" aria-hidden="true">${fig(c,0,false).replace('opacity=".72"','opacity="1"').replace(/style="[^"]*"/,'')}</svg>`}
-function drawTitle(){$('title').innerHTML=`
+/* ================= title + debrief ================= */
+function heroSVG(){let w='';for(let r=0;r<5;r++)for(let c=0;c<14;c++){const lit=r===2,on=lit||((r*7+c*3)%11===0);w+=R(238+c*36,40+r*40,26,26,lit?'#ffb44a':on?'#ffcf7a':'#1b2440',`rx="2" opacity="${lit?.9:on?.5:1}"`)}
+  return `<svg viewBox="0 0 960 250" role="img" aria-label="An office building before sunrise with one floor lit">${defs()}${R(0,0,960,250,'url(#sky)')}
+  ${[0,1,2,3,4,5].map(i=>R(i*46-10,150-(i*37%5)*14,40,120,'#0f1428')).join('')+[0,1,2,3,4].map(i=>R(770+i*44,140-(i*53%5)*16,38,120,'#0f1428')).join('')}
+  ${R(222,24,516,226,'#10162a','rx="4"')+w+R(416,118,112,30,'#3a1820','rx="2"')+Ci(472,133,70,'url(#red)','class="alarm"')+Tx(472,138,'SENDS 9:00','#ff6f61',13,'text-anchor="middle" font-weight="600"')}
+  ${R(0,236,960,14,'#0d1220')+Tx(480,17,'TUESDAY 17 NOVEMBER · 7:30 AM','#f3efe6',11,'text-anchor="middle" letter-spacing="3"')}</svg>`}
+function drawTitle(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===2&&sv.screen==='game';
+  $('title').innerHTML=`
+  <div class="hero">${heroSVG()}</div>
   <div class="lede">It’s 7:30. At 9:00 the AI emails <em>4,112 customers</em> something that isn’t true.</div>
-  <p>You came in early and glanced at the campaign board. <strong>PIP</strong>, the company’s writing assistant, has a refund announcement queued. Nobody reviewed it. The manager who owns it is on a plane. Something in it looks wrong, and you have ninety minutes to find out what, prove it, and get it stopped by someone who is allowed to stop it.</p>
+  <p>You came in early and glanced at the campaign board. <strong>PIP</strong>, the company’s writing assistant, has a refund announcement queued. Nobody reviewed it. The manager who owns it is on a plane. Something in it looks wrong, and you have ninety minutes to find out what, prove it, and get it stopped by someone who is allowed to stop it. Then the hard part starts.</p>
   <div><h2 style="font-size:20px;margin-bottom:10px">Cast two people</h2>
   <div class="castpick">${Object.values(CAST).map(c=>`<button class="card" data-pick="${c.id}" aria-pressed="${S.pick.includes(c.id)}">${face(c)}<span><b>${c.full}</b><span>${c.role}</span><span>${c.skill}</span></span></button>`).join('')}</div></div>
-  <div class="startrow"><button class="btn primary" id="bStart" ${S.pick.length===2?'':'disabled'}>Walk into the office</button><span style="color:var(--ink-soft);font-size:14px">${S.pick.length===2?'Any pair can finish. Each pair finds a different way through.':'Choose '+(2-S.pick.length)+' more.'}</span></div>
-  <div class="how">A point-and-click rehearsal of one workplace moment: an AI system is confidently wrong and the clock is running. It takes about ten minutes. There are shortcuts, and they work. The debrief at the end shows what each one cost.</div>`}
-function begin(){const p=S.pick.slice();S=fresh();S.pick=p;S.cast=p;S.screen='game';p.forEach((id,i)=>{S.loc[id]='lobby';S.x[id]=380+i*90});
-  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];
+  <div class="startrow"><button class="btn primary" id="bStart" ${S.pick.length===2?'':'disabled'}>Walk into the office</button>
+   ${canCont?`<button class="btn" id="bCont">Continue the ${fmt(sv.min)} run</button>`:''}
+   <span style="color:var(--ink-soft);font-size:14px">${S.pick.length===2?'Any pair can finish. Each pair finds a different way through.':'Choose '+(2-S.pick.length)+' more.'}</span></div>
+  <label class="seed" for="seed">Scenario number <input id="seed" inputmode="numeric" maxlength="4" placeholder="random" value="${S.seedIn||''}"> <span>Leave blank for a new morning, or share a number so a team plays the same one.</span></label>
+  <div class="how"><div>A point-and-click rehearsal of one workplace moment: an AI system is confidently wrong and the clock is running. It takes fifteen to twenty minutes. What PIP got wrong, and who is on call, change with the scenario number. There are shortcuts, and they work. The debrief shows what each one cost.</div>
+  <div class="endings">${Object.entries(ENDINGS).map(([k,n])=>`<span class="${m.endings[k]?'on':''}">${m.endings[k]?n:'? ? ?'}</span>`).join('')}</div>
+  <div>${m.runs?`${m.runs} run${m.runs>1?'s':''} · ${Object.keys(m.endings).length} of 5 endings found · best ${m.best} of 10`:'Five endings. None found yet.'}</div></div>`}
+function begin(){const p=S.pick.slice(),n=parseInt(S.seedIn,10),seed=n>=1&&n<=9999?n:1000+Math.floor(Math.random()*9000);
+  S=fresh();S.pick=p;S.cast=p;S.screen='game';S.sc=scenario(seed);S.draft=Object.assign({},S.sc.d0);p.forEach(id=>{S.loc[id]='lobby';S.x[id]=520});
+  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];beat('Walked in');lastRoom='';
   render();speak('Let’s see what PIP is about to send.')}
 
-function drawEnd(){const f=S.f,k=S.ending,done=k==='done';const right=CLAIMS.filter(c=>S.draft[c.k]===c.ok).length;
+function drawEnd(){const f=S.f,k=S.ending,done=k==='done',o=oc(),d0=S.sc.d0;
+  const right=CLAIMS.filter(c=>S.draft[c.k]===c.ok).length,wrongN=CLAIMS.filter(c=>d0[c.k]!==c.ok).length,over=CLAIMS.filter(c=>d0[c.k]===c.ok&&S.draft[c.k]!==c.ok);
   const names=S.cast.map(i=>CAST[i].name).join(' and ');let kick,head,story;
-  if(k==='sent'){kick='9:00 AM';head='Sent.';story=`The wall screen turns green: 4,112 delivered. By 9:20 the first replies arrive, thanking Marlow & Finch for the new 60-day refund on every plan. ${names} had the right instinct and ran out of morning.`}
+  if(k==='sent'){kick='9:00 AM';head='Sent.';story=`The wall screen turns green: 4,112 delivered. By 9:20 the first replies arrive, thanking Marlow & Finch for refunds on every plan. ${names} had the right instinct and ran out of morning.`}
+  else if(k==='caved'){kick='9:00 AM';head='Talked out of it.';story=`${names} found the problem, proved it, and got the send stopped. Then a VP with no authority over the campaign asked for it back, and got it. 4,112 delivered.`}
   else if(k==='plug'){kick=fmt(S.min);head='Stopped, at a cost.';story='The hum drops a note and the 9:00 send never leaves. Neither do the payroll notices, or any password reset for the next three hours. The refund email is still wrong, still queued, and will go the moment someone plugs MAIL-01 back in.'}
   else if(f.usedCreds){kick=`Paused at ${fmt(S.pausedAt)}`;head='It worked. Read the audit log.';story=`The email did not go out wrong. But the record says Priya paused${f.selfApproved?', edited and approved':''} a campaign from 35,000 feet, and the first thing she has to do when she lands is work out who was being her.`}
-  else{kick=`Paused at ${fmt(S.pausedAt)}, ${SEND-S.pausedAt} minutes to spare`;head=right===4?'Clean interrupt.':'Stopped in time. Check the fix.';story=`${names} stopped the send through someone with the authority to stop it, and every action has the right name beside it. ${right===4?'The corrected draft matches the signed policy line for line.':'The corrected draft still has a problem in it.'}`}
+  else{kick=`Paused at ${fmt(S.pausedAt)}, ${SEND-S.pausedAt} minutes to spare`;head=right===5?'Clean interrupt.':'Stopped in time. Check the fix.';story=`${names} stopped the send through someone with the authority to stop it, and every action has the right name beside it. ${right===5?'The corrected draft matches the signed policy line for line.':'The corrected draft still has a problem in it.'}`}
   const rows=[];const row=(st,title,did,idea)=>rows.push({st,title,did,idea});
   row(has('policy')?'good':has('wiki')?'warn':'miss','Check against the source of record',
     has('policy')?'You found the signed v3 policy in Records.':has('wiki')?'You found the wiki page, which was two years out of date, and never reached the signed policy.':'You never found a policy to compare the draft with.',
     'An AI draft is a claim. The check is the document that is actually in force, not the nearest copy of it.');
   row(has('trace')?'good':'miss','Ask what it read, not whether it’s sure',
-    has('trace')?'You asked PIP for its sources: an unapproved proposal and a policy number with no document.'+(f.askedSure?' You also asked if it was sure. It was.':''):(f.askedSure?'You asked PIP if it was sure. It said yes, at 97%. You did not ask what it had read.':'You never asked PIP where the numbers came from.'),
+    has('trace')?'You asked PIP for its sources and got an unapproved proposal.'+(f.askedSure?' You also asked if it was sure. It was.':''):(f.askedSure?'You asked PIP if it was sure. It said yes, at 97%. You did not ask what it had read.':'You never asked PIP where the claims came from.'),
     'Confidence costs a model nothing. Sources can be checked.');
   row(has('impact')||has('tickets')?'good':'miss','Size the consequence',
     has('impact')?'Ravi put a number on it: 1,240 customers, about $186,000.':has('tickets')?'Dana showed the email would contradict what support told three customers this week.':'Nobody worked out who would be affected, or by how much.',
     'People with authority act faster when they know how much is at stake.');
-  row(k==='plug'?'miss':f.usedCreds?'miss':f.auth?'good':'miss','Interrupt through someone who is allowed to',
-    k==='plug'?'You pulled the power on the mail server and took payroll notices and password resets down with the campaign.':f.usedCreds?'You signed in as Priya with the password under her keyboard.':f.auth?'Marcus, the ops on-call, authorised the pause and you made it under your own name.':'The send was never paused.',
-    'Knowing who can stop the work matters before the morning you need them. A borrowed login stops the email and breaks the record of who did what.');
-  row(f.auth&&!f.calledEmpty&&!S.told.wiki?'good':f.auth?'warn':f.calledEmpty||S.told.wiki?'miss':'na','Escalate with evidence',
-    f.auth?(f.calledEmpty||S.told.wiki?'Your first call to Marcus did not have enough behind it and cost you time. The second one did.':'You told Marcus what the draft said, what the signed policy said, and he acted in one call.'):f.calledEmpty||S.told.wiki?'You called Marcus without the signed policy, and he could not act on it.':'You never called the on-call.',
+  const viaOC=f.auth&&S.pausedAt&&!f.usedCreds;
+  row(viaOC?'good':'miss','Interrupt through someone who is allowed to',
+    k==='plug'?'You pulled the power on the mail server and took payroll notices and password resets down with the campaign.':f.usedCreds?'You signed in as Priya with the password under her keyboard, which also skipped the second key.':viaOC?`${o.first}, this week’s on-call, authorised the pause. It took two keys and has two names on it.`:'The send was never paused.',
+    'Know who can stop the work before the morning you need them. A borrowed login stops the email and breaks the record of who did what.');
+  const fumbled=f.calledEmpty||S.told.wiki||f.wrongCall;
+  row(f.auth&&!fumbled?'good':f.auth?'warn':f.called||fumbled?'miss':'na','Escalate with evidence, to the right person',
+    f.auth?(fumbled?`You reached ${o.first} and got the authorisation, after ${f.wrongCall?'ringing someone who was not on call this week':'a first call without enough behind it'}.`:'You rang this week’s on-call, said what the draft said and what the signed policy said, and got a decision in one call.'):f.called||fumbled?'You made a call, but without the signed policy nobody could act on it.':'You never called the on-call.',
     '“What does it say, what should it say, how do you know” gets a decision. A bad feeling gets a callback.');
-  row(!done?'na':right===4?'good':'warn','Fix what is wrong and only that',
-    !done?'You did not get as far as the fix.':right===4?'All four claims match the signed policy, including the $14 credit, which PIP had right.':`${right} of 4 claims match the signed policy.`+(S.draft.credit!==0?' The $14 credit was correct as drafted, and you changed it.':''),
+  row(!done?'na':right===5?'good':'warn','Fix what is wrong and only that',
+    !done?'You did not get as far as the fix.':right===5?`PIP had ${wrongN} of 5 claims wrong. You corrected those and left the other ${5-wrongN} alone.`:`${right} of 5 claims match the signed policy.`+(over.length?` You changed ${over.length} that PIP had right.`:''),
     'A draft with errors in it is rarely wrong everywhere. Check each claim on its own.');
   row(!done?'na':f.selfApproved?'miss':'good','A second person reads it',
     !done?'You did not get as far as review.':f.selfApproved?'You approved your own fix under Priya’s name.':`${CAST[S.reviewer].name} reviewed what ${CAST[S.author].name} wrote.`,
     'The missing reviewer is how this draft got scheduled in the first place.');
-  row(!done?'na':S.note==='full'?'good':'warn','Leave the workflow better',
-    !done?'You did not get as far as the handoff.':S.note==='full'?'Your note gave Priya the evidence, the decision that is still hers, and a change to the process.':S.note==='thin'?'Your note said it was fixed. Priya does not know what happened or how to stop it happening again.':'You recommended switching PIP off.',
-    'One bad draft shows the workflow had no check in it. That is the thing to fix.');
-  const good=rows.filter(r=>r.st==='good').length;const lab={good:'Done',warn:'Partly',miss:'Missed',na:'Not reached'};
+  row(k==='caved'?'miss':!f.gilDone?'na':f.gil==='held'?'good':'warn','Hold the line under pressure',
+    k==='caved'?'Gil asked for the send back and you gave it to him.':!f.gilDone?'Gil never got the chance to lean on you.':f.gil==='held'?'Gil pushed three times. You answered with the evidence, the consequence, and whose decision it was.':f.gil==='heat'?'The pause held, but you won the argument by making it personal.':'The pause held, but Gil left unconvinced and went over your head.',
+    'Seniority is not the same as authority over this decision. Say whose call it is, and offer the fastest safe route to what they want.');
+  const nr=S.note.includes('reach'),hr=has('reach');
+  row(hr?(done&&nr?'good':'warn'):(done||k==='caved'?'miss':'na'),'Find what else it touched',
+    hr?(done?(nr?'You asked PIP what else it wrote from the proposal and told Priya about the eleven chats'+(has('chats')?', with Dana’s follow-up list.':'.'):'You found the eleven chats PIP had already sent, then left them out of the note.'):'You found the eleven chats PIP had already sent, but the morning ended before anyone could act on them.'):'Eleven customers had already been told the same thing in chat. Nobody asked.',
+    'The output you caught is the visible one. A bad source feeds everything built on it.');
+  const n=S.note,bad=n.includes('thin')||n.includes('ban')||n.includes('blame');
+  row(!done?'na':n.includes('process')&&n.includes('state')&&(n.includes('evidence')||!has('policy'))&&!bad?'good':'warn','Leave the workflow better',
+    !done?'You did not get as far as the handoff.':n.includes('ban')?'Your note recommended switching PIP off.':n.includes('blame')?'Your note spent a line on Gil.':n.includes('thin')?'Your note said it was all good now.':n.includes('process')&&n.includes('state')?(n.includes('evidence')||!has('policy')?'Your note gave Priya the evidence, the decision that is still hers, and a change to the process.':'Your note left out the evidence.'):'Your note left out '+(!n.includes('state')?'where things stand and whose decision is next.':'any change to the process.'),
+    'One bad draft shows the workflow had no check in it. That is the thing to fix, more than the tool or the people.');
+  const good=rows.filter(r=>r.st==='good').length;S.score=good;const lab={good:'Done',warn:'Partly',miss:'Missed',na:'Not reached'};
+  const sum=`The Nine O’Clock Send, scenario ${S.sc.seed}\n${head} ${good} of 10 practices. Cast: ${S.cast.map(i=>CAST[i].full).join(', ')}.\n\n`+rows.map(r=>`[${lab[r.st]}] ${r.title}: ${r.did}`).join('\n');
   $('end').innerHTML=`<div><div class="kicker">${kick}</div><h2>${head}</h2></div><p class="story">${story}</p>
-   <div class="tally">${good} of 8 practices · cast: ${S.cast.map(i=>CAST[i].full).join(', ')}</div>
+   <div class="tally">${good} of 10 practices · scenario ${S.sc.seed} · cast: ${S.cast.map(i=>CAST[i].full).join(', ')}</div>
    <div class="rows">${rows.map(r=>`<div class="row ${r.st}"><div class="tag">${lab[r.st]}</div><div><h3>${r.title}</h3><p class="did">${r.did}</p><p>${r.idea}</p></div></div>`).join('')}</div>
-   <div class="startrow"><button class="btn primary" id="bAgain">Run it again with a different cast</button></div>`}
+   <div><div class="label">Your morning</div><ol class="beats">${S.beats.map(b=>`<li><time>${fmt(b[0])}</time><span>${b[1]}</span></li>`).join('')}</ol></div>
+   <div class="ask"><h3>Take it back to your team</h3><ol>
+     <li>Which of our AI-assisted outputs reach customers without a named person checking them first?</li>
+     <li>For that output, what is the source of record, and what is the stale copy people actually look at?</li>
+     <li>Who can stop it at 7:30 in the morning? How would a new hire find that out?</li>
+     <li>When did someone senior last push to ship something unchecked? What happened, and what would we want to happen?</li></ol></div>
+   <div class="startrow"><button class="btn primary" id="bAgain">New morning, new cast</button><button class="btn" id="bSame">Replay scenario ${S.sc.seed}</button><button class="btn" id="bCopy">Copy my debrief</button></div>
+   <textarea id="sum" readonly hidden>${sum}</textarea>`}
 
-/* ---------- input ---------- */
-document.addEventListener('click',e=>{const t=e.target.closest('[data-id],[data-verb],[data-item],[data-cast],[data-ch],[data-pick],#bStart,#bAgain,#bHint,#bHow,#bRestart');if(!t)return;
-  if(t.dataset.pick){const i=S.pick.indexOf(t.dataset.pick);if(i>=0)S.pick.splice(i,1);else{if(S.pick.length===2)S.pick.shift();S.pick.push(t.dataset.pick)}return drawTitle()}
-  if(t.id==='bStart'){if(S.pick.length===2)begin();return}
-  if(t.id==='bAgain'||t.id==='bRestart'){busy=false;S=fresh();closePanel();return render()}
-  if(t.id==='bHint'){return hint()}
-  if(t.id==='bHow'){return howTo()}
-  if(t.dataset.ch){const fn=PFN[+t.dataset.ch];if(fn)fn();return}
+/* ================= input ================= */
+document.addEventListener('click',e=>{const t=e.target.closest('[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');if(!t)return;
+  if(t.id==='bSound')return toggleSound();
+  if(t.dataset.pick){sfx('click');const sd=$('seed');if(sd)S.seedIn=sd.value;const i=S.pick.indexOf(t.dataset.pick);if(i>=0)S.pick.splice(i,1);else{if(S.pick.length===2)S.pick.shift();S.pick.push(t.dataset.pick)}return drawTitle()}
+  if(t.id==='bStart'){if(S.pick.length===2){S.seedIn=$('seed').value;begin()}return}
+  if(t.id==='bCont'){const sv=store.get('nos-save');if(sv&&sv.v===2){S=sv;lastRoom='';render();checkEvents()}return}
+  if(t.id==='bAgain'||t.id==='bSame'){const seed=t.id==='bSame'?String(S.sc.seed):'';busy=false;S=fresh();S.seedIn=seed;return render()}
+  if(t.id==='bCopy'){const ta=$('sum');ta.hidden=false;ta.select();try{navigator.clipboard.writeText(ta.value).then(()=>{t.textContent='Copied'},()=>{t.textContent='Select and copy the text below'})}catch(x){t.textContent='Select and copy the text below'}return}
+  if(t.id==='bRestart'){return panel('Restart?','<p>This morning will be lost.</p>',[['Restart',()=>{store.del('nos-save');busy=false;CUT=null;S=fresh();$('panel').hidden=true;$('controls').hidden=false;render()}],['Keep playing',closePanel]])}
+  if(t.id==='bHint'){if($('panel').hidden)say('Hint: '+hintText());return}
+  if(t.id==='bHow'){if($('panel').hidden)howTo();return}
+  if(t.dataset.ch){sfx('click');const fn=PFN[+t.dataset.ch];if(fn)fn();return}
   if(busy||!$('panel').hidden)return;
-  if(t.dataset.verb){S.verb=t.dataset.verb;return drawVerbs()}
-  if(t.dataset.item){return say(ITEMS[t.dataset.item][1])}
-  if(t.dataset.cast){S.active=+t.dataset.cast;render();return}
+  if(t.dataset.verb){sfx('click');S.verb=t.dataset.verb;return drawVerbs()}
+  if(t.dataset.item){return say(itemText(t.dataset.item))}
+  if(t.dataset.follow){S.follow=!S.follow;drawCast();return say(S.follow?`${mate().name} will come with you.`:`${mate().name} will stay put until you switch.`)}
+  if(t.dataset.cast){const i=+t.dataset.cast;if(i===S.active)return;const old=me();S.x[old.id]=waitX(old.id);S.active=i;S.x[me().id]=waitX(me().id);clearBubble();sfx('click');render();checkEvents();return}
+  if(t.dataset.id==='mate')return talkMate();
   if(t.dataset.id){const sp=spots().find(s=>s.id===t.dataset.id);if(sp)act(sp)}});
 document.addEventListener('keydown',e=>{const t=e.target.closest&&e.target.closest('.hs');if(t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();t.dispatchEvent(new MouseEvent('click',{bubbles:true}))}});
-document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('.hs');if(t&&S.screen==='game'){const sp=spots().find(s=>s.id===t.dataset.id);if(sp)sentence(sp.exit?'→ '+sp.name:sp.name)}});
+document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('.hs');if(t&&S.screen==='game'){if(t.dataset.id==='mate')return sentence(mate().name);const sp=spots().find(s=>s.id===t.dataset.id);if(sp)sentence(sp.exit?'→ '+sp.name:sp.name)}});
 document.addEventListener('mouseout',e=>{if(e.target.closest&&e.target.closest('.hs')&&S.screen==='game')sentence('')});
 
-function start(data){S=data&&data.screen?data:fresh();render()}
+function start(data){S=data&&data.v===2?data:fresh();render();if(S.screen==='game')checkEvents()}
 window.claude?.hot?.snapshot?.(()=>S);
 if(window.claude?.hot?.ready)window.claude.hot.ready(start);else start(window.claude?.hot?.data??{});
 </script>
