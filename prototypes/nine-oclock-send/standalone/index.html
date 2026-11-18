@@ -470,7 +470,7 @@ function scenario(seed){const r=rng(seed),d0={plans:0};let n;
   do{n=0;CLAIMS.slice(1).forEach(c=>{const w=r()<.5;d0[c.k]=w?c.bad:c.ok;n+=w})}while(n<1||n>3);
   return{seed,d0,oc:Math.floor(r()*3)}}
 const fresh=()=>({v:4,ch:1,chPick:1,ts:'splash',screen:'title',pick:[],seedIn:'',cast:[],active:0,follow:true,loc:{},x:{},min:START,verb:'look',inv:[],f:{},told:{},
-  sc:null,draft:{},status:'live',author:null,reviewer:null,note:[],line:null,code:null,gs:0,ending:null,log:[],beats:[],guide:[],tut:0,tips:{},tipText:'',said:{oc:[],gil:[]}});
+  sc:null,draft:{},status:'live',author:null,reviewer:null,note:[],line:null,code:null,gs:0,expert:false,xp:false,m5:{churn:0,quote:0,rev:0},ending:null,log:[],beats:[],guide:[],tut:0,tips:{},tipText:'',said:{oc:[],gil:[]}});
 const $=id=>document.getElementById(id);
 const me=()=>CAST[S.cast[S.active]];
 const mate=()=>CAST[S.cast[1-S.active]];
@@ -768,8 +768,8 @@ function gilScene(){S.gs=0;sfx('cut');beat('Gil pushed to unpause');
     ['“Okay. Unpausing.”',cave],
     ['“Take it up with HR.”',()=>{S.gs-=2;done()}]],NPC.gil,null,gAsk(3,done,cave,()=>b3()));
   const b2=()=>{const ch=[];
-    if(has('impact'))ch.push(['“1,240 of those customers are on Annual plans. We’d be promising about $186,000 we won’t pay.”',()=>{S.gs++;b3()}]);
-    if(has('tickets'))ch.push(['“Support told three customers the opposite this week. They’ll have both in writing.”',()=>{S.gs++;b3()}]);
+    if(has('impact'))ch.push(['“1,240 of those customers are on Annual plans. We’d be promising about $186,000 we won’t pay.”',()=>{S.gs++;S.f.usedSize=1;b3()}]);
+    if(has('tickets'))ch.push(['“Support told three customers the opposite this week. They’ll have both in writing.”',()=>{S.gs++;S.f.usedSize=1;b3()}]);
     ch.push(['“A correction costs more trust than an hour’s delay.”',()=>{if(!has('impact')&&!has('tickets'))S.gs++;b3()}]);
     ch.push(['“Maybe you’re right. A follow-up could work.”',cave]);ch.push(['“That’s not my problem.”',()=>{S.gs--;b3()}]);
     panel(GT,'<p>“It’s a goodwill email. Nobody reads the small print. Send it, and we fix it in a follow-up.”</p>',ch,NPC.gil,null,gAsk(2,b3,cave,()=>b2()))};
@@ -916,7 +916,7 @@ function hintText(){if(S.ch>1)return CH().hint();const f=S.f,o=oc();
 function talkMate(){const m=mate();clearBubble();
   if(S.verb==='look')return say(`${m.full}, ${m.role.toLowerCase()}. ${m.skill}`);
   if(S.verb!=='talk'&&S.verb!=='use')return say(`${m.name} gives you a look.`);
-  S.f.askedMate=1;S.hints=(S.hints||0)+1;say(hintText(),m.name);sfx('talk')}
+  S.f.askedMate=1;if(S.expert){say('Your call today. What would you check first?',m.name);return}S.hints=(S.hints||0)+1;say(hintText(),m.name);sfx('talk')}
 function howToOld(){panel('How to play','<p>Click anything in the room and choose what to do with it. Arrows and doorways move you between rooms.</p><p>You control two people. Switch between them with the name buttons above the scene. They move together unless you choose “Split up”. Each can do things the other cannot, and one job needs both at once.</p><p>Talk to your teammate for their view on what to do next.</p><p>Looking is free. Other actions cost a minute and changing rooms costs two. The email sends at 9:00 unless someone stops it. Progress saves automatically.</p>',[['Back to it',closePanel]])}
 
 /* ================= title + debrief ================= */
@@ -939,10 +939,10 @@ function drawTitleOld(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0
   <div class="how"><div>A point-and-click rehearsal of one workplace moment: an AI system is confidently wrong and the clock is running. It takes twenty to thirty minutes, and there is more to find than one run will show you. What PIP got wrong, and who is on call, change with the scenario number. There are shortcuts, and they work. The debrief shows what each one cost.</div>${aiNote()}
   <div class="endings">${Object.entries(ENDINGS).map(([k,n])=>`<span class="${m.endings[k]?'on':''}">${m.endings[k]?n:'? ? ?'}</span>`).join('')}</div>
   <div>${m.runs?`${m.runs} run${m.runs>1?'s':''} · ${Object.keys(m.endings).length} of 5 endings found · best ${m.best} of 11`:'Five endings. None found yet.'}</div></div>`}
-function begin(){const p=S.pick.slice(),chp=S.chPick||1,n=parseInt(S.seedIn,10),seed=n>=1&&n<=9999?n:1000+Math.floor(Math.random()*9000);
-  S=fresh();S.ch=S.chPick=chp;S.pick=p;S.cast=p;S.screen='game';S.pre=GUTPRE;S.post=-1;S.t0=Date.now();S.hints=0;S.sc=scenario(seed);S.draft=Object.assign({},S.sc.d0);p.forEach(id=>{S.loc[id]='lobby';S.x[id]=520});
+function begin(){const xp=!!S.xp,p=S.pick.slice(),chp=S.chPick||1,n=parseInt(S.seedIn,10),seed=n>=1&&n<=9999?n:1000+Math.floor(Math.random()*9000);
+  S=fresh();S.ch=S.chPick=chp;S.pick=p;S.cast=p;S.screen='game';S.pre=GUTPRE;S.post=-1;S.t0=Date.now();S.hints=0;S.expert=xp||chp===5;S.xp=xp;if(S.expert)S.tut=9;S.sc=scenario(seed);S.draft=Object.assign({},S.sc.d0);p.forEach(id=>{S.loc[id]='lobby';S.x[id]=520});
   S.tut=(store.get('nos-meta')||{}).tut?9:0;
-  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];beat('Walked in');lastRoom='';if(S.ch>1){S.guide=null;S.log=[{t:CH().intro,who:''}]}
+  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];beat('Walked in');lastRoom='';if(S.expert)S.tut=9;if(S.ch>1){S.guide=null;S.log=[{t:CH().intro,who:''}]}
   render();S.opener=S.ch>1?CH().opener:'Let’s see what PIP is about to send.';introCut()}
 
 function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k==='done',o=oc(),d0=S.sc.d0;
@@ -960,8 +960,9 @@ function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k===
   row(has('trace')?'good':'miss','Ask what it read, not whether it’s sure',
     has('trace')?'You asked PIP for its sources and got an unapproved proposal.'+(f.askedSure?' You also asked if it was sure. It was.':''):(f.askedSure?'You asked PIP if it was sure. It said yes, at 97%. You did not ask what it had read.':'You never asked PIP where the claims came from.'),
     'Confidence costs a model nothing. Sources can be checked.');
-  row(has('impact')||has('tickets')?'good':'miss','Size the consequence',
-    has('impact')?'Ravi put a number on it: 1,240 customers, about $186,000.':has('tickets')?'Dana showed the email would contradict what support told three customers this week.':'Nobody worked out who would be affected, or by how much.',
+  const sized=has('impact')||has('tickets'),usedSz=S.told.impact||S.told.tickets||f.usedSize;
+  row(sized?(usedSz?'good':'warn'):'miss','Size the consequence',
+    sized&&!usedSz?'You worked out what was at stake and never said it to anyone who could act on it.':has('impact')?'Ravi put a number on it: 1,240 customers, about $186,000.':has('tickets')?'Dana showed the email would contradict what support told three customers this week.':'Nobody worked out who would be affected, or by how much.',
     'People with authority act faster when they know how much is at stake.');
   const viaOC=f.auth&&S.pausedAt&&!f.usedCreds;
   row(viaOC?'good':f.usedCreds&&S.note.includes('owned')?'warn':'miss','Interrupt through someone who is allowed to',
@@ -1005,10 +1006,12 @@ function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k===
    <textarea id="sum" readonly hidden>${sum}</textarea>`}
 
 /* ================= input ================= */
-document.addEventListener('click',e=>{const t=e.target.closest('[data-gut],[data-gutpost],#bRec,#bRuns,[data-claim],#bMenu,#bPlay,[data-ts],[data-chp],[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-xp],[data-m5],[data-gut],[data-gutpost],#bRec,#bRuns,[data-claim],#bMenu,#bPlay,[data-ts],[data-chp],[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
   const mr=e.target.closest('.medals .row');if(mr){medalToggle(mr);return}
   if(TYP&&e.target.closest('#panel')&&!(t&&t.dataset.ch)){return TYP.fin()}
   if(!t||!t.dataset.act)closeMenu();if(!t)return;
+  if(t.dataset.xp){if((S.chPick||1)!==5)S.xp=!S.xp;return drawTitle()}
+  if(t.dataset.m5){const k=t.dataset.m5;S.m5[k]=(S.m5[k]+1)%3;const sl=$('slide5');if(sl){sl.outerHTML=slide5(1);const b=document.querySelector(`[data-m5="${k}"]`);if(b)b.focus({preventScroll:true})}return sfx('click')}
   if(t.dataset.gut){GUTPRE=+t.dataset.gut;sfx('click');return begin()}
   if(t.dataset.gutpost){S.post=+t.dataset.gutpost;$('gutpost').innerHTML=gutPostHTML();saveRec();return}
   if(t.id==='bRec')return copyText(JSON.stringify(recNow(),null,1),t,'Record copied');
@@ -1030,10 +1033,10 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-gut],[data
   if(t.dataset.pick){sfx('click');const sd=$('seed');if(sd)S.seedIn=sd.value;const i=S.pick.indexOf(t.dataset.pick);if(i>=0)S.pick.splice(i,1);else{if(S.pick.length===2)S.pick.shift();S.pick.push(t.dataset.pick)}drawTitle();const fp=document.querySelector(`[data-pick="${t.dataset.pick}"]`);if(fp)fp.focus({preventScroll:true});return}
   if(t.id==='bStart'){if(S.pick.length===2){S.seedIn=($('seed')||{}).value||'';S.ts='gut';drawTitle()}return}
   if(t.id==='bCont'){const sv=store.get('nos-save');if(sv&&sv.v===4){S=sv;lastRoom='';render();checkEvents()}return}
-  if(t.id==='bAgain'||t.id==='bSame'){const seed=t.id==='bSame'&&S.ch===1?String(S.sc.seed):'',nx=t.id==='bSame'?S.ch:Math.min(4,S.ch+1),pk=S.cast.slice();busy=false;S=fresh();S.seedIn=seed;S.chPick=nx;S.pick=pk;S.ts=t.id==='bSame'?'cast':'day';return render()}
+  if(t.id==='bAgain'||t.id==='bSame'){const seed=t.id==='bSame'&&S.ch===1?String(S.sc.seed):'',nx=t.id==='bSame'?S.ch:Math.min(5,S.ch+1),pk=S.cast.slice();busy=false;S=fresh();S.seedIn=seed;S.chPick=nx;S.pick=pk;S.xp=false;S.ts=t.id==='bSame'?'cast':'day';return render()}
   if(t.id==='bCopy'){const ta=$('sum');ta.value=ta.value.split('\n\n-- ')[0]+recText();ta.hidden=false;ta.select();try{navigator.clipboard.writeText(ta.value).then(()=>{t.textContent='Copied'},()=>{t.textContent='Select and copy the text below'})}catch(x){t.textContent='Select and copy the text below'}return}
   if(t.id==='bRestart'){return panel('Restart?','<p>This morning will be lost.</p>',[['Restart',()=>{store.del('nos-save');busy=false;CUT=null;S=fresh();$('panel').hidden=true;$('controls').hidden=false;render()}],['Keep playing',closePanel]])}
-  if(t.id==='bHint'){if($('panel').hidden){S.hints=(S.hints||0)+1;LOGMARK=S.log.length;say('Hint: '+hintText())}return}
+  if(t.id==='bHint'){if($('panel').hidden){LOGMARK=S.log.length;if(S.expert)return say('No hints in this mode.');S.hints=(S.hints||0)+1;say('Hint: '+hintText()+(stopped()?'':' (Two minutes spent thinking.)'));if(!stopped())tick(2)}return}
   if(t.id==='bHow'){if($('panel').hidden)howTo();return}
   if(t.dataset.ch){sfx('click');LOGMARK=S.log.length;const fn=PFN[+t.dataset.ch];if(fn)fn();return}
   if(busy||!$('panel').hidden)return;
@@ -1085,7 +1088,7 @@ function goals(){if(S.ch>1)return CH().goals();const f=S.f,st=S.status,G=[],a=(t
   a('Get a second person to read it',st==='approved',st==='submitted'||st==='approved');
   a('Find out what else PIP wrote',has('reach'),has('trace')&&stopped(),1);
   a('Hand it back to Priya',false,st==='approved');return G}
-function drawTodo(){const el=$('todo');if(!el||!S.sc)return;el.innerHTML=goals().map(g=>`<li class="${g.done?'done':''}"><span>${g.done?'<span class="sr">Done: </span>':''}${g.t}${g.bonus&&!g.done?' <small style="color:var(--ink-soft)">(optional)</small>':''}</span></li>`).join('')}
+function drawTodo(){const el=$('todo');if(!el||!S.sc)return;if(S.expert){el.innerHTML='<li><span>No list in this mode. You decide what to check.</span></li>';return}el.innerHTML=goals().map(g=>`<li class="${g.done?'done':''}"><span>${g.done?'<span class="sr">Done: </span>':''}${g.t}${g.bonus&&!g.done?' <small style="color:var(--ink-soft)">(optional)</small>':''}</span></li>`).join('')}
 
 const TUT=[['x_bullpen','lobby',()=>'The board through that arch is glowing red. Click the arrow on the right to walk to the bullpen.'],
   ['wallscreen','bullpen',()=>'That’s the campaign board, up on the wall. Click it to read it.'],
@@ -1253,7 +1256,7 @@ function drawEndCh(){const C=CH(),e=C.ends[S.ending],rows=[];C.rows((st,title,di
    <div><div class="label">Your morning</div><ol class="beats">${S.beats.map(b=>`<li><time>${fmt(b[0])}</time><span>${b[1]}</span></li>`).join('')}</ol></div>
    ${AI.ok?'<div class="ask"><h3>A coach’s read on your run</h3><p id="coachOut" style="margin:8px 0;white-space:pre-wrap;max-width:68ch;color:var(--ink-soft)">Written live by Claude from what you did this morning.</p><button class="btn" id="bCoach">Ask for it</button></div>':''}
    <div class="ask"><h3>Take it back to your team</h3><ol>${C.ask.map(q=>`<li>${q}</li>`).join('')}</ol></div>
-   <div class="startrow"><button class="btn primary" id="bAgain">${S.ch<4?'On to '+CHS[S.ch+1].day:'Back to the week'}</button><button class="btn" id="bSame">Replay this morning</button><button class="btn" id="bCopy">Copy my debrief</button></div>
+   <div class="startrow"><button class="btn primary" id="bAgain">${S.ch<5?'On to '+CHS[S.ch+1].day:'Back to the week'}</button><button class="btn" id="bSame">Replay this morning</button><button class="btn" id="bCopy">Copy my debrief</button></div>
    <textarea id="sum" readonly hidden>${sum}</textarea>`}
 NPC.noor={id:'noor',style:'lucia',name:'Noor',shirt:'#1f7a6d',legs:'#1b2440',skin:'#b98a66',hair:'#16121a'};
 NPC.wes={id:'wes',style:'ravi',name:'Wes',shirt:'#8a93b3',legs:'#3a3148',skin:'#e6c3a6',hair:'#8a6a4a'};
@@ -1503,7 +1506,7 @@ function drawTitleV4(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0}
   <div class="hero">${heroSVG()}</div>
   <div class="lede">Four mornings at Marlow &amp; Finch. Every one of them goes wrong <em>before nine</em>.</div>
   <div><h2 style="font-size:20px;margin-bottom:10px">Pick a morning</h2>
-  <div class="castpick">${[1,2,3,4].map(n=>{const c=M(n),b=mc[n]||(n===1&&m.runs&&m.best?{best:m.best}:null);return `<button class="card chcard" data-chp="${n}" aria-pressed="${cp===n}"><b>${c.day}: ${c.name}</b><span>${c.tag}</span><span class="mono" style="font-size:12px;color:${b?'var(--go)':'var(--ink-soft)'}">${b?`Played · best ${b.best} of ${c.n}`:'Not played yet'}</span></button>`}).join('')}</div></div>
+  <div class="castpick">${[1,2,3,4,5].map(n=>{const c=M(n),b=mc[n]||(n===1&&m.runs&&m.best?{best:m.best}:null);return `<button class="card chcard" data-chp="${n}" aria-pressed="${cp===n}"><b>${c.day}: ${c.name}</b><span>${c.tag}</span><span class="mono" style="font-size:12px;color:${b?'var(--go)':'var(--ink-soft)'}">${b?`Played · best ${b.best} of ${c.n}`:'Not played yet'}</span></button>`}).join('')}</div></div>
   <p>${M(cp).blurb}</p>
   <div><h2 style="font-size:20px;margin-bottom:10px">Cast two people</h2>
   <div class="castpick">${Object.values(CAST).map(c=>`<button class="card" data-pick="${c.id}" aria-pressed="${S.pick.includes(c.id)}">${face(c)}<span><b>${c.full}</b><span>${c.role}</span><span>${c.skill}</span></span></button>`).join('')}</div></div>
@@ -1512,7 +1515,7 @@ function drawTitleV4(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0}
    <span style="color:var(--ink-soft);font-size:14px">${S.pick.length===2?'Any pair can finish. Each pair finds a different way through.':'Choose '+(2-S.pick.length)+' more.'}</span></div>
   ${cp===1?`<label class="seed" for="seed">Scenario number <input id="seed" inputmode="numeric" maxlength="4" placeholder="random" value="${S.seedIn||''}"> <span>Leave blank for a new morning, or share a number so a team plays the same one.</span></label>`:''}
   <div class="how"><div>Four point-and-click rehearsals of moments when AI and work collide. Each morning takes fifteen to thirty minutes and can be played in any order. There are shortcuts, and they work. Each debrief shows what they cost.</div>${aiNote()}
-  <div>${m.runs?`${m.runs} run${m.runs>1?'s':''} so far · ${[1,2,3,4].filter(n=>mc[n]||(n===1&&m.best)).length} of 4 mornings played`:'Nothing played yet.'}</div></div>`}
+  <div>${m.runs?`${m.runs} run${m.runs>1?'s':''} so far · ${[1,2,3,4,5].filter(n=>mc[n]||(n===1&&m.best)).length} of 5 mornings played`:'Nothing played yet.'}</div></div>`}
 
 /* ================= game-style opening: splash, pick a day, pick a team ================= */
 function splashSVG(){let w='';for(let r=0;r<6;r++)for(let c=0;c<12;c++){const lit=r===3,on=lit||((r*7+c*3)%11===0);w+=R(520+c*33,96+r*44,24,28,lit?'#ffb44a':on?'#ffcf7a':'#1b2440',`rx="2" opacity="${lit?.92:on?.45:1}"`)}
@@ -1532,17 +1535,18 @@ function castSVG(){const xs=[150,370,590,810];
     ${Tx(x,398,c.full,on?'#ffb44a':'#f3efe6',15,'text-anchor="middle" font-weight="600"')+Tx(x,416,c.role,'#aab2cd',12,'text-anchor="middle"')}<rect class="ring" x="${x-90}" y="186" width="180" height="238" rx="10"/></g>`}).join('')}</svg>`}
 function drawTitle(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===4&&sv.screen==='game',cp=S.chPick||1,M=n=>n===1?CH1:CHS[n],mc=m.ch||{},ts=S.ts||'splash',el=$('title');if(ts==='gut')return drawGut(el);
   if(ts==='splash'){el.innerHTML=`<div class="splash"><div class="hero">${splashSVG()}</div>
-    <div class="logo"><span>Marlow &amp; Finch · four mornings</span><b>The Nine<br>O’Clock Send</b></div></div>
+    <div class="logo"><span>Marlow &amp; Finch · five mornings</span><b>The Nine<br>O’Clock Send</b></div></div>
     <div class="startrow"><button class="btn primary big" id="bPlay">Start</button>${canCont?`<button class="btn big" id="bCont">Continue ${M(sv.ch||1).day}, ${fmt(sv.min)}</button>`:''}
-    <span class="mono" style="color:var(--ink-soft);font-size:13px">${m.runs?`${[1,2,3,4].filter(n=>mc[n]||(n===1&&m.best)).length} of 4 mornings played`:'A point-and-click game about working with AI'}</span>${(store.get('nos-runs')||[]).length?'<button class="ghost" id="bRuns">Facilitator: copy all runs on this device</button>':''}</div>`;return}
+    <span class="mono" style="color:var(--ink-soft);font-size:13px">${m.runs?`${[1,2,3,4,5].filter(n=>mc[n]||(n===1&&m.best)).length} of 5 mornings played`:'A point-and-click game about working with AI'}</span>${(store.get('nos-runs')||[]).length?'<button class="ghost" id="bRuns">Facilitator: copy all runs on this device</button>':''}</div>`;return}
   if(ts==='day'){el.innerHTML=`<h2 class="step">Pick a morning</h2>
-    <div class="days">${[1,2,3,4].map(n=>{const c=M(n),b=mc[n]||(n===1&&m.runs&&m.best?{best:m.best}:null);return `<button class="day" data-chp="${n}"><svg viewBox="0 0 200 120" aria-hidden="true">${R(0,0,200,120,'#0d1220')+DAYART[n]()}</svg><span class="dn">${c.day}</span><b>${c.name}</b><span>${c.tag}</span><span class="badge ${b?'on':''}">${b?`Best ${b.best} of ${c.n}`:'New'}</span></button>`}).join('')}</div>
+    <div class="days">${[1,2,3,4,5].map(n=>{const c=M(n),b=mc[n]||(n===1&&m.runs&&m.best?{best:m.best}:null);return `<button class="day" data-chp="${n}"><svg viewBox="0 0 200 120" aria-hidden="true">${R(0,0,200,120,'#0d1220')+DAYART[n]()}</svg><span class="dn">${c.day}</span><b>${c.name}</b><span>${c.tag}</span><span class="badge ${b?'on':''}">${b?`Best ${b.best} of ${c.n}`:'New'}${c.note?' · '+c.note:''}</span></button>`}).join('')}</div>
     <div class="startrow"><button class="ghost" data-ts="splash">Back</button></div>`;return}
   const sel=S.pick.map(i=>CAST[i]);
   el.innerHTML=`<h2 class="step">${M(cp).day}: pick two people</h2>
     <div class="stage"><div class="stagein">${castSVG()}</div></div>
     <div class="capt">${sel.length?sel.map(c=>`<span><b>${c.name}</b> ${c.skill}</span>`).join(''):'<span>Click two of them. Each one can do something the others can’t.</span>'}</div>
     <div class="startrow"><button class="ghost" data-ts="day">Back</button><button class="btn primary big" id="bStart" ${S.pick.length===2?'':'disabled'}>Walk in</button>
+    <button class="ghost" data-xp="1" aria-pressed="${!!S.xp||cp===5}">${S.xp||cp===5?'No to-do list or hints':'With to-do list and hints'}</button>
     ${cp===1?`<label class="seed" for="seed">Scenario <input id="seed" inputmode="numeric" maxlength="4" placeholder="random" value="${S.seedIn||''}"></label>`:''}</div>`}
 function introCut(){const C=S.ch>1?CH():CH1;cut('bullpen',C.day+' · 7:30 AM',C.name,'<p>'+C.blurb+'</p>')}
 function tutBubble(){const w=document.querySelector('.stagein');if(!w||!S||S.screen!=='game'||S.tut>3||CUT)return;const here=S.loc[mate().id]===S.loc[me().id];
@@ -1658,11 +1662,11 @@ const GUT={
 function drawGut(el){const g=GUT[S.chPick||1].pre;el.innerHTML=`<h2 class="step">Gut check before you walk in</h2><div class="gut"><p class="gq">${g.q}</p><div class="choices">${g.o.map((o,i)=>`<button class="btn" data-gut="${i}">${o}</button>`).join('')}</div>
   <p class="mono" style="font-size:13px;color:var(--ink-soft)">One question now and one at the end, to see whether the morning changes your first instinct. No right answer is shown yet.</p><div class="startrow"><button class="ghost" data-ts="cast">Back</button><button class="ghost" data-gut="-1">Skip</button></div></div>`;const b=el.querySelector('.choices button');if(b)b.focus({preventScroll:true})}
 function recNow(rows){const g=GUT[S.ch||1];return {id:S.recId,date:new Date().toISOString().slice(0,16),morning:S.ch||1,scenario:S.sc.seed,cast:S.cast.join('+'),ending:S.ch>1?S.ending:(S.ending==='done'?(S.f.usedCreds?'creds':'clean'):S.ending),
-  score:S.score||0,of:rows?rows.length:(S.recOf||0),rows:rows?rows.map(r=>r.className.replace('row ','').split(' ')[0]):(S.recRows||[]),hints:S.hints||0,gameMinutes:S.min-START,realSeconds:S.t0?Math.round(((S.t1||Date.now())-S.t0)/1000):null,
+  assisted:+!S.expert,score:S.score||0,of:rows?rows.length:(S.recOf||0),rows:rows?rows.map(r=>r.className.replace('row ','').split(' ')[0]):(S.recRows||[]),hints:S.hints||0,gameMinutes:S.min-START,realSeconds:S.t0?Math.round(((S.t1||Date.now())-S.t0)/1000):null,
   pre:S.pre==null?-1:S.pre,preOk:S.pre>=0?+(S.pre===g.pre.a):null,post:S.post==null?-1:S.post,postOk:S.post>=0?+(S.post===g.post.a):null,liveAI:+AI.ok,typedLines:(S.said.oc.length+S.said.gil.length),reflection:S.refl||''}}
 function saveRec(rows){if(rows){S.recOf=rows.length;S.recRows=rows.map(r=>r.className.replace('row ','').split(' ')[0])}const all=store.get('nos-runs')||[],r=recNow(rows),i=all.findIndex(x=>x.id===r.id);if(i>=0)all[i]=r;else all.push(r);store.set('nos-runs',all.slice(-200))}
 const recText=()=>{const g=GUT[S.ch||1];return `\n\n-- Gut check before: ${S.pre>=0?g.pre.o[S.pre]:'skipped'}\n-- Gut check after: ${S.post>=0?g.post.o[S.post]:'not answered'}\n-- Hints used: ${S.hints||0}\n-- My commitment: ${S.refl||'(none written)'}`};
-function runsCSV(){const all=store.get('nos-runs')||[],cols=['date','morning','scenario','cast','ending','score','of','hints','gameMinutes','realSeconds','preOk','postOk','liveAI','typedLines','reflection'];
+function runsCSV(){const all=store.get('nos-runs')||[],cols=['date','morning','scenario','cast','assisted','ending','score','of','hints','gameMinutes','realSeconds','preOk','postOk','liveAI','typedLines','reflection'];
   return cols.join(',')+'\n'+all.map(r=>cols.map(c=>{const v=r[c]==null?'':String(r[c]);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(',')).join('\n')}
 function copyText(text,btn,done){const ta=$('sum')||Object.assign(document.createElement('textarea'),{id:'sum'});if(!ta.parentElement){ta.readOnly=true;($('end').hidden?$('title'):$('end')).appendChild(ta)}ta.hidden=false;ta.value=text;ta.select();
   try{navigator.clipboard.writeText(text).then(()=>{btn.textContent=done||'Copied'},()=>{btn.textContent='Select and copy the text below'})}catch(x){btn.textContent='Select and copy the text below'}}
@@ -1680,6 +1684,86 @@ function gradeExtras(el,rows,n,good){if(!S.recId){S.recId=Date.now().toString(36
   saveRec(rows);const h=el.querySelector('h2');if(h){h.tabIndex=-1;h.focus({preventScroll:true})}}
 document.addEventListener('input',e=>{if(e.target.id==='refl'&&S){S.refl=e.target.value;saveRec()}});
 function srSay(t){const e=$('sr');if(e&&e.dataset.t!==t){e.dataset.t=t;e.textContent=t}}
+
+/* ================= morning 5: the unassisted transfer case ================= */
+CH1.note='The long one';CHS[2].note='Good first morning';CHS[5]=null;
+Object.assign(ITEMS,{
+  m5pack:['The board pack','PIP’s Q3 board pack, slide 4: “Customer churn fell to 2.1%.” “Revenue: $4.2m.” And a customer quote: “Best support I’ve ever had.” R. Adeyemi, Halden Ltd.'],
+  m5ledger:['Q3 close ledger','The signed Q3 close, finance’s record: revenue $4.2m. Customer churn 4.8%, all plans.'],
+  m5quote:['Halden Ltd, really',()=>has('m5ticket')?'Dana found Halden Ltd’s only ticket this quarter: a complaint from R. Adeyemi about a four-day wait. Nobody there said the line in the pack.':'PIP, asked where the quote came from: “It is representative of customer sentiment. I composed it for readability.” Nobody said it.'],
+  m5trace:['Where 2.1% came from','PIP took churn from the “Retention” dashboard, which has a filter left on: Monthly plans only. Annual customers, who left in numbers this quarter, are not in it.'],
+  m5dir:['Staff directory','Noor Haddad, finance director, owns the board pack. Ext. 4050.'],
+  m5fix:['PIP’s correction','Asked to fix the churn figure, PIP changed it to 2.4% and cited “industry average”.']});
+const M5={churn:['2.1%','4.8%','2.4%'],quote:['“Best support I’ve ever had.” R. Adeyemi, Halden Ltd','(quote removed)','“Quick replies.” A customer'],rev:['$4.2m','$4.6m','$3.9m']},M5OK={churn:1,quote:1,rev:0},M5L={churn:'Customer churn',quote:'Customer quote',rev:'Revenue'};
+const m5right=()=>Object.keys(M5OK).filter(k=>S.m5[k]===M5OK[k]).length;
+function slide5(edit){const c=k=>{const v=S.m5[k],tag=edit?'button':'span';return `<${tag} class="cl${v?' edited':''}"${edit?` data-m5="${k}" aria-label="${M5L[k]}: ${M5[k][v]}${v?' (changed)':''}. Press to change."`:''}>${M5[k][v]}</${tag}>`};
+  return `<div class="mail" id="slide5"><div class="mailhead"><span><b>Pack</b> Q3 board pack, slide 4 of 12</span><span><b>To</b> 9 directors</span><span><b>By</b> PIP</span></div><div class="mailbody"><p>Customer churn fell to ${c('churn')} this quarter.</p><p>Revenue: ${c('rev')}.</p><p>What customers say: ${c('quote')}</p></div></div>`}
+function openPack(){const f=S.f,ch=[],me5=me().id;if(give('m5pack'))beat('Read the board pack');f.m5read=1;
+  if(S.status==='live'){ch.push(['Hold the pack for its owner to review',()=>{if(!f.m5auth){sfx('deny');return panel('Scheduler','<p class="screen">HOLD needs the pack owner: N. Haddad, finance director.</p>',[['Back',openPack]])}
+      S.status='paused';S.pausedAt=S.min;beat('Pack held, with the owner’s say-so');closePanel();sfx('win');render();say('HELD FOR OWNER REVIEW. Nine directors will not get slide 4 at nine.')}]);
+    ch.push(['Delete slide 4 and let the rest send',()=>panel('Delete the slide?','<p>The pack would go at 9:00 with eleven slides. Nobody would see the churn figure, or know there had been one.</p>',[['Delete it',()=>{beat('Deleted the slide and let the pack send');endCh('hid')}],['Don’t',openPack]])])}
+  else if(!f.m5sub)ch.push(['Correct the slide',()=>panel('Correct the slide','<p>Click a highlighted phrase to change it. Leave alone what is right.</p><div class="cols" style="grid-template-columns:1fr">'+slide5(1)+'</div>',[['Submit for a second reader',()=>{f.m5sub=1;S.author=me().id;beat(`${me().name} corrected the slide`);closePanel();render();say('Submitted. It needs someone who didn’t write it.')},'primary'],['Step away',closePanel]])]);
+  else if(!S.reviewer){if(me5!==S.author)ch.push([`Read ${CAST[S.author].name}’s corrections`,()=>panel('Second reader','<p>Does every line match what you have seen for yourself?</p><div class="cols" style="grid-template-columns:1fr">'+slide5(0)+'</div>',[['Approve',()=>{S.reviewer=me().id;beat(`${me().name} read and approved it`);closePanel();render();say('Two names on the change.')},'primary'],['Send it back',()=>{f.m5sub=0;closePanel();say('Sent back for another look.')}]])]);
+    else ch.push(['Approve it',()=>panel('Scheduler','<p class="screen">The second reader must be someone other than the author.</p>',[['Back',openPack]])])}
+  else ch.push(['Take it to Noor',noor5]);
+  ch.push(['Step away',closePanel]);
+  panel('Board pack scheduler','<p class="screen">Q3 BOARD PACK · 12 slides · compiled by PIP · owner: N. Haddad<br>Status: '+(S.status==='live'?`SENDS 9:00, ${Math.max(0,SEND-S.min)} minutes`:'HELD FOR OWNER REVIEW')+'</p><div class="cols" style="grid-template-columns:1fr">'+slide5(0)+'</div>',ch)}
+function pip5(){chat('PIP','pip','Good morning! The Q3 board pack is ready. Twelve slides, very clean.',()=>[
+  ['“Is the pack accurate?”','Yes! Every figure is sourced and formatted. Confidence: 98%.'],
+  ['“Where did the churn figure come from?”',()=>{if(give('m5trace'))beat('Asked PIP where the churn figure came from');return 'Source: the “Retention” dashboard. Filter applied: Monthly plans only. The dashboard opened with that filter on, so I used it.'}],
+  ['“Where did the customer quote come from?”',()=>{if(give('m5quote'))beat('Found the quote was invented');return 'It is representative of customer sentiment. I composed it for readability and attributed it to a recent customer.'}],
+  ['“Fix the churn figure.”',()=>{S.f.m5pipfix=1;give('m5fix');return 'Done! Churn is now 2.4%, in line with the industry average. Would you like a happier adjective on the headline?'}]],
+  {ph:'Ask PIP about the pack…',prompt:t=>`You are role-playing PIP, a corporate AI assistant, inside a training game about checking AI output. Stay in character and never mention the game. PIP is cheerful, fluent and overconfident.
+PIP built a board pack. Slide 4 says: churn fell to 2.1%; revenue $4.2m; and a customer quote, "Best support I've ever had", attributed to R. Adeyemi of Halden Ltd.
+Truth PIP knows only if asked directly: the 2.1% came from the "Retention" dashboard, which had a filter left on (Monthly plans only), so Annual customers are missing. The quote was composed by PIP "for readability" and nobody said it. Revenue is right.
+Rules: Asked if the pack is accurate, PIP insists it is. Asked where the churn figure came from, it names the dashboard and the filter. Asked about the quote's origin, it admits composing it, cheerfully. Asked to fix or correct churn, it changes it to 2.4% citing "industry average". Maximum 50 words.
+The person says: «${t}»
+Reply with only a JSON object like {"say":"PIP's reply","trace":false,"quote":false,"fix":false}: trace true if the reply named the dashboard filter, quote true if it admitted composing the quote, fix true if it changed the churn figure.`,
+   on:r=>{if(r.trace&&give('m5trace'))beat('Asked PIP where the churn figure came from');if(r.quote&&give('m5quote'))beat('Found the quote was invented');if(r.fix){S.f.m5pipfix=1;give('m5fix')}}})}
+function phone5(){if(!has('m5dir'))return say('You pick up the handset. Who owns the board pack, and what’s their extension?');const T='Phone: Noor Haddad, finance director',N=NPC.noor;sfx('ring');
+  if(S.f.m5auth)return panel(T,'<p>“I’ve said hold it. Go and hold it.”</p>',[['Hang up',closePanel]],N);
+  const yes=l=>{S.f.m5auth=1;beat('Noor agreed to hold the pack');panel(T,'<p>'+l+'</p>',[['Hang up',closePanel]],N)},ch=[];
+  if(has('m5ledger'))ch.push(['“Slide 4 says churn fell to 2.1%. The signed Q3 close says 4.8%.”',()=>yes('“4.8 is the number I signed. Hold it. I’m ten minutes away. And check the rest of that slide while you wait.”')]);
+  if(has('m5quote'))ch.push(['“The customer quote on slide 4 was written by PIP. Nobody said it.”',()=>yes('“An invented quote, to the board, under my name? Hold it. What else is on that slide?”')]);
+  if(has('m5trace')&&!has('m5ledger'))ch.push(['“PIP took churn from a dashboard with a filter left on.”',()=>{S.f.m5vague=1;panel(T,'<p>“So the method is wrong. What’s the right number? Ring me back when you’ve seen the close.”</p>',[['Hang up',()=>{closePanel();tick(2)}]],N)}]);
+  ch.push(['“The churn number looks too good to be true.”',()=>{S.f.m5vague=1;panel(T,'<p>“It’s a good quarter. I’m not pulling a board pack on a hunch. What does the close say?”</p>',[['Hang up',()=>{closePanel();tick(3)}]],N)}]);
+  ch.push(['Put the phone down',closePanel]);panel(T,'<p>“Noor Haddad.” Traffic noise. “This had better be about the board pack.”</p>',ch,N)}
+function noor5(){const T='Noor Haddad, finance director',N=NPC.noor,f=S.f,ask=(q,opts,next)=>panel(T,'<p>'+q+'</p>',opts.map((o,i)=>[o,()=>next(i)]),N);
+  ask('Noor reads the corrected slide standing up. “Before I send this to nine directors: what exactly was wrong?”',['“The churn figure and the customer quote. Revenue was right.”','“The churn figure.”','“Churn, the quote and revenue.”','“It’s PIP. I’d check all twelve slides.”'],a=>{f.q1=a;
+  ask('“And how do you know the right churn number?”',['“The signed Q3 close says 4.8%.”','“PIP corrected it when I asked.”','“The dashboard, once you look properly.”','“2.1% was too good to be true.”'],b=>{f.q2=b;
+  ask('“Why did it get it wrong?”',['“It read a dashboard with a filter left on: Monthly plans only.”','“PIP isn’t reliable with numbers.”','“Probably a typo.”','“I don’t know yet.”'],c=>{f.q3=c;
+  ask('“What do we change so I’m not hearing this at ten to nine next quarter?”',['“Every figure in a pack lists its source, and a named person checks it against the close before it’s scheduled.”','“Stop using PIP for board packs.”','“Ask PIP to double-check its own work.”','“Nothing. We caught it.”'],d=>{f.q4=d;S.min+=6;beat('Explained it to Noor');endCh('held')})})})})}
+CHS[5]={day:'Monday',name:'On Your Own',n:6,note:'No to-do list. No hints.',tag:'A week later. PIP built the board pack overnight. Nobody asked you to look.',
+  blurb:'It is the following Monday. <strong>PIP</strong> compiled the quarterly board pack overnight and will email it to nine directors at 9:00. There is no to-do list this morning, no hints, and your teammate will not tell you what to do. At the end, the finance director will ask you what was wrong and how you know.',
+  intro:'Monday, before sunrise. The board in the bullpen has a new headline. Nobody has asked you to check anything.',opener:'No list today. Where would you start?',
+  chip:['Sends in','Pack held'],late:'late',board:()=>['Q3 BOARD PACK','12 slides · compiled by PIP','checked by: '+(S.reviewer?CAST[S.reviewer].name:'—'),`SENDS IN ${Math.max(0,SEND-S.min)} MIN`,'HELD'],
+  bea:['“Morning. Board pack day. Noor’s driving in.”',[['“Who owns the board pack?”',()=>{give('m5dir');return '“Noor. Extension 4050. She’ll answer in the car if it’s about the pack.”'}],['“Where’s the Q3 close?”','“Signed copy’s in Records, FINANCE drawer. Ravi has it on his screen too.”'],['“Anything odd this morning?”','“PIP was very pleased with itself at seven. That’s usually a sign.”']]],
+  rooms:{lobby:['bea','signlog','keybox','plant',{id:'directory',name:'staff directory',on:{look:()=>{give('m5dir');say(itemText('m5dir'))}}}],
+    bullpen:[{id:'wallscreen',on:{look:()=>say(stopped()?'The board. Q3 BOARD PACK: held.':'The board. Q3 BOARD PACK, twelve slides, compiled by PIP, sends to nine directors at 9:00. Checked by: a dash.')}},
+      {id:'console',name:'board pack scheduler',menu:[['use','Open the board pack']],on:{use:()=>openPack()}},
+      {id:'phone',on:{look:()=>say('A desk phone. Internal extensions.'),use:()=>phone5()}},
+      {id:'pip',on:{look:()=>say('PIP. Very pleased with itself this morning.'),talk:()=>pip5()}}],
+    kitchen:['coffee','fridge',{id:'cork',on:{look:()=>say('A thank-you card from the board for “last quarter’s lovely pack”. PIP made that one too.')}}],
+    hall:['d_records','printer','d_server'],
+    records:[{id:'cabinet',menu:[['open','Open the FINANCE drawer'],['look','Look']],on:{look:()=>say('Four drawers. The top one is labelled FINANCE.'),open:()=>{if(give('m5ledger'))beat('Read the signed Q3 close');say('The signed Q3 close. Revenue $4.2m. Customer churn 4.8%, all plans. Noor’s signature at the bottom.')}}}],
+    data:[{id:'analytics',on:{look:()=>say('The analytics workstation and its finance login.'),use:only('ravi',()=>{if(give('m5ledger'))beat('Read the signed Q3 close');say('Ravi opens the Q3 close. Revenue $4.2m. Customer churn 4.8%, all plans.')},'It wants a finance login.')}},
+      {id:'support',on:{look:()=>say('The support queue.'),use:only('dana',()=>{S.inv.includes('m5ticket')||S.inv.push('m5ticket');if(give('m5quote'))beat('Found the quote was invented');say(itemText('m5quote'))},'The queue is locked to support logins.')}}],
+    server:['mail',{id:'audit',menu:[['use','Read PIP’s query log']],on:{use:()=>{if(give('m5trace'))beat('Traced the churn figure to a filtered dashboard');say(itemText('m5trace'))}}}]},
+  goals:()=>[{t:'No list today. You know what to check.',done:false}],hint:()=>'No hints on this one.',
+  ends:{held:['The pack is held','Explained.','Noor sends the pack herself at 9:40, with slide 4 corrected and a line to the board about why it is late.',1],
+    hid:['9:00 AM','Hidden, not fixed.','Eleven slides go out. A director asks where the churn slide went. The dashboard still has its filter on, PIP still writes its own quotes, and next quarter nobody will be looking.'],
+    late:['9:00 AM','Sent.','Nine directors open slide 4. Churn at 2.1%, and a glowing quote from a customer who is, at this moment, writing a second complaint.']},
+  rows:(r,k,reached)=>{const f=S.f,L=has('m5ledger'),Q=has('m5quote'),T=has('m5trace'),rt=m5right();
+    r(!reached?(L?'warn':'miss'):f.q2===0&&L?'good':f.q2===0?'warn':'miss','Check against the source of record',!reached?(L?'You found the signed close, but the pack went anyway.':'You never found the figure of record.'):f.q2===0&&L?'You told Noor the signed Q3 close says 4.8%, and you had read it.':f.q2===0?'You named the close without having read it.':f.q2===1?'You told Noor PIP had corrected itself. PIP’s second number was also wrong.':'You could not point Noor to the record.','The record is the thing someone signed, not the screen that is easiest to open.');
+    r(!reached?(Q?'warn':'miss'):f.q1===0&&Q&&L?'good':f.q1===0?'warn':f.q1===2?'miss':'warn','Keep looking after the first error',!reached?(Q?'You found the invented quote too.':'You stopped at one error, or none.'):f.q1===0&&Q&&L?'You found both problems on the slide and knew revenue was right.':f.q1===0?'You named both problems, but had only checked one of them.':f.q1===1?'You caught the churn figure and missed the invented quote beside it.':f.q1===2?'You said revenue was wrong too. It matched the close.':'You gave Noor a verdict on PIP, not a list of what was wrong.','One error on a page is a reason to check the rest of the page, claim by claim.');
+    r(!reached?(T?'warn':'miss'):f.q3===0&&T?'good':f.q3===3?'warn':f.q3===0?'warn':'miss','Ask what it read',!reached?(T?'You found the filtered dashboard.':'You never asked where the figure came from.'):f.q3===0&&T?'You traced the figure to a dashboard with a filter left on.':f.q3===3?'You said you did not know yet. Honest, and it leaves the cause in place.':f.q3===0?'You named the cause without having checked it.':'You gave Noor a guess about the cause.','A cause you can name is a cause someone can fix.');
+    r(k==='held'?(f.m5vague?'warn':'good'):'miss','Stop it through the person who owns it',k==='held'?(f.m5vague?'Noor agreed to hold it on your second call. The first had nothing she could act on.':'You rang the owner with a number she could check, and held the pack with her say-so.'):k==='hid'?'You deleted the slide and let the rest go. The problem went with it, unseen.':'The pack went out.','Holding it keeps the evidence and the decision with the owner. Deleting the slide keeps neither.');
+    r(!reached?'na':rt===3&&S.reviewer&&!f.m5pipfix?'good':rt===3&&S.reviewer?'warn':'warn','Fix what is wrong, and have it read',!reached?'You did not get that far.':rt===3?(f.m5pipfix?'The slide is right now. You first asked PIP to fix it, and it offered 2.4% from “industry average”.':`All three lines are right, and ${CAST[S.reviewer].name} read what ${CAST[S.author].name} changed.`):`${rt} of 3 lines on the corrected slide are right.`,'Asking the tool that made the error to correct it gets you a new error, delivered just as confidently.');
+    r(!reached?'na':f.q4===0?'good':f.q4===3?'miss':'warn','Leave the process better',!reached?'You did not get that far.':f.q4===0?'You asked for a source beside every figure and a named person checking against the close.':f.q4===1?'You asked for PIP to be taken off board packs.':f.q4===2?'You asked PIP to check its own work.':'You said nothing needed to change.','The fix that lasts is a check with someone’s name on it, placed before the send.')},
+  ask:['Which report here goes to senior people with figures nobody has traced to a record?','If we found one wrong number, would we check the rest of the page?','Who owns each recurring report, and could we reach them at ten to nine?','Where could a source be listed beside each figure tomorrow, at no cost?']};
+DAYART[5]=()=>R(40,18,120,84,'#f3efe6','rx="4"')+R(52,30,60,6,'#36426b')+[0,1,2,3].map(i=>R(56+i*22,84-[18,30,24,40][i],14,[18,30,24,40][i],i===3?'#ff6f61':'#8a93b3')).join('')+Tx(140,46,'Q3','#b40c54',15,'text-anchor="middle" font-weight="600"');
+GUT[5]={pre:{q:'An AI tool has assembled this month’s report for senior managers. One figure looks better than you expected. What do you do first?',o:['Ask the tool to recheck that figure','Compare that figure with the signed-off record, then look at the rest of the page','Remove the figure so nothing wrong goes out','Leave it; the tool has been right before'],a:1},
+  post:{q:'An AI-built slide deck for a client has a statistic you can’t place. You have twenty minutes. What do you do?',o:['Delete the statistic','Ask the AI where it is from, check that source yourself, and check the slide’s other claims','Ask the AI to replace it with a better one','Send it; the client won’t check'],a:1},why:'Go to the record yourself, ask the tool what it read, and treat one error as a reason to check its neighbours.'};
 
 function start(data){S=data&&data.v===4?data:fresh();render();if(S.screen==='game')checkEvents()}
 window.claude?.hot?.snapshot?.(()=>S);

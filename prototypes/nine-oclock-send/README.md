@@ -1,6 +1,6 @@
 # The Nine O'Clock Send
 
-A point-and-click learning game in four mornings about working safely with AI at work. Prototype.
+A point-and-click learning game in five mornings about working safely with AI at work. Prototype.
 
 ## Files
 
@@ -11,7 +11,7 @@ A point-and-click learning game in four mornings about working safely with AI at
 
 | Feature | Claude artifact | Standalone copy |
 | --- | --- | --- |
-| All four mornings, scripted dialogue | Yes | Yes |
+| All five mornings, scripted dialogue | Yes | Yes |
 | Typed or spoken lines answered live by Claude | Yes, for people in the owner's organisation, after they allow it | No (scripted lines only) |
 | Character voices | Where the browser supports it | No |
 | Music and sound | Yes | Yes |
@@ -25,3 +25,9 @@ A point-and-click learning game in four mornings about working safely with AI at
 4. On a shared device, the title screen shows **Facilitator: copy all runs on this device**, which gives a CSV of every run.
 
 Each record holds: morning, cast, ending, score, the state of each practice, hints used, in-game minutes, real seconds, whether the before and after gut checks were the strongest answer, whether live AI was on, and the reflection text. Nothing is sent anywhere; records leave the device only when someone copies them.
+
+## Modes
+
+- **With to-do list and hints** (default on Tuesday to Friday). Hints and teammate advice cost two in-game minutes and are counted in the run record.
+- **No to-do list or hints**: a toggle on the team screen for any morning.
+- **Monday, "On Your Own"** always runs without help and ends with four questions from the pack's owner. An answer only scores if the player found the evidence for it.
