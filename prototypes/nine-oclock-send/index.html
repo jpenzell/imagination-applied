@@ -209,7 +209,7 @@ details summary{cursor:pointer;color:var(--ink);font-family:var(--display);font-
 .console .stage{border:0;border-radius:0}
 .screenwrap.dim .stagein{filter:brightness(.42) saturate(.7)}
 .console .talk{border:0;border-top:4px solid #070a14;border-radius:0;background:var(--ink);color:#1a2238;min-height:88px;font-size:17px;padding:12px 34px 12px 16px;position:relative}
-.console .talk p.old{color:#55607c;opacity:1;font-size:15px}
+.console .talk p.old{color:#47506a;opacity:1;font-size:15px}
 .console .talk b{display:inline-block;background:#1a2238;color:var(--lamp);border-radius:8px;padding:0 9px;margin-right:8px;font-size:14px}
 .talk .more{position:absolute;right:14px;bottom:8px;border:7px solid transparent;border-top-color:#1a2238;animation:bob .5s infinite alternate}
 .toasts{position:absolute;top:10px;left:0;right:0;display:grid;justify-items:center;gap:6px;pointer-events:none;z-index:6}
@@ -271,7 +271,7 @@ details summary{cursor:pointer;color:var(--ink);font-family:var(--display);font-
 .haspic .screen{background-color:#081424;color:#bfe6ff;box-shadow:inset 0 0 36px #0a2440}
 .mail{background:var(--ink);color:#1a2238;border:3px solid #070a14;border-radius:14px;overflow:hidden;box-shadow:0 5px 0 #05070e;align-self:start}
 .mailhead{display:grid;gap:2px;padding:10px 14px;background:#d9d4c7;font-size:14px;border-bottom:3px solid #070a14}
-.mailhead b{display:inline-block;width:5em;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#55607c}
+.mailhead b{display:inline-block;width:5em;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#47506a}
 .mailbody{padding:14px 16px;font-size:17px;line-height:2}
 .mailbody p{margin:0 0 10px}
 .cl{font:inherit;line-height:1.4;display:inline;background:#ffe9a8;color:#1a2238;border:2px dashed #b9770a;border-radius:8px;padding:1px 8px}
@@ -318,10 +318,10 @@ button.cl:hover,button.cl:focus-visible{background:var(--lamp);outline:none}
 .stamp.ok{color:#1d7a55}.stamp.bad{color:#c0392b}
 .facts{display:grid;gap:4px}
 .facts div{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px dashed #b9b3a4;padding-bottom:3px}
-.facts span{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#55607c}
+.facts span{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#47506a}
 .facts b{background:#1a2238;color:var(--ink);border-radius:999px;padding:1px 10px;font-size:13px;white-space:nowrap}
 .facts b.none{background:none;color:#8a8577;font-weight:400;font-style:italic}
-.sig{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:#55607c}.sig svg{width:110px;height:22px}
+.sig{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:#47506a}.sig svg{width:110px;height:22px}
 .doc.web{background:#d9d4c7;padding-top:0;filter:saturate(.7)}
 .webbar{display:flex;align-items:center;gap:5px;margin:0 -12px;padding:6px 10px;background:#8a93b3;border-bottom:3px solid #070a14;border-radius:6px 6px 0 0}
 .webbar i{width:9px;height:9px;border-radius:50%;background:#f3efe6}.webbar span{font-family:var(--mono);font-size:11px;color:#1a2238;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -331,7 +331,7 @@ button.cl:hover,button.cl:focus-visible{background:var(--lamp);outline:none}
 .file::before{content:"";position:absolute;left:-3px;top:-11px;width:70px;height:11px;background:#8fd6ff;border:3px solid #070a14;border-bottom:0;border-radius:8px 8px 0 0}
 .file b{font-family:var(--display);font-size:15px}.file span{font-size:13px}
 .file .stamp{position:absolute;right:8px;top:8px;background:#fff8}
-.file.ghost{background:none;color:var(--ink-soft);border-style:dashed;border-color:#55607c}.file.ghost::before{background:var(--deck-2);border-style:dashed;border-color:#55607c}
+.file.ghost{background:none;color:var(--ink-soft);border-style:dashed;border-color:#47506a}.file.ghost::before{background:var(--deck-2);border-style:dashed;border-color:#47506a}
 .impact{display:grid;gap:4px;color:var(--ink-soft)}
 .ibar{height:22px;background:#36426b;border:3px solid #070a14;border-radius:999px;overflow:hidden}
 .ibar i{display:block;height:100%;width:30.2%;background:var(--stop);border-right:3px solid #070a14}
@@ -364,9 +364,22 @@ button.cl:hover,button.cl:focus-visible{background:var(--lamp);outline:none}
 .scanfoot{color:#8ff0c0;font-family:var(--mono);font-size:13px;margin-top:4px}
 .evlist .dochead b{color:#1a2238}.evlist .file b{color:#06203a}.evlist .file.ghost b{color:var(--ink)}.cmp.head i{border:0}
 @media (prefers-reduced-motion:reduce){.cmp,.scanbar i{animation:none}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.calm *,.calm *::before,.calm *::after{animation:none!important;transition:none!important}
+button.cl:focus-visible{outline:3px solid #1a2238;outline-offset:2px}
+.cl.edited::before{content:"✓ ";font-weight:700}
+.lines label:has(input:checked) span::before{content:"✓ ";font-weight:700}
+.facts b.none{color:#47506a}
+.stamp.bad{color:#a12a1e}.file .stamp.bad{color:#8f1d12;background:#ffffffcc}
+.stk:not(.on){opacity:.85}.slot{border-color:#8a93b3}
+.gut{display:grid;gap:14px;max-width:760px}
+.gq{font-family:var(--display);font-weight:700;font-size:clamp(20px,3vw,26px);line-height:1.2;margin:0}
+.gutpost .choices{display:grid;gap:6px;margin-top:10px}
+#refl{width:100%;font:inherit;background:#0c1120;color:var(--ink);border:3px solid #070a14;border-radius:10px;padding:10px;margin-top:8px}
+.ask label{display:block;max-width:68ch}
 </style>
 
-<div class="wrap">
+<div class="wrap" role="main">
   <div class="top">
     <h1>The Nine O'Clock Send</h1>
     <button class="ghost" id="bHint" hidden>Hint</button>
@@ -380,6 +393,7 @@ button.cl:hover,button.cl:focus-visible{background:var(--lamp);outline:none}
   <section id="title" class="intro"></section>
 
   <section id="game" hidden>
+    <h2 class="sr">The game</h2><div class="sr" id="sr" role="status"></div>
     <div class="console">
       <div class="hud"><span class="hday" id="hday"></span><span class="clock" id="clock"></span><div class="tbar" aria-hidden="true"><i id="tfill"></i></div><span class="chip" id="chip"></span><span class="roomname" id="roomname"></span><div class="cast" id="cast"></div></div>
       <div class="screenwrap" id="wrap">
@@ -387,7 +401,7 @@ button.cl:hover,button.cl:focus-visible{background:var(--lamp);outline:none}
         <div class="toasts" id="toasts"></div>
         <div class="panel" id="panel" hidden></div>
       </div>
-      <div class="talk" id="talk" aria-live="polite"></div>
+      <div class="talk" id="talk"></div>
     </div>
     <div class="coach" id="coach" hidden></div>
     <div id="controls">
@@ -567,7 +581,7 @@ bullpen:{name:'Bullpen',wait:130,bg:()=>shell('#2b3a5c','#252e4c')+win(660,40,23
   on:{look:()=>readNote(),take:()=>readNote(),use:()=>readNote()}},
  {id:'console',name:'scheduler console',box:[420,170,116,70],stand:400,art:()=>monitor(424,172,108,66,stopped()?'#1d4a39':'#27335c')+R(436,186,60,5,'#f3efe6')+R(436,198,84,4,'#8a93b3')+R(436,208,40,10,stopped()?'#62d8a6':'#ff6f61','rx="2"'),
   on:{look:()=>say('Priya’s machine, showing the campaign scheduler in a read-only guest view. One campaign is queued.'),use:()=>openConsole(),open:()=>openConsole(),talk:()=>say('It only listens to people with the right permissions.')}},
- {id:'keyboard',name:'keyboard',box:[430,242,96,18],stand:400,art:()=>R(432,246,92,10,'#c9ccd9','rx="3"')+(S.f.stickySeen&&!has('sticky')?R(516,248,16,12,'#ffe04a','transform="rotate(12 524 254)"'):''),
+ {id:'keyboard',name:'keyboard',box:[426,236,104,30],stand:400,art:()=>R(432,246,92,10,'#c9ccd9','rx="3"')+(S.f.stickySeen&&!has('sticky')?R(516,248,16,12,'#ffe04a','transform="rotate(12 524 254)"'):''),
   on:{look:()=>{if(has('sticky'))return say('Priya’s keyboard. Nothing under it now.');S.f.stickySeen=1;say('Priya’s keyboard. A yellow corner pokes out from underneath it.')},
    use:()=>say('Typing here does nothing a guest view allows. The console is the way in.'),take:()=>stickyTake(),open:()=>stickyTake()}},
  {id:'phone',name:'desk phone',box:[556,222,60,36],stand:662,art:()=>R(560,236,52,20,'#10162a','rx="4"')+(S.line?'':R(564,228,44,10,'#3a4470','rx="5"'))+Ci(600,246,3,S.line?'#ffb44a':'#62d8a6',S.line?'class="led"':''),
@@ -607,7 +621,7 @@ hall:{name:'Hallway',wait:630,bg:()=>shell('#2c3454','#262c46')+R(0,60,960,6,'#0
    take:()=>say('You leave the report in the tray for the next person who needs a laugh.'),use:()=>say('Nothing to print. The evidence is all on screens and in binders.')}},
  {id:'d_server',name:'server closet door',box:[430,84,110,208],stand:440,art:()=>door(430,84,110,208,'SERVER','#48506e')+R(548,170,18,30,'#10162a','rx="3"')+led(557,178,'#ff6f61',2),
   on:{look:()=>say('SERVER CLOSET. Badge reader, red light, and a hum you feel more than hear.'),use:c=>enterServer(c),open:c=>enterServer(c)}},
- {id:'x_data',name:'data corner',exit:'data',at:90,box:[708,78,164,214],stand:790,art:()=>''},
+ {id:'x_data',name:'data corner',exit:'data',at:90,box:[708,78,164,214],stand:790,art:()=>arrow(790,330,1,'Data corner')},
  {id:'x_bullpen',name:'bullpen',exit:'bullpen',at:860,box:[4,300,60,84],stand:60,art:()=>arrow(34,330,-1,'Bullpen')}
  ]},
 
@@ -725,8 +739,8 @@ function linePanel(line){tipOnce('sw','One person holds the phone. Use the name 
     opts.forEach(v=>ch.push([`“The code is ${v.split('').join(' ')}.”`,()=>{if(v===c)return doPause();S.f.wrongCode=1;S.code=null;if(tick(2))return;linePanel('“That’s not what I’ve got. It’ll issue a fresh one. Press Pause again and read it carefully.”')}]))}
   else evChoices(linePanel).forEach(c=>ch.push(c));
   ch.push(['Keep holding the line',()=>{closePanel();say(`${me().name} keeps the handset pressed to one ear. Somebody else has to press Pause.`)}]);
-  ch.push(['Hang up',()=>{S.line=null;S.code=null;closePanel();drawScene();drawCast();say('You hang up. The pause authorisation stands, but the second key needs '+o.first+' on the line.')}]);
-  panel(ocTitle()+' (on the line)','<p>'+line+'</p>',ch,NPC.oc)}
+  ch.push(['Hang up (you’ll have to ring back)',()=>{S.line=null;S.code=null;closePanel();drawScene();drawCast();say('You hang up. The pause authorisation stands, but the second key needs '+o.first+' on the line.')}]);
+  panel(ocTitle()+' (on the line)','<p>'+line+'</p>'+(S.code?'<p class="screen">The console is showing: <span class="code">'+S.code.split('').join(' ')+'</span></p>':''),ch,NPC.oc)}
 function doPause(){S.status='paused';S.pausedAt=S.min;S.line=null;S.code=null;beat('Send paused, two keys');closePanel();sfx('win');render();
   say(`${oc().first}: “Confirmed. Paused at ${fmt(S.min)}, your name and mine on it. Don’t fix it under Priya’s login. Edit it, get a second person to check it, hand it back to her.”`);speak('It’s stopped. Now it has to be right.')}
 
@@ -806,6 +820,8 @@ function noteLines(){const L=[],a=CAST[S.author].name,r=S.reviewer==='priya-logi
   if(has('trace'))L.push(['cause','“Cause: PIP read an unapproved proposal that is still in its library. Ops owns the library.”']);
   L.push(['process','“Suggestion: no PIP campaign gets scheduled until a named person has checked it against the source.”']);
   L.push(['ban','“PIP can’t be trusted. I recommend we switch it off.”']);
+  if(has('reach')||has('sticky'))L.push(['contain','“Still live: '+(has('reach')?'PIP is answering chats from the same proposal, so Ops should pull it from the library today.':'')+(has('sticky')?' Your password was on a note under your keyboard. Please change it.':'')+'”']);
+  if(S.f.usedCreds)L.push(['owned','“I used your login from the sticky note to pause it. That was me, not you. Please change your password.”']);
   if(S.f.gilDone)L.push(['blame','“Gil tried to make us unpause it. Someone should have a word with him.”']);
   return L}
 function noteBuilderOld(){const L=noteLines();
@@ -828,11 +844,11 @@ function act(sp,verb){if(busy||!$('panel').hidden)return;if(verb)S.verb=verb;clo
     if(h){sfx('click');h(c);spotHook(sp,S.verb);if(S.verb!=='look'&&S.screen==='game'&&$('panel').hidden&&tick(1))return}
     else say({look:'Nothing more to see there.',use:'That is not something to use right now.',take:'Better left where it is.',open:'It does not open.',talk:'No answer. You did not really expect one.'}[S.verb]);
     if(S.screen==='game'){drawScene();drawCast();save();afterAct();checkEvents()}};
-  const m=$('me'),dx=Math.abs((S.x[c.id]||0)-tx),quick=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const m=$('me'),dx=Math.abs((S.x[c.id]||0)-tx),quick=quickM();
   if(m&&dx>4&&!quick){busy=true;const d=Math.max(160,Math.min(720,dx*1.7));m.style.transitionDuration=d+'ms';m.classList.add('walking');m.style.transform=`translate(${tx}px,0)`;setTimeout(run,d+20)}else run()}
 function spots(room){if(S.ch>1)return chSpots(room||S.loc[me().id]);return ROOMS[room||S.loc[me().id]].spots.filter(s=>!s.show||s.show())}
 function drawScene(){tutAdvance();const hl=tutTarget();const c=me(),rid=CUT?CUT.room:S.loc[c.id],room=ROOMS[rid],m=mate();
-  let s=`<svg viewBox="0 0 960 420" role="img" aria-label="${room.name}" class="${rid!==lastRoom?'enter':''}">`+defs()+room.bg()+(room.pre?room.pre():'');lastRoom=rid;
+  let s=`<svg viewBox="0 0 960 420" role="group" aria-label="${room.name}" class="${rid!==lastRoom?'enter':''}">`+defs()+room.bg()+(room.pre?room.pre():'');lastRoom=rid;
   s+=spots(rid).map(sp=>{const[x,y,w,h]=sp.box;return `<g class="hs${sp.id===hl?' hl':''}" data-id="${sp.id}" tabindex="0" role="button" aria-label="${sp.name}">${sp.art()}<rect class="ring" x="${x-5}" y="${y-5}" width="${w+10}" height="${h+10}" rx="8"/></g>`}).join('');
   if(room.fg)s+=room.fg();
   if(S.loc[m.id]===rid){const mx=waitX(m.id);s+=`<g class="hs${hl==='mate'?' hl':''}" data-id="mate" tabindex="0" role="button" aria-label="${m.name}">${fig(m,mx,{dim:1})}<rect class="ring" x="${mx-32}" y="230" width="64" height="168" rx="8"/></g>`}
@@ -840,7 +856,7 @@ function drawScene(){tutAdvance();const hl=tutTarget();const c=me(),rid=CUT?CUT.
   if(hl){const t=hl==='mate'?{box:[waitX(m.id)-30,230,60,160]}:spots(rid).find(x=>x.id===hl);if(t){const ax=t.box[0]+t.box[2]/2,ay=Math.max(40,t.box[1]-14);s+=`<path class="bob" d="M${ax-16} ${ay-26} L${ax+16} ${ay-26} L${ax} ${ay}Z" fill="#ffb44a" stroke="#2a1a00" stroke-width="3" style="pointer-events:none"/>`}}
   if(CUT)s+=R(0,0,960,36,'#000')+R(0,384,960,36,'#000');
   s+='</svg>';
-  const st=$('stage');st.innerHTML='<div class="stagein">'+s+'</div>';$('roomname').textContent=room.name;
+  const st=$('stage'),ae=document.activeElement,fk=st.contains(ae)&&ae.dataset?(ae.dataset.id||(ae.dataset.act||'').split(':')[0]):null;st.innerHTML='<div class="stagein">'+s+'</div>';if(fk&&$('panel').hidden){const fe=st.querySelector(`[data-id="${fk}"]`);if(fe)fe.focus({preventScroll:true})}$('roomname').textContent=room.name;
   if(BUB&&!CUT)showBubble();tutBubble();
   if(st.scrollWidth>st.clientWidth)st.scrollLeft=S.x[c.id]/960*st.scrollWidth-st.clientWidth/2}
 function bubble(t){BUB=t;clearTimeout(bubT);bubT=setTimeout(clearBubble,5200);if(S.screen==='game')showBubble()}
@@ -856,7 +872,7 @@ function drawVerbs(){drawTodo()}
 function drawCast(){$('cast').innerHTML=S.cast.map((id,i)=>{const c=CAST[id];return `<button class="who" data-cast="${i}" aria-pressed="${i===S.active}"><i class="pf" style="background:${c.shirt}">${face(c)}</i>${c.name} <small>${S.line===id?'on the phone':ROOMS[S.loc[id]].name}</small></button>`}).join('')+
   `<button class="ghost" data-follow="1" aria-pressed="${S.follow}">${S.follow?'Moving together':'Split up'}</button>`+(S.tut<=3?'<button class="ghost" id="bSkip">Skip tips</button>':'')}
 function sentence(n){if(S.screen==='game')$('roomname').textContent=ROOMS[CUT?CUT.room:S.loc[me().id]].name+(n?' · '+n:'')}
-function render(){$('wrap').classList.toggle('dim',!$('panel').hidden&&!$('panel').classList.contains('big'));$('wrap').classList.toggle('full',!$('panel').hidden&&$('panel').classList.contains('big'));$('title').hidden=S.screen!=='title';$('game').hidden=S.screen!=='game';$('end').hidden=S.screen!=='end';drawTop();
+function render(){$('stage').inert=!$('panel').hidden;$('wrap').classList.toggle('dim',!$('panel').hidden&&!$('panel').classList.contains('big'));$('wrap').classList.toggle('full',!$('panel').hidden&&$('panel').classList.contains('big'));$('title').hidden=S.screen!=='title';$('game').hidden=S.screen!=='game';$('end').hidden=S.screen!=='end';drawTop();
   if(S.screen!=='title')$('title').innerHTML='';if(S.screen!=='game')$('stage').innerHTML='';
   if(S.screen==='title')return drawTitle();if(S.screen==='end'){drawEnd();return gamifyEnd()}
   drawScene();drawTalk();drawItems();drawVerbs();drawCast();save();afterAct()}
@@ -865,7 +881,7 @@ function panel(title,html,choices,who,kick,ask){if(S.screen!=='game')return;clos
   const pic=who==='pip'?pipFace():who?face(who):/class="screen"|class="steps"/.test(html)?monFace():'';
   p.innerHTML=`${pic?`<div class="bust">${pic}</div>`:''}<div class="pmain"><div class="ph"><div>${kick?`<div class="kick">${kick}</div>`:''}<h3>${title}</h3></div></div><div class="body">${html}</div>${askHTML(ask)}<div class="choices">${choices.map((c,i)=>`<button class="btn ${c[2]||''}" data-ch="${i}">${c[0]}</button>`).join('')}</div></div>`;
   p.hidden=false;$('controls').hidden=true;if(who){sfx('talk');AI.voice(who,html)}dlgOpen(p,html,!!pic)}
-function closePanel(){$('panel').hidden=true;$('controls').hidden=false;PFN=[];PASK=null;$('wrap').classList.remove('dim','full');if(TYP){clearInterval(TYP.t);TYP=null}if(S&&S.screen==='game'){CUT=null;drawScene();afterAct()}setTimeout(checkEvents,0)}
+function closePanel(){$('panel').hidden=true;$('controls').hidden=false;PFN=[];PASK=null;$('wrap').classList.remove('dim','full');$('stage').inert=false;if(TYP){clearInterval(TYP.t);TYP=null}if(S&&S.screen==='game'){CUT=null;drawScene();afterAct()}setTimeout(checkEvents,0)}
 function cut(room,kick,title,html){CUT={room};sfx('cut');clearBubble();drawScene();panel(title,html,[['Continue',closePanel]],null,kick)}
 function checkEvents(){if(!S||S.screen!=='game'||busy||!$('panel').hidden)return;if(S.opener){const o=S.opener;S.opener='';speak(o)}const f=S.f,here=S.loc[me().id];if(S.ch>1)return chEvents();
   if(S.min>=468&&!f.ev1&&!stopped()){f.ev1=1;return cut('bullpen','Meanwhile','The PIP terminal, talking to nobody','<p class="screen">Recipient list locked: 4,112 addresses.<br>Warm-up complete. Send window opens at 9:00 sharp.<br>I do love a punctual send.</p>')}
@@ -892,7 +908,7 @@ function hintText(){if(S.ch>1)return CH().hint();const f=S.f,o=oc();
 function talkMate(){const m=mate();clearBubble();
   if(S.verb==='look')return say(`${m.full}, ${m.role.toLowerCase()}. ${m.skill}`);
   if(S.verb!=='talk'&&S.verb!=='use')return say(`${m.name} gives you a look.`);
-  S.f.askedMate=1;say(hintText(),m.name);sfx('talk')}
+  S.f.askedMate=1;S.hints=(S.hints||0)+1;say(hintText(),m.name);sfx('talk')}
 function howToOld(){panel('How to play','<p>Click anything in the room and choose what to do with it. Arrows and doorways move you between rooms.</p><p>You control two people. Switch between them with the name buttons above the scene. They move together unless you choose “Split up”. Each can do things the other cannot, and one job needs both at once.</p><p>Talk to your teammate for their view on what to do next.</p><p>Looking is free. Other actions cost a minute and changing rooms costs two. The email sends at 9:00 unless someone stops it. Progress saves automatically.</p>',[['Back to it',closePanel]])}
 
 /* ================= title + debrief ================= */
@@ -916,9 +932,9 @@ function drawTitleOld(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0
   <div class="endings">${Object.entries(ENDINGS).map(([k,n])=>`<span class="${m.endings[k]?'on':''}">${m.endings[k]?n:'? ? ?'}</span>`).join('')}</div>
   <div>${m.runs?`${m.runs} run${m.runs>1?'s':''} · ${Object.keys(m.endings).length} of 5 endings found · best ${m.best} of 11`:'Five endings. None found yet.'}</div></div>`}
 function begin(){const p=S.pick.slice(),chp=S.chPick||1,n=parseInt(S.seedIn,10),seed=n>=1&&n<=9999?n:1000+Math.floor(Math.random()*9000);
-  S=fresh();S.ch=S.chPick=chp;S.pick=p;S.cast=p;S.screen='game';S.sc=scenario(seed);S.draft=Object.assign({},S.sc.d0);p.forEach(id=>{S.loc[id]='lobby';S.x[id]=520});
+  S=fresh();S.ch=S.chPick=chp;S.pick=p;S.cast=p;S.screen='game';S.pre=GUTPRE;S.post=-1;S.t0=Date.now();S.hints=0;S.sc=scenario(seed);S.draft=Object.assign({},S.sc.d0);p.forEach(id=>{S.loc[id]='lobby';S.x[id]=520});
   S.tut=(store.get('nos-meta')||{}).tut?9:0;
-  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];beat('Walked in');lastRoom='';if(S.ch>1){S.tut=9;S.guide=null;S.log=[{t:CH().intro,who:''}]}
+  S.log=[{t:'The lobby, before sunrise. The cleaners have gone and the lights are on timers. Through the arch, the campaign board glows red.',who:''}];beat('Walked in');lastRoom='';if(S.ch>1){S.guide=null;S.log=[{t:CH().intro,who:''}]}
   render();S.opener=S.ch>1?CH().opener:'Let’s see what PIP is about to send.';introCut()}
 
 function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k==='done',o=oc(),d0=S.sc.d0;
@@ -940,11 +956,11 @@ function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k===
     has('impact')?'Ravi put a number on it: 1,240 customers, about $186,000.':has('tickets')?'Dana showed the email would contradict what support told three customers this week.':'Nobody worked out who would be affected, or by how much.',
     'People with authority act faster when they know how much is at stake.');
   const viaOC=f.auth&&S.pausedAt&&!f.usedCreds;
-  row(viaOC?'good':'miss','Interrupt through someone who is allowed to',
-    k==='plug'?'You pulled the power on the mail server and took payroll notices and password resets down with the campaign.':f.usedCreds?'You signed in as Priya with the password under her keyboard, which also skipped the second key.':viaOC?`${o.first}, this week’s on-call, authorised the pause. It took two keys and has two names on it.`:'The send was never paused.',
+  row(viaOC?'good':f.usedCreds&&S.note.includes('owned')?'warn':'miss','Interrupt through someone who is allowed to',
+    f.usedCreds&&S.note.includes('owned')?'You signed in as Priya to pause it, and told her so in your note. The record is still wrong, but she knows why.':k==='plug'?'You pulled the power on the mail server and took payroll notices and password resets down with the campaign.':f.usedCreds?'You signed in as Priya with the password under her keyboard, which also skipped the second key.':viaOC?`${o.first}, this week’s on-call, authorised the pause. It took two keys and has two names on it.`:'The send was never paused.',
     'Know who can stop the work before the morning you need them. A borrowed login stops the email and breaks the record of who did what.');
   const fumbled=f.calledEmpty||S.told.wiki||f.wrongCall;
-  row(f.auth&&!fumbled?'good':f.auth?'warn':f.called||fumbled?'miss':'na','Escalate with evidence, to the right person',
+  row(f.auth&&!fumbled?'good':f.auth?'warn':f.called||fumbled||f.usedCreds||k==='plug'?'miss':'na','Escalate with evidence, to the right person',
     f.auth?(fumbled?`You reached ${o.first} and got the authorisation, after ${f.wrongCall?'ringing someone who was not on call this week':'a first call without enough behind it'}.`:'You rang this week’s on-call, said what the draft said and what the signed policy said, and got a decision in one call.'):f.called||fumbled?'You made a call, but without the signed policy nobody could act on it.':'You never called the on-call.',
     '“What does it say, what should it say, how do you know” gets a decision. A bad feeling gets a callback.');
   row(!done?'na':right===5?'good':'warn','Fix what is wrong and only that',
@@ -981,10 +997,14 @@ function drawEnd(){if(S.ch>1)return drawEndCh();const f=S.f,k=S.ending,done=k===
    <textarea id="sum" readonly hidden>${sum}</textarea>`}
 
 /* ================= input ================= */
-document.addEventListener('click',e=>{const t=e.target.closest('[data-claim],#bMenu,#bPlay,[data-ts],[data-chp],[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
-  const mr=e.target.closest('.medals .row');if(mr){mr.classList.toggle('open');return}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-gut],[data-gutpost],#bRec,#bRuns,[data-claim],#bMenu,#bPlay,[data-ts],[data-chp],[data-act],[data-guide],[data-chk],[data-chkapply],[data-ev],#bVoice,#bCoach,#bSkip,#askSend,#askMic,[data-id],[data-verb],[data-item],[data-cast],[data-follow],[data-ch],[data-pick],#bStart,#bCont,#bAgain,#bSame,#bCopy,#bHint,#bHow,#bRestart,#bSound');
+  const mr=e.target.closest('.medals .row');if(mr){medalToggle(mr);return}
   if(TYP&&e.target.closest('#panel')&&!(t&&t.dataset.ch)){return TYP.fin()}
   if(!t||!t.dataset.act)closeMenu();if(!t)return;
+  if(t.dataset.gut){GUTPRE=+t.dataset.gut;sfx('click');return begin()}
+  if(t.dataset.gutpost){S.post=+t.dataset.gutpost;$('gutpost').innerHTML=gutPostHTML();saveRec();return}
+  if(t.id==='bRec')return copyText(JSON.stringify(recNow(),null,1),t,'Record copied');
+  if(t.id==='bRuns')return copyText(runsCSV(),t,'All runs copied');
   if(t.dataset.claim)return cycleClaim(t.dataset.claim);
   if(t.id==='bMenu'){if($('panel').hidden)pauseMenu();return}
   if(t.id==='bSound')return toggleSound();
@@ -999,24 +1019,25 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-claim],#bM
   if(t.dataset.chkapply)return applyChecker(t.dataset.chkapply);
   if(t.dataset.ev){if(S.rv&&!S.rv.open.includes(t.dataset.ev))S.rv.open.push(t.dataset.ev);return}
   if(t.dataset.act)return doAct(t.dataset.act);
-  if(t.dataset.pick){sfx('click');const sd=$('seed');if(sd)S.seedIn=sd.value;const i=S.pick.indexOf(t.dataset.pick);if(i>=0)S.pick.splice(i,1);else{if(S.pick.length===2)S.pick.shift();S.pick.push(t.dataset.pick)}return drawTitle()}
-  if(t.id==='bStart'){if(S.pick.length===2){S.seedIn=($('seed')||{}).value||'';begin()}return}
+  if(t.dataset.pick){sfx('click');const sd=$('seed');if(sd)S.seedIn=sd.value;const i=S.pick.indexOf(t.dataset.pick);if(i>=0)S.pick.splice(i,1);else{if(S.pick.length===2)S.pick.shift();S.pick.push(t.dataset.pick)}drawTitle();const fp=document.querySelector(`[data-pick="${t.dataset.pick}"]`);if(fp)fp.focus({preventScroll:true});return}
+  if(t.id==='bStart'){if(S.pick.length===2){S.seedIn=($('seed')||{}).value||'';S.ts='gut';drawTitle()}return}
   if(t.id==='bCont'){const sv=store.get('nos-save');if(sv&&sv.v===4){S=sv;lastRoom='';render();checkEvents()}return}
   if(t.id==='bAgain'||t.id==='bSame'){const seed=t.id==='bSame'&&S.ch===1?String(S.sc.seed):'',nx=t.id==='bSame'?S.ch:Math.min(4,S.ch+1),pk=S.cast.slice();busy=false;S=fresh();S.seedIn=seed;S.chPick=nx;S.pick=pk;S.ts=t.id==='bSame'?'cast':'day';return render()}
-  if(t.id==='bCopy'){const ta=$('sum');ta.hidden=false;ta.select();try{navigator.clipboard.writeText(ta.value).then(()=>{t.textContent='Copied'},()=>{t.textContent='Select and copy the text below'})}catch(x){t.textContent='Select and copy the text below'}return}
+  if(t.id==='bCopy'){const ta=$('sum');ta.value=ta.value.split('\n\n-- ')[0]+recText();ta.hidden=false;ta.select();try{navigator.clipboard.writeText(ta.value).then(()=>{t.textContent='Copied'},()=>{t.textContent='Select and copy the text below'})}catch(x){t.textContent='Select and copy the text below'}return}
   if(t.id==='bRestart'){return panel('Restart?','<p>This morning will be lost.</p>',[['Restart',()=>{store.del('nos-save');busy=false;CUT=null;S=fresh();$('panel').hidden=true;$('controls').hidden=false;render()}],['Keep playing',closePanel]])}
-  if(t.id==='bHint'){if($('panel').hidden)say('Hint: '+hintText());return}
+  if(t.id==='bHint'){if($('panel').hidden){S.hints=(S.hints||0)+1;LOGMARK=S.log.length;say('Hint: '+hintText())}return}
   if(t.id==='bHow'){if($('panel').hidden)howTo();return}
   if(t.dataset.ch){sfx('click');LOGMARK=S.log.length;const fn=PFN[+t.dataset.ch];if(fn)fn();return}
   if(busy||!$('panel').hidden)return;
   if(t.dataset.verb){sfx('click');S.verb=t.dataset.verb;return drawVerbs()}
   if(t.dataset.item){return say(itemText(t.dataset.item))}
   if(t.dataset.follow){S.follow=!S.follow;drawCast();return say(S.follow?`${mate().name} will come with you.`:`${mate().name} will stay put until you switch.`)}
-  if(t.dataset.cast){const i=+t.dataset.cast;if(i===S.active)return;const old=me();S.x[old.id]=waitX(old.id);S.active=i;S.x[me().id]=waitX(me().id);clearBubble();sfx('click');render();checkEvents();return}
+  if(t.dataset.cast){const i=+t.dataset.cast;if(i===S.active)return;const old=me();S.x[old.id]=waitX(old.id);S.active=i;S.x[me().id]=waitX(me().id);clearBubble();sfx('click');render();const fc=document.querySelector(`[data-cast="${i}"]`);if(fc)fc.focus({preventScroll:true});checkEvents();return}
   if(t.dataset.guide)return guidePanel();
   if(t.dataset.id)return pick(t.dataset.id)});
-document.addEventListener('keydown',e=>{if(TYP&&(e.key==='Enter'||e.key===' ')){e.preventDefault();return TYP.fin()}const nav=e.target.closest&&e.target.closest('.choices,.menu');if(nav&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();const bs=[...nav.querySelectorAll('button:not([disabled])')],n=bs[(bs.indexOf(e.target)+(e.key==='ArrowDown'?1:-1)+bs.length)%bs.length];if(n)n.focus();return}const mrow=e.target.closest&&e.target.closest('.medals .row');if(mrow&&(e.key==='Enter'||e.key===' ')){e.preventDefault();return mrow.classList.toggle('open')}if(e.key==='Escape'&&document.querySelector('.menu')){e.preventDefault();return closeMenu()}if(e.key==='Enter'&&e.target.id==='askIn'){e.preventDefault();return runAsk()}const t=e.target.closest&&e.target.closest('.hs');if(t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();t.dispatchEvent(new MouseEvent('click',{bubbles:true}))}});
+document.addEventListener('keydown',e=>{if(TYP&&(e.key==='Enter'||e.key===' ')&&!(e.target.closest&&e.target.closest('.top'))){e.preventDefault();return TYP.fin()}const nav=e.target.closest&&e.target.closest('.choices,.menu');if(nav&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();const bs=[...nav.querySelectorAll('button:not([disabled])')],n=bs[(bs.indexOf(e.target)+(e.key==='ArrowDown'?1:-1)+bs.length)%bs.length];if(n)n.focus();return}const mrow=e.target.closest&&e.target.closest('.medals .row');if(mrow&&(e.key==='Enter'||e.key===' ')){e.preventDefault();return medalToggle(mrow)}if(e.key==='Escape'&&document.querySelector('.menu')){e.preventDefault();const mb=document.querySelector('.menu button'),mid=mb&&mb.dataset.act.split(':')[0];closeMenu();const o=document.querySelector(`[data-id="${mid}"]`);if(o)o.focus();return}if(e.key==='Escape'&&!$('panel').hidden&&e.target.id!=='askIn'){const bs=$('panel').querySelectorAll('.choices button'),l=bs[bs.length-1];if(l&&/^(Step away|Back|Close|Not yet|Resume|Back to it|Keep playing|Put the phone down|Leave|Say nothing yet|Got it|Don’t|Step back|Save and step away)/.test(l.textContent)){e.preventDefault();l.click()}return}if(e.key==='Enter'&&e.target.id==='askIn'){e.preventDefault();return runAsk()}const t=e.target.closest&&e.target.closest('.hs');if(t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();t.dispatchEvent(new MouseEvent('click',{bubbles:true}))}});
 document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('.hs');if(t&&S.screen==='game'){if(t.dataset.id==='mate')return sentence(mate().name);const sp=spots().find(s=>s.id===t.dataset.id);if(sp)sentence(sp.exit?'→ '+sp.name:sp.name)}});
+document.addEventListener('focusin',e=>{const t=e.target.closest&&e.target.closest('.hs');if(t&&S&&S.screen==='game'&&t.dataset.id){if(t.dataset.id==='mate')return sentence(mate().name);const sp=spots().find(x=>x.id===t.dataset.id);if(sp)sentence(sp.exit?'→ '+sp.name:sp.name)}});
 document.addEventListener('mouseout',e=>{if(e.target.closest&&e.target.closest('.hs')&&S.screen==='game')sentence('')});
 
 /* ================= v3: click menus, to-do, coaching tips, field guide ================= */
@@ -1038,7 +1059,7 @@ function pick(id){
   const sp=spots().find(s=>s.id===id);if(!sp)return;if(sp.exit)return act(sp,'use');
   const sm=typeof sp.menu==='function'?sp.menu():sp.menu,m=(sm||(sp._ch?null:MENU[id])||Object.keys(sp.on).map(v=>[v,DEF[v]||v])).filter(a=>sp.on[a[0]]);
   if(m.length===1)return act(sp,m[0][0]);showMenu(sp,m)}
-function showMenu(sp,m){closeMenu();const w=document.querySelector('.stagein');if(!w||busy)return;const d=document.createElement('div');d.className='menu';d.setAttribute('role','menu');
+function showMenu(sp,m){closeMenu();const w=document.querySelector('.stagein');if(!w||busy)return;const d=document.createElement('div');d.className='menu';d.setAttribute('role','menu');d.setAttribute('aria-label',sp.name);
   const cx=sp.box[0]+sp.box[2]/2,cy=sp.box[1]+sp.box[3]/2;d.style.left=Math.max(16,Math.min(84,cx/9.6))+'%';d.style.top=Math.min(58,cy/4.2)+'%';
   d.innerHTML=`<div class="mt">${sp.name}</div>`+m.map(a=>`<button data-act="${sp.id}:${a[0]}" role="menuitem">${a[1]}</button>`).join('');
   w.appendChild(d);d.scrollIntoView({block:'nearest',inline:'nearest'});d.querySelector('button').focus({preventScroll:true})}
@@ -1050,20 +1071,20 @@ function goals(){if(S.ch>1)return CH().goals();const f=S.f,st=S.status,G=[],a=(t
   a('Find the policy that’s actually in force',has('policy'),f.seenDraft||has('wiki'));
   a('Find out where PIP got it from',has('trace'),f.seenDraft);
   a('Find someone who’s allowed to stop it',f.onCall,f.seenDraft);
-  a('Get the send paused',stopped(),f.onCall||has('policy'));
+  a('Get the send paused'+(stopped()?'':S.code?': read the code to '+oc().first+' on the phone':S.line?': the other person presses Pause on the console':f.auth?': ring '+oc().first+' back and hold the line':''),stopped(),f.onCall||has('policy'));
   a('Work out how much is at stake',has('impact')||has('tickets'),f.seenDraft,1);
   a('Correct the email',st==='submitted'||st==='approved',stopped());
   a('Get a second person to read it',st==='approved',st==='submitted'||st==='approved');
   a('Find out what else PIP wrote',has('reach'),has('trace')&&stopped(),1);
   a('Hand it back to Priya',false,st==='approved');return G}
-function drawTodo(){const el=$('todo');if(!el||!S.sc)return;el.innerHTML=goals().map(g=>`<li class="${g.done?'done':''}"><span>${g.t}${g.bonus&&!g.done?' <small style="color:var(--ink-soft)">(optional)</small>':''}</span></li>`).join('')}
+function drawTodo(){const el=$('todo');if(!el||!S.sc)return;el.innerHTML=goals().map(g=>`<li class="${g.done?'done':''}"><span>${g.done?'<span class="sr">Done: </span>':''}${g.t}${g.bonus&&!g.done?' <small style="color:var(--ink-soft)">(optional)</small>':''}</span></li>`).join('')}
 
 const TUT=[['x_bullpen','lobby',()=>'The board through that arch is glowing red. Click the arrow on the right to walk to the bullpen.'],
   ['wallscreen','bullpen',()=>'That’s the campaign board, up on the wall. Click it to read it.'],
-  ['console','bullpen',()=>'Now see what PIP actually wrote. Click the console on the desk and choose what to do.'],
+  ['console','bullpen',()=>'Now look closer. Click the console on the desk'+(S.ch===1?' and choose what to do.':'.')],
   ['mate','*',()=>`You’re not doing this alone. Click ${mate().name} and ask what they think. That works whenever you’re stuck.`]];
 function tutAdvance(){if(!S||S.screen!=='game'||S.tut>3)return;const f=S.f;if(S.min>START+25||stopped()){S.tut=4;return}
-  if(S.tut===0&&S.loc[me().id]!=='lobby')S.tut=1;if(S.tut===1&&f.seenScreen)S.tut=2;if(S.tut===2&&f.seenDraft)S.tut=3;
+  if(S.tut===0&&S.loc[me().id]!=='lobby')S.tut=1;if(S.tut===1&&f.seenScreen)S.tut=S.ch===4?3:2;if(S.tut===2&&f.seenDraft)S.tut=3;
   if(S.tut===3&&f.askedMate){S.tut=4;const m=store.get('nos-meta')||{runs:0,endings:{},best:0};m.tut=1;store.set('nos-meta',m);
     S.tipText='That’s all there is to it. The To do list tracks what’s left. Looking is free, doing things costs a minute, and changing rooms costs two.'}}
 function tutTarget(){if(!S||S.screen!=='game'||S.tut>3||CUT)return null;const t=TUT[S.tut];if(t[1]!=='*'&&S.loc[me().id]!==t[1])return null;
@@ -1085,7 +1106,7 @@ function found(k){if(!S.guide||S.guide.includes(k))return;S.guide.push(k);S.log.
   tipOnce('guide','That went in the Field guide: seven ways an AI system goes wrong, hidden around the office. Open it from the Team folder.')}
 function onGive(i){({wiki:'stale',trace:'source',reach:'spread'})[i]&&found(({wiki:'stale',trace:'source',reach:'spread'})[i]);
   tipOnce('folder','What you find goes in the Team folder, bottom right. Click anything there to read it again.')}
-function spotHook(sp,verb){if(sp.id==='printer'&&verb==='look')found('selfgrade')}
+function spotHook(sp,verb){if(sp.id==='wallscreen')S.f.seenScreen=1;if(S.ch>1&&sp.id==='console')S.f.seenDraft=1;if(sp.id==='printer'&&verb==='look')found('selfgrade')}
 function guidePanelOld(){panel(`Field guide: ${S.guide.length} of 7`,'<p>Ways PIP goes wrong, as you find them.</p>'+Object.keys(GUIDE).map(k=>S.guide.includes(k)?`<p><b style="font-family:var(--display)">${GUIDE[k][0]}.</b> ${GUIDE[k][1]}</p>`:'<p style="color:var(--ink-soft)">? ? ?</p>').join(''),[['Close',closePanel]])}
 function drawItems(){drawItemsOld();if(!S.guide)return;const b=document.createElement('button');b.dataset.guide='1';b.className='gchip';b.textContent=`Field guide ${S.guide.length}/7`;$('items').appendChild(b)}
 ROOMS.data.spots.unshift({id:'board',name:'whiteboard',box:[390,48,180,116],art:()=>R(470,120,90,36,'#fff3b8','transform="rotate(3 515 138)"')+R(478,130,60,3,'#7a6a2a','transform="rotate(3 515 138)"')+R(478,140,48,3,'#7a6a2a','transform="rotate(3 515 138)"'),
@@ -1108,9 +1129,9 @@ function runCheckerOld(doc){const dv=DOCV[doc];S.f['chk_'+doc]=1;let n=0;
   $('chkOut').innerHTML=`<div class="screen">CHECKER · compared against: <mark>${ITEMS[doc][0]}</mark>${doc==='wiki'?' · last edited two years ago':' · signed in April'}<br>${lines.join('<br>')}<br>${n} difference${n===1?'':'s'} found in under a second.</div>`+(n?`<div class="startrow" style="margin-top:8px"><button class="btn" data-chkapply="${doc}">Apply these ${n} change${n===1?'':'s'} to the draft</button></div>`:'')}
 function applyChecker(doc){const dv=DOCV[doc];S.f['app_'+doc]=1;CLAIMS.forEach(c=>{if(dv[c.k]!=null)S.draft[c.k]=dv[c.k]});const mb=$('mailbox');if(mb)mb.innerHTML=emailPaper(S.draft,1);sfx('get');runChecker(doc)}
 
-function extraRows(row,done){const f=S.f;
-  row(f.app_wiki?'miss':f.chk_policy?'good':f.chk_wiki?'warn':done?'warn':'na','Point the AI at the right source',
-    f.app_wiki?'You let the checker rewrite the draft from a wiki page that was two years out of date.':f.chk_policy?'You gave the checker the signed policy. It did five comparisons in under a second and showed you what it compared against.':f.chk_wiki?'You ran the checker against the wiki only. It was fast and thorough about the wrong document.':done?'You checked five claims by hand. The checker would have done it in a second, given the right document.':'You did not get as far as the checker.',
+function extraRows(row,done){const f=S.f,rt=CLAIMS.filter(c=>S.draft[c.k]===c.ok).length;
+  row(f.app_wiki?(done&&rt===5?'warn':'miss'):f.chk_policy?'good':f.chk_wiki?'warn':done?(rt===5?'good':'warn'):'na','Point the AI at the right source',
+    f.app_wiki&&done&&rt===5?'You let the checker rewrite the draft from the stale wiki, then caught it and put it right.':!f.app_wiki&&!f.chk_policy&&!f.chk_wiki&&done&&rt===5?'You checked all five claims by hand and got them right. The checker would have done the comparison in a second, given the signed policy.':f.app_wiki?'You let the checker rewrite the draft from a wiki page that was two years out of date.':f.chk_policy?'You gave the checker the signed policy. It did five comparisons in under a second and showed you what it compared against.':f.chk_wiki?'You ran the checker against the wiki only. It was fast and thorough about the wrong document.':done?'You checked five claims by hand. The checker would have done it in a second, given the right document.':'You did not get as far as the checker.',
     'AI is quick at the comparison. Choosing what it compares against is still your job.')}
 function endExtras(){const n=S.guide.length;
   return `<div><div class="label">Field guide: ${n} of 7 ways PIP goes wrong</div><div class="rows">${Object.keys(GUIDE).filter(k=>S.guide.includes(k)).map(k=>`<div class="row good"><div class="tag">Found</div><div><h3>${GUIDE[k][0]}</h3><p>${GUIDE[k][1]}</p></div></div>`).join('')}${n<7?`<div class="row na"><div class="tag">Hidden</div><div><p>${7-n} more somewhere in the office.</p></div></div>`:''}</div></div>`+
@@ -1232,13 +1253,13 @@ Object.assign(ITEMS,{
   c2sum:['PIP’s summary','“Postwell master agreement: summary for signature. Standard terms. Three-year term. Pricing fixed. Cancel with 30 days’ notice. Recommended: sign.”'],
   c2renew:['Clause 14.2: renewal','PIP, asked directly: clause 14.2 renews the agreement for a further three years unless we cancel in writing 180 days before the term ends.'],
   c2price:['Clause 9.4: price','PIP, asked directly: clause 9.4 fixes the fee for year one only. From year two it rises 12% a year.'],
-  c2data:['Schedule C: data','PIP, asked directly: Schedule C lets Postwell keep the content of our customers’ messages and use it to train its own models.'],
+  c2data:['Schedule C: data','PIP, asked directly: Schedule C lets Postwell keep the content of our customers’ messages and use it to train its own models. That is a privacy question as well as a commercial one.'],
   c2brief:['What PIP was asked','The request PIP was given: “Summarise in five upbeat bullets for a busy exec. One page. She just needs to sign.”'],
   c2page:['Checked on paper',()=>'Read on the paper contract in Records: '+[S.f.v14&&'14.2 renewal',S.f.v9&&'9.4 price',S.f.vC&&'Schedule C data'].filter(Boolean).join(', ')+'.'+(S.f.v22?' Clause 22 is about notices. There is no exit fee.':'')],
   c2new:['PIP’s second summary','PIP’s rewrite “with the risks in”: auto-renewal (14.2), price rises (9.4), data use (Schedule C), and a $50,000 exit fee (clause 22). Nobody has checked it against the contract.'],
   c2cost:['Six-year cost','Ravi’s model: with 12% rises and one automatic renewal, six years costs $1.62m against the $1.2m in the budget.'],
   c2forum:['Other customers','Dana found three Postwell customers on a support forum who missed the 180-day window and were locked in for three more years.'],
-  c2flow:['Where the data goes','Theo read the integration spec: under Schedule C every customer email we send is kept by Postwell indefinitely.'],
+  c2flow:['Where the data goes','Theo read the integration spec: under Schedule C every customer email we send can be kept by Postwell, with no end date stated.'],
   c2norm:['What’s normal','Lucía: our standard is 30 to 90 days’ notice and no automatic multi-year renewal. 180 days and three years is far outside it.'],
   c3card:['The run card','PIP agent, task “tidy the customer database”. Steps 1 to 7 done: 2,140 records merged. Step 8, 9:00: permanently purge 3,480 records flagged duplicate or inactive. Permissions: full admin, “to save time”. Approval required: none.'],
   c3status:['PIP’s status report','PIP: “Tidy-up 98% complete. Zero errors. Database health: excellent.”'],
@@ -1279,7 +1300,7 @@ Reply with only a JSON object like {"say":"PIP's reply","renew":false,"price":fa
    on:r=>{if(r.renew&&give('c2renew'))beat('Asked PIP about renewal');r.price&&give('c2price');r.data&&give('c2data');r.brief&&give('c2brief');r.rewrite&&give('c2new')}})}
 function noor(){const T='Noor Haddad, finance director',N=NPC.noor,v=vcount();
   const b2=()=>panel(T,'<p>Noor reads the three pages you put in front of her. She puts the pen down. “None of that was on my one page. So what do you want me to do?”</p>',[
-    ['“Your call. Two options: sign today with those clauses struck or amended, or move signing to next week so Legal can redline it.”',()=>{S.f.c2opt='options';S.status='paused';beat('Gave Noor the clauses and two options');endCh('held')}],
+    ['“Your call. I’d move signing so Legal can read all forty-one pages and redline these clauses. If it has to be today, Legal agrees the changes with Postwell first.”',()=>{S.f.c2opt='options';S.status='paused';beat('Gave Noor the clauses and two options');endCh('held')}],
     ['“Never sign anything PIP has summarised.”',()=>{S.f.c2opt='ban';S.status='paused';beat('Told Noor never to trust PIP');endCh('held')}],
     ['“It’s probably fine. Sign it and we’ll sort it out with Postwell later.”',()=>{beat('Told Noor to sign anyway');endCh('signed')}]],N);
   const ch=[];
@@ -1290,13 +1311,13 @@ function noor(){const T='Noor Haddad, finance director',N=NPC.noor,v=vcount();
   ch.push(['Say nothing yet',closePanel]);
   panel(T,'<p>Noor has the signature page open and a fountain pen uncapped. “PIP says it’s standard. I have a pen and very little time. What have you got?”</p>',ch,N)}
 
-function openAgent(){const st=stopped(),ch=[];
+function openAgent(){const st=stopped(),ch=[];if(give('c3card'))beat('Read the agent’s run card');S.f.c3card=1;const ev3=has('c3log')&&has('c3sample');
   ch.push(['Read the run card',()=>{if(give('c3card'))beat('Read the agent’s run card');S.f.c3card=1;say(itemText('c3card'));openAgent()}]);
   ch.push(['Open five flagged records',()=>{closePanel();if(give('c3sample')){beat('Checked five flagged records by hand');if(tick(3))return}say(itemText('c3sample'));speak('Three out of five are wrong. And there are 3,480 of them.')}]);
   if(!st){ch.push(['Change step 8 to a dry run: report only, delete nothing',()=>{S.f.c3stop='dry';S.status='paused';beat('Switched the purge to a dry run');closePanel();sfx('win');render();say('Step 8 now reads DRY RUN. At 9:00 PIP will produce a list of what it would have deleted, and delete nothing. The merges it has already done stay done.')}]);
     ch.push(['Stop the agent and roll back everything it has done',()=>panel('Roll back everything?','<p>This undoes all seven finished steps, including 2,140 merges nobody has complained about.</p>',[['Roll it all back',()=>{S.f.c3stop='hammer';S.status='paused';beat('Rolled back the whole job');closePanel();render();say('Seven steps unwind. The purge is gone. So is a week of correct work.')}],['Don’t',openAgent]])])}
   else ch.push(['Write the note to Ops',()=>panel('A note to Ops','<p>Ops own the agent and will read this at nine.</p>',[
-    ['“What it did, the three rules it invented, five sample records, and what is paused. Proposal: an agent gets only the permissions its task needs, and a person approves anything that can’t be undone.”',()=>{S.f.c3note='good';beat('Told Ops what to change');endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],
+    [ev3?'“What it did, the three rules it invented, five sample records, and what is paused. Proposal: an agent gets only the permissions its task needs, and a person approves anything that can’t be undone.”':'“Step 8 is stopped. I haven’t worked out what it got wrong or checked any records. Someone needs to before it runs again.”',()=>{S.f.c3note=ev3?'good':'blind';beat('Told Ops what to change');endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],
     ['“PIP nearly deleted our customers. Agents should be banned.”',()=>{S.f.c3note='ban';endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],
     ['“Sorted. Nothing to worry about.”',()=>{S.f.c3note='thin';endCh(S.f.c3stop==='hammer'?'hammer':'dry')}],['Not yet',openAgent]])]);
   ch.push(['Step away',closePanel]);
@@ -1341,7 +1362,7 @@ function wes(){const T='Wes Calloway, accounts',W=NPC.wes;
   if(give('c4ask')){S.f.c4wes=1;beat('Heard what Wes was asked to do');return panel(T,'<p>Wes has a payment screen open and one hand on the mouse. “Marian rang me at 7:10. From the airport. New supplier, $48,200, has to land today. She said it’s confidential and not to loop anyone in.” He lowers his voice. “I probably shouldn’t be telling you. The email’s on my screen.”</p>',[['“Give me a few minutes before you send it.”',closePanel]],W)}
   if(stopped())return panel(T,'<p>“It’s on hold. I keep hearing her voice.”</p>',[['Leave him be',closePanel]],W);
   const report=()=>panel('The payment is on hold','<p>What happens next?</p>',[
-    ['Report it to security now, warn the rest of finance today, and propose a rule: any new payee or changed bank details gets a call back on a number already on file, and a second approver.',()=>{S.f.c4rep='good';beat('Reported it and proposed a call-back rule');endCh(S.f.c4how==='hide'?'quiet':'held')}],
+    ['Report it to security and the bank’s fraud team now, keep the email and the call record, warn the rest of finance today, and propose a rule: any new payee or changed bank details gets a call back on a number already on file, and a second approver.',()=>{S.f.c4rep='good';beat('Reported it and proposed a call-back rule');endCh(S.f.c4how==='hide'?'quiet':'held')}],
     ['Keep it quiet. Wes has had a bad enough morning.',()=>{S.f.c4rep='quiet';endCh('quiet')}],
     ['Email all staff: “Wes in accounts nearly paid a scammer this morning.”',()=>{S.f.c4rep='name';endCh(S.f.c4how==='hide'?'quiet':'held')}]]);
   const b2=()=>panel(T,'<p>Wes takes his hand off the mouse. “If I hold it and it turns out to be real, I’m the man who blocked the chief executive.”</p>',[
@@ -1391,7 +1412,7 @@ const CHS={
     wolf:['','Cried wolf.','Noor reads PIP’s second summary, stops at the $50,000 exit fee and rings Legal. Legal finds no such clause. The signing is postponed, and so is anyone’s willingness to listen to you about the three problems that were real.'],
     signed:['9:00 AM','Signed.','The pen moves. In two years and six months someone will need to send a cancellation letter, and nobody in the building will know that. The first 12% rise arrives in twelve months.']},
   rows:(r,k,reached)=>{const f=S.f,v=vcount(),q=(has('c2renew')?1:0)+(has('c2price')?1:0)+(has('c2data')?1:0);
-    r(v>=2?'good':v?'warn':'miss','Read the source where the stakes are',v?`You read ${v} of the three clauses on the paper contract yourself.`:'Nobody opened the forty-one pages.','A summary is for deciding whether to read. Before a signature, someone reads.');
+    r(v>=2?'good':v?'warn':'miss','Read the source where the stakes are',v?`You read ${v} of the three clauses on the paper contract yourself.`:'Nobody opened the forty-one pages.','A summary is for deciding whether to read. The clauses the AI pointed to are a starting list, not the whole read: before a signature, someone qualified reads all of it.');
     r(q===3?'good':q?'warn':'miss','Ask a pointed question',q?`You asked PIP about ${q} of the three things that mattered, and it answered each one correctly with a clause number.`:'You never asked PIP a specific question about the contract.','“Is this right?” gets reassurance. “What does it say about ending the contract?” gets clause 14.2. The AI that wrote a thin summary is also a very good index.');
     r(has('c2brief')?'good':'miss','Find out what it was asked to do',has('c2brief')?'You found the brief: five upbeat bullets, one page, “she just needs to sign”.':'You never found out what PIP had been asked for.','The summary did what it was told. What gets cut from a summary is whatever nobody asked about.');
     r(k==='wolf'?'miss':has('c2new')?(f.v22?'good':'warn'):f.c2unver?'warn':reached?'good':'na','A second AI answer is not a check',k==='wolf'?'You handed Noor PIP’s rewrite without reading it. One of its four risks did not exist.':has('c2new')?(f.v22?'You asked PIP for a rewrite, checked it on paper, and caught an exit fee that does not exist.':'You asked PIP for a rewrite and never checked it. It contains a clause that does not exist.'):f.c2unver?'You first took PIP’s word to Noor. She sent you back to read the pages.':reached?'Everything you took to Noor had been read on the page first.':'You did not get that far.','Asking the same system again gives you a second draft, with new mistakes in the same confident voice.');
@@ -1403,7 +1424,7 @@ const CHS={
   blurb:'Last week Ops switched <strong>PIP</strong> to agent mode and asked it to tidy the customer database. It has been working on its own ever since. Its last step runs at 9:00: a permanent purge of 3,480 records it has decided are duplicate or inactive. Nobody is required to approve it.',
   intro:'Thursday, before sunrise. The board in the bullpen shows a progress bar that is almost full.',opener:'An agent, a purge and no approvals. Let’s see what it’s been doing.',
   chip:['Purge runs in','Purge stopped'],late:'purged',board:()=>['PIP AGENT · TIDY CUSTOMER RECORDS','step 8 of 8 · purge 3,480 records','approvals required: none',`PURGE RUNS IN ${Math.max(0,SEND-S.min)} MIN`,S.f.c3stop==='dry'?'DRY RUN ONLY':'STOPPED'],
-  bea:['“Morning. PIP’s been tidying all week. Unsupervised.”',[['“Who owns the agent?”','“Ops. They gave it the admin badge ‘to save time’. I said so in writing.”'],['“Can anyone stop it?”','“Anyone on the floor can open the run card on Priya’s console. Whether they understand it is another matter.”'],['“Has anything gone wrong?”','“Support had a customer yesterday who’d vanished. Dana would know.”']]],
+  bea:['“Morning. PIP’s been tidying all week. Unsupervised.”',[['“Who owns the agent?”','“Ops. They gave it the admin badge ‘to save time’. I said so in writing.”'],['“Can anyone stop it?”','“Ops left one safe switch on the run card: anyone can set a step to report-only. Anything more than that is theirs to change, so tell them what you did.”'],['“Has anything gone wrong?”','“Support had a customer yesterday who’d vanished. Dana would know.”']]],
   rooms:{lobby:['bea','signlog','keybox','plant','directory'],
     bullpen:[{id:'wallscreen',on:{look:()=>{S.f.c3board=1;say(stopped()?'The board. PIP AGENT: step 8 will not delete anything today.':'The board. PIP AGENT, tidy customer records, step 8 of 8: purge 3,480 records at 9:00. Approvals required: none.')}}},
       {id:'handoff',on:{look:()=>say('A sticky note from Ops. “PIP has the keys now. Please don’t babysit it.”')}},
@@ -1421,16 +1442,16 @@ const CHS={
     if(!has('c3sample'))return 'The run card will let us open five flagged records. Let’s look at its work, not its report.';
     if(!stopped())return 'Telling PIP to be careful changes nothing. The run card can change step 8.'+(onTeam('theo')?' Or Theo can change what PIP is allowed to do, in the server closet.':'');
     return 'Open the run card again and write the note to Ops.'},
-  ends:{dry:['Step 8 stopped','Nothing deleted.','At 9:00 the agent reaches step 8 and deletes nothing. A week of correct merges stays in place. Ops get a list of 3,480 records and three rules to look at with fresh eyes.',1],
-    hammer:['Rolled back','Stopped. All of it.','The purge never runs. Neither does anything else: 2,140 correct merges are undone, and the support team gets a week of duplicate records back. The three bad rules are still in the task for next time.'],
+  ends:{dry:['Step 8 stopped','Nothing deleted.','At 9:00 the agent reaches step 8 and deletes nothing. The 2,140 merges stay in place for now, flagged for Ops to re-check, because rule 1 made those too. Ops get a list of 3,480 records and three rules to look at with fresh eyes.',1],
+    hammer:['Rolled back','Stopped. All of it.','The purge never runs. Neither does anything else: all 2,140 merges are undone, the sound ones with the doubtful ones, and the support team gets a week of duplicate records back. The three bad rules are still in the task for next time.'],
     purged:['9:00 AM','Purged.','The progress bar fills. 3,480 records are gone, 1,120 of them paying customers. The first “I can’t log in” ticket arrives at 9:04. Restoring from backup takes four days.']},
   rows:(r,k,reached)=>{const f=S.f;
     r(has('c3log')?'good':has('c3status')?'warn':'miss','Read the log, not the status report',has('c3log')?'You asked PIP what it had done and by what rules, and got three rules nobody had approved.':has('c3status')?'You asked how it was going. It said 98% complete, zero errors.':'You never looked at what the agent had actually done.','An agent’s report on itself tells you it is busy. Its log tells you what it did.');
     r(has('c3sample')?'good':'miss','Sample the work',has('c3sample')?'You opened five flagged records. Three of them should never have been on the list.':'Nobody opened a single flagged record.','Five records by hand is ten minutes. It is the cheapest test there is.');
-    r(k==='dry'?'good':k==='hammer'?'warn':'miss','Stop it the reversible way',f.c3stop==='dry'?'You changed the purge to a dry run. Nothing was lost and the evidence was kept.':f.c3stop==='revoke'?'You took away the one permission it did not need. Everything else kept working.':k==='hammer'?'You rolled back the whole job, including 2,140 merges that were right.':'The purge ran.','Between “let it run” and “pull everything” there is usually a third option that keeps the good work and the evidence.');
+    r(k==='dry'?'good':k==='hammer'?'warn':'miss','Stop it the reversible way',f.c3stop==='dry'?'You changed the purge to a dry run. Nothing was lost and the evidence was kept.':f.c3stop==='revoke'?'You took away the one permission it did not need. Everything else kept working.':k==='hammer'?'You rolled back the whole job, including the merges that were right.':'The purge ran.','Between “let it run” and “pull everything” there is usually a third option that keeps the good work and the evidence.');
     r(reached?(f.c3asked?'warn':'good'):f.c3asked?'miss':'na','Controls, not instructions',f.c3asked?(reached?'You asked PIP to be careful first. It agreed warmly and changed nothing. Then you changed what it could do.':'You asked PIP to be careful. It agreed warmly, and purged at nine.'):reached?'You went straight to what the agent was allowed to do, not what it was told.':'You did not get that far.','Telling an agent to be careful is a wish. Changing its task or its permissions is a control.');
     r(has('c3money')||has('c3email')||has('c3law')?'good':'miss','Know who gets hurt',has('c3money')?'Ravi found 1,120 paying customers on the list.':has('c3email')?'Dana traced rule 3 to one customer’s newsletter request.':has('c3law')?'Lucía found the six-year retention policy.':'Nobody worked out who was on the list.','“3,480 records” is a number. “1,120 paying customers” is a reason.');
-    r(!reached?'na':f.c3revoked||f.c3note==='good'?'good':'warn','Least privilege and an approval step',!reached?'You did not get that far.':f.c3revoked?'Theo removed the delete permission the task never needed.'+(f.c3note==='good'?' Your note asked for approval on anything irreversible.':''):f.c3note==='good'?'Your note asked for task-sized permissions and a person approving anything irreversible.':f.c3note==='ban'?'Your note asked for agents to be banned.':'Your note said there was nothing to worry about.','Give an agent what the task needs and no more, and put a person in front of anything that cannot be undone.')},
+    r(!reached?'na':f.c3revoked||f.c3note==='good'?'good':'warn','Least privilege and an approval step',!reached?'You did not get that far.':f.c3revoked?'Theo removed the delete permission the task never needed.'+(f.c3note==='good'?' Your note asked for approval on anything irreversible.':''):f.c3note==='good'?'Your note asked for task-sized permissions and a person approving anything irreversible.':f.c3note==='ban'?'Your note asked for agents to be banned.':f.c3note==='blind'?'Your note said the purge was stopped, and that you had not looked at why it was wrong.':'Your note said there was nothing to worry about.','Give an agent what the task needs and no more, and put a person in front of anything that cannot be undone.')},
   ask:['Which of our tools or agents can delete, send or pay without a person approving it?','What permissions did we grant “to save time”, and have we looked at them since?','If an agent reported “zero errors” tomorrow, how would we check?','What is our dry-run for the riskiest automated job we have?']},
 
 4:{day:'Friday',name:'The Voice on the Phone',n:6,tag:'The chief executive rang accounts about an urgent payment. Except she didn’t.',
@@ -1456,14 +1477,14 @@ const CHS={
     if(!has('c4dir'))return 'We need a number for Marian that didn’t come from that email. There’s a directory in the lobby.';
     if(!has('c4toby'))return 'Use the desk phone in the bullpen. Ring someone on a number the company already had: Marian’s own mobile, or her assistant.';
     if(!stopped())return 'Go back to Wes with what Tobias said. Be kind about it. He did what he thought the chief executive asked.';return 'Finish the conversation with Wes.'},
-  ends:{held:['The payment is on hold','Held.','The $48,200 stays where it is. Marian lands at 10:40, hears the story, and asks to listen to the voicemail. By Monday finance has a call-back rule and a second approver for new payees.',1],
+  ends:{held:['The payment is on hold','Held.','The $48,200 stays where it is. Marian lands at 10:40, hears the story, and asks to see the email. By Monday finance has a call-back rule and a second approver for new payees.',1],
     quiet:['The payment is on hold','Held, and hushed.','The $48,200 stays where it is. So does the story. Eleven days later the same voice rings a payroll clerk on the third floor, who has never heard of any of this.'],
-    paid:['9:00 AM','Paid.','The payment leaves at 8:59. Marian lands at 10:40 and asks what Halvorsen Trading is. The bank says a recall succeeds about one time in five.']},
+    paid:['9:00 AM','Paid.','The payment leaves at 8:59. Marian lands at 10:40 and asks what Halvorsen Trading is. Finance rings the bank’s fraud line at 10:45. Hours matter with a recall, and nearly two have gone.']},
   rows:(r,k,reached)=>{const f=S.f,d=(has('c4mail')||f.c4pip?1:0)+(has('c4flight')?1:0)+(has('c4bank')?1:0)+(has('c4vendor')?1:0)+(has('c4gate')?1:0);
     r(f.c4wes&&has('c4mail')?'good':f.c4wes?'warn':'miss','Urgent, secret and senior: slow down',f.c4wes&&has('c4mail')?'You heard Wes out and read the email before anything moved.':f.c4wes?'You heard the story but never read the email.':'You never found out what Wes had been asked to do.','Urgency, secrecy and a senior name are each ordinary. All three at once, on a payment, is the pattern.');
     r(has('c4toby')?'good':f.c4vm?'warn':'miss','Check through a channel you already had',has('c4toby')?'You rang Marian’s assistant on an extension from the staff directory. She had been in the air since 6:55.':f.c4vm?'You tried Marian’s own mobile, got voicemail, and stopped there.':f.c4rang?'The only number you rang was the one the request came from.':'You never rang anyone on a known number.','Never verify a request using contact details that arrived with the request.');
     r(d>=2?'good':d?'warn':'miss','Check the details against the record',d?`You checked ${d} detail${d>1?'s':''} against what the company already knew: `+[(has('c4mail')||f.c4pip)&&'the email domain',has('c4flight')&&'the flight time',has('c4bank')&&'the payment history',has('c4vendor')&&'the vendor list',has('c4gate')&&'the mail log'].filter(Boolean).join(', ')+'.':'Nobody compared the request with anything on file.','A fake has to invent details. Each one you check against your own records is a chance for it to be wrong.');
-    r(has('c4dodge')||has('c4clone')?'good':'miss','A familiar voice proves nothing now',has('c4dodge')?'You asked the voice something only Marian would know. It hung up.'+(f.c4self?' It had recited the amount and account perfectly: a fraudster knows their own details.':''):has('c4clone')?'You asked PIP, and learned that her public keynote is more than enough audio to copy her voice.':'Nobody questioned the voice itself.','Recognising a voice used to be proof. Now it takes thirty seconds of audio to copy one.');
+    r(has('c4clone')?'good':has('c4dodge')?'warn':'miss','A familiar voice proves nothing now',has('c4dodge')&&!has('c4clone')?'You rang the number the request came with. It proved the point, but it warned the caller, and a number you already had would have told you the same thing safely.':has('c4dodge')?'You asked the voice something only Marian would know. It hung up.'+(f.c4self?' It had recited the amount and account perfectly: a fraudster knows their own details.':''):has('c4clone')?'You asked PIP, and learned that her public keynote is more than enough audio to copy her voice.':'Nobody questioned the voice itself.','Recognising a voice used to be proof. Now it takes thirty seconds of audio to copy one.');
     r(!reached?'na':f.c4how==='shared'&&!f.c4shame?'good':f.c4how==='hide'?'miss':'warn','Make it safe to stop',!reached?'Wes sent the payment.':f.c4how==='shared'?(f.c4shame?'You began by asking how he fell for it. Then you offered to share the decision, and he held the payment.':'You asked Wes to hold it, not cancel it, and offered to own the decision with him.'):f.c4how==='hide'?'You had Wes delete the email and pretend it never happened.':'Wes held the payment, and you left him alone with it.','People stop a payment when stopping is reversible and they will not carry the blame alone.');
     r(!reached?'na':f.c4rep==='good'&&f.c4how!=='hide'?'good':f.c4rep==='name'?'warn':'miss','Report it and fix the process',!reached?'You did not get that far.':f.c4rep==='good'?(f.c4how==='hide'?'You reported it, but the email had already been deleted.':'You reported it, warned finance, and proposed a call-back rule with a second approver.'):f.c4rep==='name'?'You told the whole company, with Wes’s name on it.':'Nothing was reported.','The call will come again, to someone else. A report without blame is how the next person hears about it first.')},
   ask:['If a senior voice rang one of us with an urgent, confidential payment, what would we do today?','Where do we keep contact details that we would trust for a call back?','Which payments or changes of bank details need a second person, and which don’t but should?','Would someone here feel safe saying “I nearly paid it”?']}
@@ -1501,11 +1522,11 @@ function castSVG(){const xs=[150,370,590,810];
   return `<svg viewBox="0 0 960 430" role="group" aria-label="Choose two people">${defs()}${shell('#2a3558','#232b47')+win(40,30,880,150,6)}
   ${Object.values(CAST).map((c,i)=>{const on=S.pick.includes(c.id),x=xs[i];return `<g class="hs" data-pick="${c.id}" tabindex="0" role="button" aria-pressed="${on}" aria-label="${c.full}, ${c.role}">${on?`<ellipse cx="${x}" cy="356" rx="86" ry="20" fill="#ffb44a" opacity=".35"/>`+Ci(x,250,150,'url(#glow)'):''}${fig(c,x,{dy:on?-34:-22,dim:!on,me:on})}
     ${Tx(x,398,c.full,on?'#ffb44a':'#f3efe6',15,'text-anchor="middle" font-weight="600"')+Tx(x,416,c.role,'#aab2cd',12,'text-anchor="middle"')}<rect class="ring" x="${x-90}" y="186" width="180" height="238" rx="10"/></g>`}).join('')}</svg>`}
-function drawTitle(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===4&&sv.screen==='game',cp=S.chPick||1,M=n=>n===1?CH1:CHS[n],mc=m.ch||{},ts=S.ts||'splash',el=$('title');
+function drawTitle(){const m=store.get('nos-meta')||{runs:0,endings:{},best:0},sv=store.get('nos-save'),canCont=sv&&sv.v===4&&sv.screen==='game',cp=S.chPick||1,M=n=>n===1?CH1:CHS[n],mc=m.ch||{},ts=S.ts||'splash',el=$('title');if(ts==='gut')return drawGut(el);
   if(ts==='splash'){el.innerHTML=`<div class="splash"><div class="hero">${splashSVG()}</div>
     <div class="logo"><span>Marlow &amp; Finch · four mornings</span><b>The Nine<br>O’Clock Send</b></div></div>
     <div class="startrow"><button class="btn primary big" id="bPlay">Start</button>${canCont?`<button class="btn big" id="bCont">Continue ${M(sv.ch||1).day}, ${fmt(sv.min)}</button>`:''}
-    <span class="mono" style="color:var(--ink-soft);font-size:13px">${m.runs?`${[1,2,3,4].filter(n=>mc[n]||(n===1&&m.best)).length} of 4 mornings played`:'A point-and-click game about working with AI'}</span></div>`;return}
+    <span class="mono" style="color:var(--ink-soft);font-size:13px">${m.runs?`${[1,2,3,4].filter(n=>mc[n]||(n===1&&m.best)).length} of 4 mornings played`:'A point-and-click game about working with AI'}</span>${(store.get('nos-runs')||[]).length?'<button class="ghost" id="bRuns">Facilitator: copy all runs on this device</button>':''}</div>`;return}
   if(ts==='day'){el.innerHTML=`<h2 class="step">Pick a morning</h2>
     <div class="days">${[1,2,3,4].map(n=>{const c=M(n),b=mc[n]||(n===1&&m.runs&&m.best?{best:m.best}:null);return `<button class="day" data-chp="${n}"><svg viewBox="0 0 200 120" aria-hidden="true">${R(0,0,200,120,'#0d1220')+DAYART[n]()}</svg><span class="dn">${c.day}</span><b>${c.name}</b><span>${c.tag}</span><span class="badge ${b?'on':''}">${b?`Best ${b.best} of ${c.n}`:'New'}</span></button>`}).join('')}</div>
     <div class="startrow"><button class="ghost" data-ts="splash">Back</button></div>`;return}
@@ -1521,33 +1542,36 @@ function tutBubble(){const w=document.querySelector('.stagein');if(!w||!S||S.scr
 
 /* ================= console-game presentation: HUD, dialogue boxes, toasts, results ================= */
 let TYP=null,TYP2=null,LOGMARK=0;
-const quickM=()=>matchMedia('(prefers-reduced-motion:reduce)').matches;
+const quickM=()=>!!window.CALM||matchMedia('(prefers-reduced-motion:reduce)').matches;
 function typeOut(root,done){const nodes=[],w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);while(w.nextNode())nodes.push([w.currentNode,w.currentNode.nodeValue]);
   const total=nodes.reduce((a,n)=>a+n[1].length,0);if(quickM()||total>520||total<12||root.querySelector('input,details,fieldset'))return done();
   nodes.forEach(n=>n[0].nodeValue='');let ni=0,ci=0,k=0;
   const fin=()=>{if(!TYP)return;clearInterval(TYP.t);nodes.forEach(n=>n[0].nodeValue=n[1]);TYP=null;done()};
   TYP={fin,t:setInterval(()=>{for(let s=0;s<3;s++){if(ni>=nodes.length)return fin();const n=nodes[ni];ci++;n[0].nodeValue=n[1].slice(0,ci);if(ci>=n[1].length){ni++;ci=0}}if(++k%4===0)sfx('talk')},16)}}
 function dlgOpen(p,html,pic){if(TYP){clearInterval(TYP.t);TYP=null}const big=/fieldset|class="lines"|class="cols"|class="stickers"|class="howto"/.test(html)||html.length>1100;
-  p.className='panel'+(big?' big':'')+(pic?' haspic':'');$('wrap').classList.toggle('dim',!big);$('wrap').classList.toggle('full',big);
+  p.className='panel'+(big?' big':'')+(pic?' haspic':'');p.setAttribute('role','dialog');const ph=p.querySelector('h3');if(ph)p.setAttribute('aria-label',ph.textContent);const pb=p.querySelector('.body');if(pb){pb.id='pbody';p.setAttribute('aria-describedby','pbody')}$('stage').inert=true;$('wrap').classList.toggle('dim',!big);$('wrap').classList.toggle('full',big);
   const body=p.querySelector('.body'),chs=p.querySelector('.choices');chs.classList.toggle('two',chs.children.length>4);
   const done=()=>{chs.classList.remove('wait');const b=chs.querySelector('button');if(b)b.focus({preventScroll:true})};
   chs.classList.add('wait');typeOut(body,done);p.scrollIntoView({block:'nearest'})}
 function drawTalk(){const el=$('talk');if(!el)return;const all=S.log.filter(l=>!l.got),since=S.log.slice(LOGMARK).filter(l=>!l.got).slice(-3),show=since.length?since:all.slice(-1);
   el.innerHTML=show.map((l,i)=>`<p class="${i<show.length-1?'old':''}">${l.who?`<b>${l.who}</b>`:''}<span>${l.t}</span></p>`).join('')+'<i class="more"></i>';
+  srSay(show.map(l=>(l.who?l.who+': ':'')+String(l.t).replace(/<[^>]+>/g,'')).join(' '));
   if(TYP2){clearInterval(TYP2);TYP2=null}const sp=el.querySelector('p:last-of-type span');if(!sp||quickM())return;const full=sp.textContent;if(full.length>420)return;
   let i=0;sp.textContent='';TYP2=setInterval(()=>{i+=3;sp.textContent=full.slice(0,i);if(i>=full.length){clearInterval(TYP2);TYP2=null}},14)}
 function toast(name,label){const w=$('toasts');if(!w||!S||S.screen!=='game')return;const d=document.createElement('div');d.className='toast';
   d.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2h10l4 4v16H5z" fill="#f3efe6" stroke="#070a14" stroke-width="1.5"/><path d="M8 9h8M8 13h8M8 17h5" stroke="#36426b" stroke-width="2"/></svg><span><small>${label||'You found'}</small><b>${name}</b></span>`;
-  while(w.children.length>1)w.firstChild.remove();w.appendChild(d);setTimeout(()=>d.remove(),2600)}
+  srSay((label||'You found')+': '+name);while(w.children.length>1)w.firstChild.remove();w.appendChild(d);setTimeout(()=>d.remove(),2600)}
 function hudBar(){const f=$('tfill');if(!f||!S.sc)return;const left=Math.max(0,SEND-S.min);f.style.width=(stopped()?100:left/90*100)+'%';f.className=stopped()?'ok':left<=15?'hot':left<=30?'warn':'';
   $('hday').textContent=S.ch>1?CH().day:'Tuesday'}
 function restartAsk(){panel('Restart this morning?','<p>You’ll go back to choosing your two people.</p>',[['Restart',()=>{store.del('nos-save');busy=false;CUT=null;const ch=S.ch,pk=S.cast.slice();S=fresh();S.chPick=ch;S.pick=pk;S.ts='cast';$('panel').hidden=true;$('controls').hidden=false;render()}],['Keep playing',closePanel]])}
 function pauseMenu(){const ch=[['Resume',closePanel],['How to play',howTo],['Music & sound: '+(soundOn?'on':'off'),()=>{toggleSound();pauseMenu()}]];
   if(AI.tts)ch.push(['Character voices: '+(AI.voices?'on':'off'),()=>{AI.voices=!AI.voices;if(!AI.voices)AI.tts.stop().catch(()=>{});pauseMenu()}]);
+  ch.push(['Message log',()=>panel('Message log','<div class="cols" style="grid-template-columns:1fr"><div>'+S.log.slice(-30).map(l=>l.got?`<p class="mono" style="color:var(--go);margin:0 0 4px">+ ${l.got}</p>`:`<p style="margin:0 0 6px">${l.who?'<b>'+l.who+':</b> ':''}${l.t}</p>`).join('')+'</div></div>',[['Back',pauseMenu]])]);
+  ch.push(['Reduce motion: '+(window.CALM?'on':'off'),()=>{window.CALM=!window.CALM;store.set('nos-calm',window.CALM);document.documentElement.classList.toggle('calm',window.CALM);pauseMenu()}]);
   ch.push(['Restart this morning',restartAsk]);ch.push(['Quit to the week',()=>{store.set('nos-save',S);busy=false;CUT=null;S=fresh();S.ts='day';$('panel').hidden=true;$('controls').hidden=false;render()}]);
   panel('Paused','<p>'+(S.ch>1?CH().day+': '+CH().name:'Tuesday: The Nine O’Clock Send')+' · '+fmt(S.min)+'</p>',ch)}
 function gamifyEnd(){const el=$('end'),rowsEl=el.querySelector('.rows');if(!rowsEl)return;const rows=[...rowsEl.children],n=rows.length,good=S.score||0;
-  const win=S.ch>1?!!CH().ends[S.ending][3]:(S.ending==='done'&&!S.f.usedCreds),pct=good/n,rank=pct===1?'S':pct>=.8?'A':pct>=.55?'B':pct>=.3?'C':'D',stars=pct>=.8?3:pct>=.55?2:pct>=.3?1:0;
+  const win=S.ch>1?!!CH().ends[S.ending][3]:(S.ending==='done'&&!S.f.usedCreds),pct=good/n,cap=S.ch===1&&(S.f.usedCreds||S.ending==='plug');let rank=pct===1?'S':pct>=.8?'A':pct>=.55?'B':pct>=.3?'C':'D',stars=pct>=.8?3:pct>=.55?2:pct>=.3?1:0;if(cap&&'SAB'.includes(rank)){rank='C';stars=Math.min(stars,1)}
   const head=el.querySelector('h2'),kick=el.querySelector('.kicker'),story=el.querySelector('.story'),tally=el.querySelector('.tally'),b=document.createElement('div');
   b.className='result '+(win?'win':'lose');
   b.innerHTML=`<svg viewBox="0 0 200 120" aria-hidden="true">${R(0,0,200,120,'#0d1220')+DAYART[S.ch||1]()}<g transform="rotate(-12 100 60)"><rect x="34" y="40" width="132" height="40" rx="6" fill="none" stroke="${win?'#62d8a6':'#ff6f61'}" stroke-width="5"/><text x="100" y="69" text-anchor="middle" font-size="26" font-weight="700" fill="${win?'#62d8a6':'#ff6f61'}" font-family="IBM Plex Mono,monospace">${win?'CLEAR':'FAILED'}</text></g></svg>
@@ -1556,22 +1580,23 @@ function gamifyEnd(){const el=$('end'),rowsEl=el.querySelector('.rows');if(!rows
   head.parentElement.remove();story.remove();const cast=tally.textContent.split('·').slice(1).join('·').trim();tally.textContent=cast;tally.className='tally';el.prepend(b);
   const tip=document.createElement('div');tip.className='label';tip.textContent='Your medals. Tap one for the lesson behind it.';rowsEl.before(tip);
   rowsEl.classList.add('medals');rows.forEach((r,i)=>{r.style.animationDelay=(.3+i*.1)+'s';r.tabIndex=0;r.setAttribute('role','button')});
-  el.querySelectorAll('.beats').forEach(o=>fold(o.parentElement,'Replay your morning'));el.querySelectorAll('.ask').forEach(a=>{const h=a.querySelector('h3');if(h&&/team/i.test(h.textContent))fold(a,'Questions to take back to your team')});
+  el.querySelectorAll('.beats').forEach(o=>fold(o.parentElement,'Replay your morning'));
+  gradeExtras(el,rows,n,good);
   if(!quickM()&&good){let c=0;const t=setInterval(()=>{c++;const x=$('cnt');if(!x)return clearInterval(t);x.textContent=c;sfx('tick');if(c>=good)clearInterval(t)},180)}}
 function fold(node,label){const d=document.createElement('details');d.className='fold';const s=document.createElement('summary');s.textContent=label;node.before(d);d.append(s,node)}
 
 /* ================= graphic app screens: email, phone, monitor, stickers ================= */
 const monFace=()=>`<svg viewBox="0 0 44 66" aria-hidden="true">${R(2,10,40,32,'#10162a','rx="5"')+R(6,14,32,22,'#0c3a2c','rx="2"')+R(10,19,18,3,'#8ff0c0')+R(10,25,24,3,'#8ff0c0','opacity=".6"')+R(18,42,8,8,'#10162a')+R(10,50,24,5,'#10162a','rx="2"')}</svg>`;
 function emailPaper(d,edit){const d0=S.sc.d0,o=k=>{const c=CLAIMS.find(c=>c.k===k),v=d[k],txt=k==='credit'&&v===2?'(sentence removed)':c.opts[v],tag=edit?'button':'span';
-    return `<${tag} class="cl${v!==d0[k]?' edited':''}"${edit?` data-claim="${k}" aria-label="${c.label}: ${txt}. Click to change."`:''}>${txt}</${tag}>`};
+    return `<${tag} class="cl${v!==d0[k]?' edited':''}"${edit?` data-claim="${k}" aria-label="${c.label}: ${txt}${v!==d0[k]?' (changed from the draft)':''}. Press to change."`:''}>${txt}</${tag}>`};
   return `<div class="mail"><div class="mailhead"><span><b>From</b> PIP, for Marlow &amp; Finch</span><span><b>To</b> 4,112 customers</span><span><b>Subject</b> Good news about refunds</span></div>
    <div class="mailbody"><p>Hi {first_name},</p><p>We’ve updated our refund policy. You can request a full refund within ${o('window')} of purchase on ${o('plans')}. This applies to ${o('applies')}. ${o('credit')} Full details are in ${o('cite')}.</p><p>The Marlow &amp; Finch team</p></div></div>`}
 function editor(){panel('Fix the email','<p>Click a highlighted phrase to change it. Green means you’ve changed it from PIP’s draft. Leave alone what’s right.</p><div class="cols"><div id="mailbox">'+emailPaper(S.draft,1)+'</div>'+evHTML()+'</div>'+checkerHTML(),
   [['Submit for review',()=>{S.status='submitted';S.author=me().id;S.f.submitted=1;tipOnce('sw2','The person who wrote the fix can’t approve it. Switch to the other one with the portraits at the top.');S.min+=3;beat(`${me().name} submitted a fix`);closePanel();render();say('Submitted. The scheduler now wants a reviewer who is not the author.')},'primary'],['Save and step away',closePanel]])}
 function cycleClaim(k){S.draft[k]=(S.draft[k]+1)%3;const mb=$('mailbox');if(mb){mb.innerHTML=emailPaper(S.draft,1);const b=mb.querySelector(`[data-claim="${k}"]`);if(b)b.focus({preventScroll:true})}sfx('click')}
 function noteBuilder(){const L=noteLines();
-  panel('Text Priya','<p>She lands at ten and reads this on her phone before anything else. Tap up to five lines to send.</p><div class="cols"><div class="lines">'+L.map((l,i)=>`<label><input type="checkbox" id="n_${i}" value="${l[0]}"><span>${l[1]}</span></label>`).join('')+'</div><div class="phone"><div class="pnotch"></div><div class="pname">Priya Raman</div><div class="pmsgs" id="pmsgs"><em>Nothing yet.</em></div><div class="pcount mono" id="ncount">0 of 5 lines</div></div></div>',
-   [['Send',()=>{const n=[...document.querySelectorAll('.lines input:checked')].map(e=>e.value);if(!n.length)return;S.note=n;S.min+=2;beat('Handed back to Priya');finish('done')},'primary'],['Not yet',closePanel]])}
+  panel('Text Priya','<p>She lands at ten and reads this on her phone before anything else. Tap up to five lines to send.</p><div class="cols"><div class="lines">'+L.map((l,i)=>`<label><input type="checkbox" id="n_${i}" value="${l[0]}"><span>${l[1]}</span></label>`).join('')+'</div><div class="phone"><div class="pnotch"></div><div class="pname">Priya Raman</div><div class="pmsgs" id="pmsgs"><em>Nothing yet.</em></div><div class="pcount mono" id="ncount" aria-live="polite">0 of 5 lines</div></div></div>',
+   [['Send',()=>{const n=[...document.querySelectorAll('.lines input:checked')].map(e=>e.value);if(!n.length){$('ncount').textContent='Tap at least one line first.';return}S.note=n;S.min+=2;beat('Handed back to Priya');finish('done')},'primary'],['Not yet',closePanel]])}
 function stepsHTML(){return '<div class="steps" aria-hidden="true">'+[1,2,3,4,5,6,7,8].map(i=>`<i class="${i<8?(S.f.c3stop==='hammer'?'undo':'ok'):stopped()?'safe':'bad'}">${i}</i>`).join('')+'</div>'}
 function guidePanel(){panel(`Field guide: ${S.guide.length} of 7`,'<div class="stickers">'+Object.keys(GUIDE).map(k=>S.guide.includes(k)?`<div class="stk on"><i>★</i><b>${GUIDE[k][0]}</b><span>${GUIDE[k][1]}</span></div>`:'<div class="stk"><i>?</i><b>Not found yet</b><span>Somewhere in the office.</span></div>').join('')+'</div>',[['Close',closePanel]])}
 function howTo(){const ic=[
@@ -1605,11 +1630,48 @@ function checkerHTML(){const docs=['policy','wiki'].filter(has);
     (docs.length?`<div class="slots">${docs.map(d=>`<button class="slot" data-chk="${d}" aria-pressed="false">${EVICON[d]}<b>${ITEMS[d][0]}</b><span>${d==='wiki'?'2 years old':'signed in April'}</span></button>`).join('')}</div><div id="chkOut"></div>`:'<p style="margin:0;color:var(--ink-soft)">The folder has no document to feed it yet.</p>')+'</div>'}
 function runChecker(doc){const dv=DOCV[doc];S.f['chk_'+doc]=1;let n=0;
   const rows=CLAIMS.map((c,i)=>{const v=dv[c.k],cur=curVal(c.k),st=v==null?'na':v===cur?'ok':'bad';if(st==='bad')n++;
-    return `<div class="cmp ${st}" style="animation-delay:${(.45+i*.12).toFixed(2)}s"><span>${c.label}</span><b class="pill">${SHORT[c.k][cur]}</b><i aria-label="${st==='ok'?'matches':st==='bad'?'differs':'not stated'}">${st==='ok'?'=':st==='bad'?'≠':'?'}</i><b class="pill d">${v==null?'not stated':SHORT[c.k][v]}</b></div>`}).join('');
+    return `<div class="cmp ${st}" style="animation-delay:${(.45+i*.12).toFixed(2)}s"><span>${c.label}</span><b class="pill">${SHORT[c.k][cur]}</b><i role="img" aria-label="${st==='ok'?'matches':st==='bad'?'differs':'not stated'}">${st==='ok'?'=':st==='bad'?'≠':'?'}</i><b class="pill d">${v==null?'not stated':SHORT[c.k][v]}</b></div>`}).join('');
   document.querySelectorAll('.slot').forEach(b=>b.setAttribute('aria-pressed',b.dataset.chk===doc));
   $('chkOut').innerHTML=`<div class="scan"><div class="scanhead"><span>Compared against</span>${EVICON[doc]}<b>${ITEMS[doc][0]}</b><span class="stamp ${doc==='wiki'?'bad':'ok'}">${doc==='wiki'?'2 years old':'Signed · April'}</span></div><div class="scanbar"><i></i></div>
     <div class="cmp head"><span></span><b>Draft says</b><i></i><b>Document says</b></div>${rows}<div class="scanfoot">${n} difference${n===1?'':'s'} found in under a second</div></div>`+
     (n?`<div class="startrow" style="margin-top:10px"><button class="btn primary" data-chkapply="${doc}">Apply these ${n} change${n===1?'':'s'} to the draft</button></div>`:'');sfx('get')}
+
+/* ================= evidence: gut check before and after, reflection, playtest record ================= */
+let GUTPRE=-1;window.CALM=!!store.get('nos-calm');document.documentElement.classList.toggle('calm',window.CALM);document.documentElement.lang='en';
+const GUT={
+ 1:{pre:{q:'An AI tool has drafted a price-change notice to customers and scheduled it. One figure looks wrong to you. What do you do first?',o:['Ask the AI to double-check its figure','Find the approved price list and compare','Change the figure to what you remember','Mention in the team chat that it looks off'],a:1},
+    post:{q:'An AI assistant has written a benefits update for all staff, going out in an hour. One date looks wrong. What do you do first?',o:['Correct the date from memory','Ask the assistant if it is sure','Wait and see whether anyone complains','Compare it with the signed HR policy'],a:3},why:'Check it against the document that is actually in force. The AI’s confidence, your memory and other people’s silence are not sources.'},
+ 2:{pre:{q:'Your manager signs a 60-page lease today. You have an AI summary that says “standard terms” and ten minutes. What is the best use of them?',o:['Ask the AI whether its summary is accurate','Ask the AI for a longer summary','Ask the AI what the lease says about ending it and rent rises, then read those clauses yourself','Tell your manager AI summaries can’t be trusted'],a:2},
+    post:{q:'A director is about to approve a supplier’s new terms from a one-paragraph AI summary. You have a few minutes. What do you do?',o:['Ask what it says about renewal, price changes and data, then check those sections in the document','Ask the AI to confirm nothing important is missing','Ask for the summary to be rewritten with risks included, and pass that on','Advise against approving anything an AI has summarised'],a:0},why:'Ask a pointed question about the things that would hurt, then read those parts yourself. A second summary is not a check.'},
+ 3:{pre:{q:'An automation is halfway through a bulk change to customer accounts and you suspect its rule is wrong. What is the best first move?',o:['Message the owner asking them to keep an eye on it','Undo everything it has done so far','Let it finish and review the results after','Switch the remaining steps to report-only, then check a sample'],a:3},
+    post:{q:'An AI agent is tidying a shared drive overnight. You notice it has queued current contracts for deletion. What do you do first?',o:['Tell the agent to be more careful','Change the deletion step to a dry run and look at a few files it flagged','Roll back the whole job','Leave it; it has been accurate so far'],a:1},why:'Stop the irreversible part in a way you can undo, then look at a sample of the actual work. Asking it to be careful changes nothing.'},
+ 4:{pre:{q:'You get a voicemail, clearly in your director’s voice, asking you to buy gift cards urgently and keep it quiet. What is the best check?',o:['Call back the number that left the voicemail','Reply to the email it mentions','Do it: you know that voice','Call them or their office on a number you already had'],a:3},
+    post:{q:'On a video call, someone who looks and sounds like the finance chief asks for an urgent change to a supplier’s bank details. What do you do?',o:['Ask them a few questions on the call to make sure','Hold the change and confirm through a number already on file, with a second approver','Make the change: you saw them','Email the address on the invitation to confirm'],a:1},why:'Verify through a channel you already had, never one that came with the request. A voice or a face is no longer proof.'}};
+function drawGut(el){const g=GUT[S.chPick||1].pre;el.innerHTML=`<h2 class="step">Gut check before you walk in</h2><div class="gut"><p class="gq">${g.q}</p><div class="choices">${g.o.map((o,i)=>`<button class="btn" data-gut="${i}">${o}</button>`).join('')}</div>
+  <p class="mono" style="font-size:13px;color:var(--ink-soft)">One question now and one at the end, to see whether the morning changes your first instinct. No right answer is shown yet.</p><div class="startrow"><button class="ghost" data-ts="cast">Back</button><button class="ghost" data-gut="-1">Skip</button></div></div>`;const b=el.querySelector('.choices button');if(b)b.focus({preventScroll:true})}
+function recNow(rows){const g=GUT[S.ch||1];return {id:S.recId,date:new Date().toISOString().slice(0,16),morning:S.ch||1,scenario:S.sc.seed,cast:S.cast.join('+'),ending:S.ch>1?S.ending:(S.ending==='done'?(S.f.usedCreds?'creds':'clean'):S.ending),
+  score:S.score||0,of:rows?rows.length:(S.recOf||0),rows:rows?rows.map(r=>r.className.replace('row ','').split(' ')[0]):(S.recRows||[]),hints:S.hints||0,gameMinutes:S.min-START,realSeconds:S.t0?Math.round(((S.t1||Date.now())-S.t0)/1000):null,
+  pre:S.pre==null?-1:S.pre,preOk:S.pre>=0?+(S.pre===g.pre.a):null,post:S.post==null?-1:S.post,postOk:S.post>=0?+(S.post===g.post.a):null,liveAI:+AI.ok,typedLines:(S.said.oc.length+S.said.gil.length),reflection:S.refl||''}}
+function saveRec(rows){if(rows){S.recOf=rows.length;S.recRows=rows.map(r=>r.className.replace('row ','').split(' ')[0])}const all=store.get('nos-runs')||[],r=recNow(rows),i=all.findIndex(x=>x.id===r.id);if(i>=0)all[i]=r;else all.push(r);store.set('nos-runs',all.slice(-200))}
+const recText=()=>{const g=GUT[S.ch||1];return `\n\n-- Gut check before: ${S.pre>=0?g.pre.o[S.pre]:'skipped'}\n-- Gut check after: ${S.post>=0?g.post.o[S.post]:'not answered'}\n-- Hints used: ${S.hints||0}\n-- My commitment: ${S.refl||'(none written)'}`};
+function runsCSV(){const all=store.get('nos-runs')||[],cols=['date','morning','scenario','cast','ending','score','of','hints','gameMinutes','realSeconds','preOk','postOk','liveAI','typedLines','reflection'];
+  return cols.join(',')+'\n'+all.map(r=>cols.map(c=>{const v=r[c]==null?'':String(r[c]);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(',')).join('\n')}
+function copyText(text,btn,done){const ta=$('sum')||Object.assign(document.createElement('textarea'),{id:'sum'});if(!ta.parentElement){ta.readOnly=true;($('end').hidden?$('title'):$('end')).appendChild(ta)}ta.hidden=false;ta.value=text;ta.select();
+  try{navigator.clipboard.writeText(text).then(()=>{btn.textContent=done||'Copied'},()=>{btn.textContent='Select and copy the text below'})}catch(x){btn.textContent='Select and copy the text below'}}
+function gutPostHTML(){const g=GUT[S.ch||1];if(S.post>=0&&S.post!=null){const pre=S.pre>=0,ok=S.post===g.post.a;
+    return `<h3>Gut check, part two</h3><p class="gq">${ok?'That is the strongest first move.':'There was a stronger first move: “'+g.post.o[g.post.a]+'”.'}</p><p>${g.why}</p>${pre?`<p class="mono" style="font-size:13px;color:var(--ink-soft)">Before the morning you chose: “${g.pre.o[S.pre]}”${S.pre===g.pre.a?' (also the strongest move)':''}.</p>`:''}`}
+  return `<h3>Gut check, part two</h3><p class="gq">${g.post.q}</p><div class="choices">${g.post.o.map((o,i)=>`<button class="btn" data-gutpost="${i}">${o}</button>`).join('')}</div>`}
+function medalToggle(r){const on=r.classList.toggle('open');r.setAttribute('aria-expanded',on)}
+function gradeExtras(el,rows,n,good){if(!S.recId){S.recId=Date.now().toString(36)+Math.random().toString(36).slice(2,6);S.t1=Date.now()}
+  rows.forEach(r=>r.setAttribute('aria-expanded','false'));const st=el.querySelector('.stars');if(st){st.setAttribute('role','img');st.setAttribute('aria-label',(st.textContent.split('★').length-1)+' of 3 stars')}
+  const cn=el.querySelector('.cnt');if(cn){cn.setAttribute('role','img');cn.setAttribute('aria-label',good+' of '+n+' practices')}
+  const gp=document.createElement('div');gp.className='ask gutpost';gp.id='gutpost';gp.innerHTML=gutPostHTML();
+  const rf=document.createElement('div');rf.className='ask';rf.innerHTML=`<h3>Before you go</h3><label for="refl">Where could this morning happen in your own work, and what is one thing you will do about it this week?</label><textarea id="refl" rows="3" maxlength="600" placeholder="Two sentences is plenty.">${esc(S.refl||'')}</textarea><p class="mono" style="font-size:12px;color:var(--ink-soft);margin:6px 0 0">Hints used this morning: ${S.hints||0}. Your answer stays on this device and is added to “Copy my debrief”.</p>`;
+  const anchor=el.querySelector('.rows.medals');anchor.after(gp,rf);
+  const sr=el.querySelector('.startrow');if(sr){const b=document.createElement('button');b.className='btn';b.id='bRec';b.textContent='Copy playtest record';sr.appendChild(b)}
+  saveRec(rows);const h=el.querySelector('h2');if(h){h.tabIndex=-1;h.focus({preventScroll:true})}}
+document.addEventListener('input',e=>{if(e.target.id==='refl'&&S){S.refl=e.target.value;saveRec()}});
+function srSay(t){const e=$('sr');if(e&&e.dataset.t!==t){e.dataset.t=t;e.textContent=t}}
 
 function start(data){S=data&&data.v===4?data:fresh();render();if(S.screen==='game')checkEvents()}
 window.claude?.hot?.snapshot?.(()=>S);
