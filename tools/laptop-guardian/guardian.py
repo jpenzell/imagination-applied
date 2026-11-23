@@ -60,7 +60,25 @@ PLIST_PATH = HOME / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 MENU_LABEL = "local.guardian.menu"
 MENU_APP = HOME / "Applications" / "Guardian.app"
 MENU_PLIST = HOME / "Library" / "LaunchAgents" / f"{MENU_LABEL}.plist"
-HOSTNAME = socket.gethostname().split(".")[0]
+
+
+def own_name() -> str:
+    """This Mac's own name (Sharing > Local hostname), the one the archive folders use. The
+    network's name for it changes from place to place: the same Mac was "Joshs-Air" on one
+    network and "Joshs-MacBook-Air" on another, and a diary shared by two Macs has to be able
+    to tell them apart."""
+    if IS_MAC:
+        try:
+            name = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True, text=True,
+                                  timeout=5).stdout.strip()
+            if name:
+                return name
+        except Exception:
+            pass
+    return socket.gethostname().split(".")[0]
+
+
+HOSTNAME = own_name()
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -2292,11 +2310,25 @@ def access_report(cfg: dict, announce: bool = True) -> dict:
     return a
 
 
+def settings_names(version: str = None) -> tuple:
+    """What this Mac calls the settings app and its privacy page: both were renamed in macOS 13,
+    and directions that name the wrong one send an older Mac's owner looking for nothing."""
+    if version is None:
+        import platform
+        version = platform.mac_ver()[0]
+    try:
+        old = int(str(version).split(".")[0]) < 13
+    except ValueError:
+        old = False
+    return ("System Preferences", "Security & Privacy > Privacy") if old else ("System Settings", "Privacy & Security")
+
+
 def access_help(program: str) -> list:
     app = program.split(".app/")[0] + ".app" if ".app/" in program else program
+    settings, privacy = settings_names()
     return ["macOS privacy protection decides this per program; the same command in Terminal is a different program.",
             "macOS does not ask about a background helper and does not list it under Files and Folders,",
-            "so the way in is: System Settings > Privacy & Security > Full Disk Access. Drag this program",
+            f"so the way in is: {settings} > {privacy} > Full Disk Access. Drag this program",
             "into the list (or use + and paste its path), then check its switch is on:",
             f"  {app}",
             "To see it in Finder next to that page:  open -R '" + app + "'",
@@ -4771,7 +4803,7 @@ def chrome_tabs(close_duplicates: bool = False, json_out: bool = False):
     raw = sh(["osascript", "-l", "JavaScript", "-e", JXA_LIST], timeout=30)
     if not raw:
         print("chrome: could not talk to Google Chrome. Is it running? "
-              "The first run asks for Automation permission (System Settings > Privacy & Security > Automation).")
+              "The first run asks for Automation permission ({} > {} > Automation).".format(*settings_names()))
         return
     tabs = json.loads(raw)
     by_win = defaultdict(int)
@@ -5253,7 +5285,7 @@ def main(argv=None):
         print("resumed")
     elif args.cmd == "test-notify":
         notify("Guardian", "Notifications work. I'll only speak up when memory pressure rises.", cfg)
-        print("sent (if nothing appeared: System Settings > Notifications > Script Editor / osascript)")
+        print(f"sent (if nothing appeared: {settings_names()[0]} > Notifications > Script Editor / osascript)")
     elif args.cmd == "config":
         config_cmd(cfg, args)
     elif args.cmd == "autopilot":

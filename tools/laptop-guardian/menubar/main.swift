@@ -329,9 +329,12 @@ final class ClosureItem: NSMenuItem {
 }
 
 func symbol(_ name: String, _ color: NSColor) -> NSImage? {
+    // These pictures arrived with macOS 11 and their colours with 12. Before that a row has
+    // no picture, or a plain one; its words say the same thing.
+    guard #available(macOS 11.0, *) else { return nil }
     guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
-    let cfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
-        .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+    var cfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+    if #available(macOS 12.0, *) { cfg = cfg.applying(NSImage.SymbolConfiguration(paletteColors: [color])) }
     return img.withSymbolConfiguration(cfg)
 }
 
@@ -365,8 +368,34 @@ func infoItem(_ left: String, _ right: String = "") -> NSMenuItem {
     return item
 }
 
+/// The small second line of a menu row. macOS 14.4 draws one itself. Before that, and with
+/// Apple tools too old to know the word, the same text goes on grey lines under the row.
+func detailLines(_ row: NSMenuItem, _ text: String) -> [NSMenuItem] {
+    #if compiler(>=5.10)
+    if #available(macOS 14.4, *) {
+        row.subtitle = text
+        return []
+    }
+    #endif
+    var lines: [String] = []
+    var line = ""
+    for word in text.split(separator: " ") {
+        if !line.isEmpty && line.count + word.count + 1 > 56 {
+            lines.append(line)
+            line = ""
+        }
+        line += (line.isEmpty ? "" : " ") + word
+    }
+    if !line.isEmpty { lines.append(line) }
+    return lines.map { infoItem("      " + $0) }
+}
+
 func sectionTitle(_ title: String) -> NSMenuItem {
+    // sectionHeader came with the macOS 14 kit (Swift 5.9 tools): an older Mac's tools do not
+    // have the word at all, so asking "is it available" is not enough.
+    #if compiler(>=5.9)
     if #available(macOS 14.0, *) { return NSMenuItem.sectionHeader(title: title) }
+    #endif
     let item = NSMenuItem(title: title.uppercased(), action: nil, keyEquivalent: "")
     item.isEnabled = false
     return item
@@ -888,9 +917,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 default: row.image = symbol("lightbulb.fill", .systemTeal)
                 }
                 let hint = issue.action.map { "\($0.label). " } ?? ""
-                if #available(macOS 14.4, *) { row.subtitle = hint + issue.detail }
+                let under = detailLines(row, hint + issue.detail)
                 row.toolTip = hint + issue.detail
                 menu.addItem(row)
+                under.forEach { menu.addItem($0) }
             }
         }
 
@@ -1025,7 +1055,9 @@ func dump(_ menu: NSMenu, _ indent: String = "") {
         var marks = item.state == .on ? "(x) " : ""
         if !item.isEnabled && item.view == nil { marks += "(info) " }
         print("\(indent)\(marks)\(line)")
+        #if compiler(>=5.10)
         if #available(macOS 14.4, *), let sub = item.subtitle, !sub.isEmpty { print("\(indent)      \(sub)") }
+        #endif
         if let sub = item.submenu { dump(sub, indent + "    ") }
     }
 }

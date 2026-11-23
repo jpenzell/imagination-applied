@@ -253,6 +253,32 @@ class ClassifyTests(unittest.TestCase):
                          "nobody's as far as can be told: listed by its own name, as before")
         self.assertNotIn("vm_mb", g.aggregate(loose, self.cfg)[0])
 
+    def test_directions_name_the_settings_app_this_mac_has(self):
+        # The second Mac runs macOS 12 or older: there is no "System Settings" on it.
+        self.assertEqual(g.settings_names("12.7.6"), ("System Preferences", "Security & Privacy > Privacy"))
+        self.assertEqual(g.settings_names("10.15.7")[0], "System Preferences")
+        self.assertEqual(g.settings_names("13.0"), ("System Settings", "Privacy & Security"))
+        self.assertEqual(g.settings_names("26.5")[0], "System Settings")
+        self.assertEqual(g.settings_names("")[0], "System Settings", "not a Mac, or unreadable: the current name")
+        saved = g.settings_names
+        g.settings_names = lambda version=None: saved("11.7")
+        try:
+            said = " ".join(g.access_help("/x/Python.app/Contents/MacOS/Python"))
+        finally:
+            g.settings_names = saved
+        self.assertIn("System Preferences > Security & Privacy > Privacy > Full Disk Access", said)
+        self.assertNotIn("System Settings", said)
+        # one Mac, one name: the diary, the report and the archive folders agree (2026-11-23: on a
+        # different network the helper said "Joshs-Air" and the archive "Joshs-MacBook-Air")
+        import archive
+        self.assertEqual(g.HOSTNAME, archive._mac_name())
+        self.assertEqual(g.own_name(), g.HOSTNAME)
+        # and the menu bar app is built for the Mac it is built on, never fixed at 13.0
+        build = (g.Path(g.__file__).parent / "menubar" / "build.sh").read_text()
+        self.assertIn('-apple-macos$MIN"', build)
+        self.assertNotIn("-apple-macos13.0", build)
+        self.assertIn("Set :LSMinimumSystemVersion $MIN", build)
+
     def test_archive_utility_is_not_a_browser(self):
         au = "/System/Library/CoreServices/Applications/Archive Utility.app/Contents/MacOS/Archive Utility"
         procs = [P(50, au), P(51, "/Applications/Archive Thing.app/Contents/MacOS/Archive Thing")]

@@ -27,8 +27,8 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 
 | part | what | tests |
 |---|---|---|
-| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 131 tests (policy + macOS parsers on output recorded from a real Mac); they run in a throwaway folder and cannot write to the real diary or settings |
-| `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac; the click path is covered by the guardian tests |
+| `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 132 tests (policy + macOS parsers on output recorded from a real Mac); they run in a throwaway folder and cannot write to the real diary or settings |
+| `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac (macOS 27, Apple silicon); the click path is covered by the guardian tests. It is built for the Mac it is built on, back to macOS 10.15; checked against the macOS 10.15, 11 and 12 rules from a newer Mac, not yet run on an older one |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 64 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
@@ -41,7 +41,7 @@ The native menu bar app with a basic (dad) mode and an advanced mode is specifie
 ```bash
 git clone --branch claude/charming-einstein-ln9egd https://github.com/jpenzell/imagination-applied.git ~/guardian-src
 cd ~/guardian-src/tools/laptop-guardian
-python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 168 tests, should say OK three times
+python3 test_guardian.py && python3 test_scratch.py && python3 test_archive.py   # 169 tests, should say OK three times
 python3 guardian.py menu install       # the shield in the menu bar (builds a small app; needs Apple's Command Line Tools)
 python3 guardian.py scratch       # what is filling the disk
 python3 guardian.py status        # what it sees right now
