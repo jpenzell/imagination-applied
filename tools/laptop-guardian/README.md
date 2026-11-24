@@ -1,5 +1,7 @@
 # Laptop Guardian
 
+> **Moved.** Laptop Guardian now lives in its own repository: <https://github.com/jpenzell/laptop-guardian>. New installs and all further changes go there. This copy stays only until the Macs installed from it have switched over.
+
 A small watchdog that lives on a Mac which runs AI agents (Claude Code, Codex, Cowork)
 and a lot of Chrome, and keeps it from grinding to a halt. One Python file, no
 dependencies, runs as you, never as root.
