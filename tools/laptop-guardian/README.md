@@ -713,3 +713,16 @@ Chrome tab census.
 ```bash
 python3 guardian.py uninstall      # removes the launchd agent; logs and config stay
 ```
+
+## License
+
+Copyright (c) 2026 TheaterThink LLC. See [LICENSE](LICENSE).
+
+- **Personal and other noncommercial use is free** under the PolyForm Noncommercial License
+  1.0.0: your own Mac, hobby projects, study, and use by schools, charities and government.
+  You may change it and share it on the same terms.
+- **Use by or for a business needs a commercial license** from TheaterThink LLC, including on
+  a work computer for a company's work: <https://imaginationapplied.ai>
+- It comes as is, with no warranty.
+
+This covers this folder only, not the rest of the repository it currently lives in.
