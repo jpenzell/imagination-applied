@@ -329,7 +329,7 @@ final class ClosureItem: NSMenuItem {
 }
 
 func symbol(_ name: String, _ color: NSColor) -> NSImage? {
-    // These pictures arrived with macOS 11 and their colours with 12. Before that a row has
+    // These pictures arrived with macOS 11 and their colors with 12. Before that a row has
     // no picture, or a plain one; its words say the same thing.
     guard #available(macOS 11.0, *) else { return nil }
     guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
@@ -350,7 +350,7 @@ func ago(_ ts: Double) -> String {
     return "\(s / 3600) h ago"
 }
 
-/// A greyed-out line with a right-aligned value: "ChatGPT ........ 10.3 GB".
+/// A grayed-out line with a right-aligned value: "ChatGPT ........ 10.3 GB".
 func infoItem(_ left: String, _ right: String = "") -> NSMenuItem {
     let item = NSMenuItem(title: left, action: nil, keyEquivalent: "")
     item.isEnabled = false
@@ -369,7 +369,7 @@ func infoItem(_ left: String, _ right: String = "") -> NSMenuItem {
 }
 
 /// The small second line of a menu row. macOS 14.4 draws one itself. Before that, and with
-/// Apple tools too old to know the word, the same text goes on grey lines under the row.
+/// Apple tools too old to know the word, the same text goes on gray lines under the row.
 func detailLines(_ row: NSMenuItem, _ text: String) -> [NSMenuItem] {
     #if compiler(>=5.10)
     if #available(macOS 14.4, *) {

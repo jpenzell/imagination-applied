@@ -8,7 +8,7 @@ Mac with Claude Code or Codex.
 
 ## 1. What the slowdown actually is (and what we are optimizing for)
 
-Josh's machines run Claude (desktop app, Claude Code CLI, Cowork, Claude in Chrome), ChatGPT
+The owner's machines run Claude (desktop app, Claude Code CLI, Cowork, Claude in Chrome), ChatGPT
 (desktop app, chatgpt.com, Codex CLI and app) and Chrome, all day, on two Macs. Four
 things compound:
 

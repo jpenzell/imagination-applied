@@ -16,7 +16,7 @@ It does three things the usual "memory cleaner" apps don't:
    server, a GUI app. Chrome's forty helper processes fold into one line. That is what lets
    it act on an abandoned automation browser while never touching the Chrome you are
    typing in.
-3. **Learns your machine.** It keeps a diary (one line every 30 s, every decision with its
+3. **Learns your machine.** It keeps a diary (one line about every 30 s, every decision with its
    reason). `guardian ask` hands that diary to Claude Code or Codex and gets back a plain
    English diagnosis, a one-time to-do list, and a config change you review before it is
    applied. After a bad day (three pressure episodes) it does this on its own and leaves a
@@ -28,7 +28,7 @@ M-series Air, macOS 27) on 2026-11-10, which found the fixes in the git log:
 | part | what | tests |
 |---|---|---|
 | `guardian.py` | the watchdog: memory pressure, process classes, tiered actions, diary, `ask` | 132 tests (policy + macOS parsers on output recorded from a real Mac); they run in a throwaway folder and cannot write to the real diary or settings |
-| `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac (macOS 27, Apple silicon); the click path is covered by the guardian tests. It is built for the Mac it is built on, back to macOS 10.15; checked against the macOS 10.15, 11 and 12 rules from a newer Mac, not yet run on an older one |
+| `menubar/` | the shield in the menu bar: what is going on, one-click fixes, a few settings | built and run on a real Mac (macOS 27, Apple silicon); the click path is covered by the guardian tests. It is built for the Mac it is built on, back to macOS 10.15; also built and run on macOS 12.7.6 on an Intel Mac with Swift 5.7 (2026-11-23); macOS 10.15 and 11 are checked against their rules from a newer Mac only |
 | `scratch.py` | the disk side: census of app data folders in tiers, safe reclaim, swap-ceiling check | 17 tests |
 | `archive.py` | old work folders move to an external drive: copy, read the copy back, compare, then remove | 20 tests, plus a real move of 5 GB to a USB drive |
 | `chrome-extension/` | tabs you are done with go to sleep; tabs untouched for days get parked as bookmarks | 64 logic checks that run on any Mac, plus 1 end-to-end run in real Chromium |
@@ -128,7 +128,7 @@ that folder is ignored. Requests older than ten minutes are dropped.
 Notifications changed with it. The first real day produced 43 notifications that all said
 memory was tight and offered nothing to do. Now a notification means a critical spell or
 something you can act on, and the icon carries the steady state. "Whenever memory is
-tight" in Settings brings the old behaviour back.
+tight" in Settings brings the old behavior back.
 
 ## What "slow" really is, and who gets the RAM
 
@@ -347,13 +347,13 @@ python3 guardian.py archive --check            # read every reachable copy and c
   place, checks the result against the drive's copy, and refuses to overwrite anything or
   to fill the disk. The drive keeps its copy; guardian never deletes from the drive.
 - **One drive is not a backup.** After a move the folder exists in one place. Guardian says
-  so in the question before you agree, in the notification afterwards, in `archive --list`,
+  so in the question before you agree, in the notification afterward, in `archive --list`,
   in `doctor`, behind the shield, and once a week for as long as it stays true. It keeps
   track of where each archive has copies. With a second drive connected, the shield offers
   to copy the archives there: the first copy is read once and must still match the checksum
   recorded when it was written, and the new copy is read back. If you keep your own copy
   somewhere (a cloud folder, a network share), name the folder with `--second-home` and
-  guardian recognises a copy by name and exact size, marked as unchecked. A copy counts
+  guardian recognizes a copy by name and exact size, marked as unchecked. A copy counts
   while its drive is away; it stops counting if the file disappears or changes size. When
   the first drive is not connected, `--restore` reads from the second copy.
 - **It asks; it never decides.** When less than 40 GB is free, an external drive is
@@ -606,7 +606,7 @@ guardian.py config [--set key=value ...] [--undo]
 | `~/.config/guardian/config.json` | your overrides; every key you leave out falls back to the defaults in `guardian.py` |
 | `~/.config/guardian/suggested-config.json` | the last change `ask` proposed, until you apply it |
 | `~/Library/Logs/guardian/events.jsonl` | every decision with class, reason, result |
-| `~/Library/Logs/guardian/samples.tsv` | one line per 30 s: level, free %, swap, compressor, load, disk, top 5 |
+| `~/Library/Logs/guardian/samples.tsv` | one line about every 30 s (it rests 30 s after each look, so a slow or busy Mac spaces them further apart): level, free %, swap, compressor, load, disk, top 5 |
 | `~/Library/Logs/guardian/digest-YYYY-MM-DD.md` | daily report, written at 8 am (`digest_hour`) |
 | `~/Library/Logs/guardian/diagnosis-*.md` | what the AI said |
 | `~/Library/Logs/guardian/state.json` | what the helper last saw, for the menu bar icon |

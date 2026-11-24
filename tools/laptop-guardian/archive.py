@@ -37,7 +37,7 @@ HOME = Path.home()
 
 def _mac_name() -> str:
     """This Mac's own name. The network hostname changes with the network (the first real Mac
-    was 'Joshs-Air' at home and 'Joshs-MacBook-Air' on battery elsewhere), which would split
+    was 'Sams-Air' at home and 'Sams-MacBook-Air' on battery elsewhere), which would split
     one Mac's archive across two folders; the name set in Sharing does not."""
     if sys.platform == "darwin":
         try:

@@ -134,7 +134,7 @@ class ClassifyTests(unittest.TestCase):
     def test_mcp_servers_fold_under_their_ai_app_and_orphans_are_flagged(self):
         claude_app = "/Applications/Claude.app/Contents/MacOS/Claude"
         procs = [P(31, claude_app),
-                 P(32, "/opt/homebrew/bin/node", "node /Users/j/mcp/josh-content/index.js", ppid=31, rss_mb=120),
+                 P(32, "/opt/homebrew/bin/node", "node /Users/j/mcp/notes-server/index.js", ppid=31, rss_mb=120),
                  P(33, "/opt/homebrew/bin/node", "node /x/node_modules/.bin/mcp-server-dropbox", ppid=32, rss_mb=80),
                  P(34, "/opt/homebrew/bin/node", "node /Users/j/.npm/_npx/abc/mcp-server-github", ppid=1, rss_mb=90),
                  P(35, "/opt/homebrew/bin/node", "node /Users/j/site/server.js", ppid=1)]
@@ -268,8 +268,14 @@ class ClassifyTests(unittest.TestCase):
             g.settings_names = saved
         self.assertIn("System Preferences > Security & Privacy > Privacy > Full Disk Access", said)
         self.assertNotIn("System Settings", said)
+        # the second Mac's owner could not find the row by hand: the directions open it
+        self.assertIn("open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'", said)
+        # and a Mac with no such work folder has nothing to archive, which is not a fault
+        with tempfile.TemporaryDirectory() as here:
+            self.assertEqual(g.absent_roots([here, here + "/not-here"]), [here + "/not-here"])
+        self.assertEqual(g.absent_roots([]), [])
         # one Mac, one name: the diary, the report and the archive folders agree (2026-11-23: on a
-        # different network the helper said "Joshs-Air" and the archive "Joshs-MacBook-Air")
+        # different network the helper said "Sams-Air" and the archive "Sams-MacBook-Air")
         import archive
         self.assertEqual(g.HOSTNAME, archive._mac_name())
         self.assertEqual(g.own_name(), g.HOSTNAME)
@@ -511,7 +517,7 @@ class EngineTests(unittest.TestCase):
         e = g.Engine(self.cfg)
         d = self.run_steps(e, lambda i, now: [P(10, CHROME, rss_mb=6000)],
                            [sample(level=lv, free=30, ts=1e6 + 30 * i) for i, lv in enumerate(levels)])
-        self.assertEqual(e.episodes_today, 4, "the old behaviour is one setting away")
+        self.assertEqual(e.episodes_today, 4, "the old behavior is one setting away")
 
     def test_orphaned_automation_chrome_is_killed_after_idle(self):
         e = g.Engine(self.cfg)
@@ -1013,7 +1019,7 @@ class RefreshTests(unittest.TestCase):
         bg.thread.join(10)
         self.assertFalse(g.refresh_waiting(st))
         self.assertEqual([p for p, _ in self.phases()][-3:], ["started", "aborted", "cancelled"])
-        self.assertIn("ChatGPT: cancelled: it did not quit", g.render_report(1))
+        self.assertIn("ChatGPT: canceled: it did not quit", g.render_report(1))
         self.assertIn("ChatGPT: expired: no quiet moment came", g.render_report(1))
 
     def test_a_wait_that_finds_no_quiet_moment_asks_instead_of_lapsing(self):
@@ -1061,7 +1067,7 @@ class RefreshTests(unittest.TestCase):
         tick(ops, st, 121)
         self.assertFalse(st["wanted"])
         self.assertEqual(self.phases()[-1], ("cancelled", "ChatGPT"))
-        self.assertIn("ChatGPT: cancelled: you stopped it", g.render_report(1))
+        self.assertIn("ChatGPT: canceled: you stopped it", g.render_report(1))
         # no answer: nothing is interrupted and nothing is forgotten
         st, ops = queued(), FakeOps(age=45.0, answer="")
         tick(ops, st, 121)
@@ -1612,7 +1618,7 @@ class ArchiveTests(unittest.TestCase):
 
     def test_the_helper_is_started_as_the_real_program_not_a_launcher_stub(self):
         # the first real Mac: the same permission was refused when the job was started through
-        # /usr/bin/python3 (a stub) and honoured when started as the program the stub runs
+        # /usr/bin/python3 (a stub) and honored when started as the program the stub runs
         real = g.real_program(g.sys.executable)
         self.assertTrue(g.os.access(real, g.os.X_OK))
         self.assertEqual(g.real_program(real), real, "already the real program: unchanged")
@@ -1778,7 +1784,7 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(len(crit), 1)
         self.assertIn("Memory critical (free 12%). Biggest: ChatGPT 8.8GB.", crit[0].reason)
         loud = dict(self.cfg, notify_level="all")
-        self.assertEqual(len(pressure(loud, level=2, free=24)), 1, "the old behaviour is one setting away")
+        self.assertEqual(len(pressure(loud, level=2, free=24)), 1, "the old behavior is one setting away")
         auto, review = g.split_tuning({"notify_level": "all", "refresh": {"agent_idle_minutes": 5}})
         self.assertEqual(auto, {}, "a diagnosis cannot make it louder or cut the idle wait below ten minutes")
 
@@ -1943,7 +1949,7 @@ class MenuTests(unittest.TestCase):
         self.assertEqual((waiting["action"]["id"], waiting["action"]["args"]), ("refresh_cancel", {"app": "ChatGPT"}))
         # the entry's own button takes it back
         _, menu = self.click(dict(waiting["action"]["args"], action=waiting["action"]["id"]), menu)
-        self.assertIn("Cancelled", menu["last_action"]["text"])
+        self.assertIn("Canceled", menu["last_action"]["text"])
         self.assertFalse(g.refresh_waiting(menu["refresh_state"]["ChatGPT"]))
         st = g.build_state(self.cfg, self.snap(), menu)
         self.assertEqual(st["refresh_waiting"], [])
@@ -2776,7 +2782,7 @@ class LagTests(unittest.TestCase):
         self.assertAlmostEqual(g.LINK["seen"], g.time.time(), delta=5, msg="the visit still counts")
         # the extension may add two small numbers saying what it just did; anything else is ignored
         g.LINK.pop("aside_total", None)
-        for query in ("aside=3&looked=9", "aside=2&looked=7", "aside=99999&looked=1", "aside=1&looked=2&x=rm", "name=josh"):
+        for query in ("aside=3&looked=9", "aside=2&looked=7", "aside=99999&looked=1", "aside=1&looked=2&x=rm", "name=sam"):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/status?{query}", timeout=5).read()
         said = [(e["stepped_aside"], e["tabs_looked_at"]) for e in g.read_events(1) if e["kind"] == "chrome"]
         self.assertEqual((said, g.LINK["aside_total"]), ([(3, 9), (2, 7)], 5))
@@ -2939,7 +2945,7 @@ class AutopilotTests(unittest.TestCase):
         path, outcome = self._ask_with(expired, others=[("codex", self._fake_codex(answer))], command="claude")
         self.assertEqual((outcome["result"], outcome["via"], outcome["reason"]), ("failed", "claude", "not logged in"))
 
-    def test_ask_failure_recognises_what_is_not_a_diagnosis(self):
+    def test_ask_failure_recognizes_what_is_not_a_diagnosis(self):
         self.assertEqual(g.ask_failure(1, "Not logged in \u00b7 Please run /login"), "not logged in")
         self.assertEqual(g.ask_failure(0, "Invalid API key \u00b7 Please run /login"), "not logged in")
         self.assertEqual(g.ask_failure(0, ""), "printed nothing")

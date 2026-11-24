@@ -102,7 +102,7 @@ class WhereTests(unittest.TestCase):
             "/dev/disk3s9 on /Volumes/Scratch (apfs, local, journaled)",                    # same disk as /
             "/dev/disk8s1 on /Volumes/CAMERA (msdos, local, nodev, nosuid, noowners)",      # 4 GB file limit
             "/dev/disk9s1 on /Volumes/Installer (hfs, local, nodev, nosuid, read-only, noowners)",
-            "//josh@nas/share on /Volumes/share (smbfs, nodev, nosuid, mounted by josh)",   # network
+            "//sam@nas/share on /Volumes/share (smbfs, nodev, nosuid, mounted by sam)",   # network
             "/dev/disk10s2 on /Volumes/Photos SSD (exfat, local, nodev, nosuid, noowners)",
             "/dev/disk11s1 on /Volumes/Locked (apfs, local, journaled)",
         ]) + "\n"
@@ -127,8 +127,8 @@ class WhereTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             home = Path(t) / "home"
             (home / "Documents" / "Codex").mkdir(parents=True)
-            d = archive.dest_dir({"base": "/Volumes/My Passport"}, str(home / "Documents" / "Codex"), home, "Joshs-Air")
-            self.assertEqual(str(d), "/Volumes/My Passport/Guardian Archive/Joshs-Air/Documents/Codex")
+            d = archive.dest_dir({"base": "/Volumes/My Passport"}, str(home / "Documents" / "Codex"), home, "Sams-Air")
+            self.assertEqual(str(d), "/Volumes/My Passport/Guardian Archive/Sams-Air/Documents/Codex")
 
 
 class ScanTests(Base):
