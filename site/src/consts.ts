@@ -43,6 +43,7 @@ export const SITE = {
 export const NAV = [
   { href: '/rehearsal-room/', label: 'The Rehearsal Room' },
   { href: '/learning-design/', label: 'Learning design' },
+  { href: '/case-studies/', label: 'Work' },
   { href: '/how-we-work/', label: 'How we work' },
   { href: '/keynotes-and-workshops/', label: 'Keynotes' },
   { href: '/executive-advisory/', label: 'Advisory' },
